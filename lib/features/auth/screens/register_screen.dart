@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
+import '../services/auth_service.dart';
+import '../../disease/screens/disease_selection_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,7 +20,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authService = AuthService();
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -28,16 +33,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _onRegisterPressed() {
+  Future<void> _onRegisterPressed() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-
-    // TODO: hook up Firebase Auth here
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      // TODO: go to disease selection after signup
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    try {
+      await _authService.signUp(
+        _emailController.text,
+        _passwordController.text,
+        _nameController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const DiseaseSelectionScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = _authService.getErrorMessage(e.code);
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Something went wrong. Please try again';
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -107,6 +132,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 12),
                 _buildTermsNote(),
                 const SizedBox(height: 32),
+                if (_errorMessage != null) ...[
+                  Text(
+                    _errorMessage!,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: Colors.red.shade700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 NuvitaButton(
                   label: 'Create Account',
                   onPressed: _onRegisterPressed,
