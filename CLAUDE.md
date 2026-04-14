@@ -47,18 +47,21 @@ lib/
 - Reusable widgets (NuvitaTextField, NuvitaButton)
 - Login screen UI
 - Register screen UI
-- Firebase Authentication enabled
+- Firebase Authentication (login + register connected to Firebase)
 - Firestore database created
+- Disease Selection Screen (Stage 1: condition picker, Stage 2: 7-step personal info flow)
+- PatientModel + PatientService (saves to /users/{uid} profile field)
+- HomeScreen placeholder
 
 ## Current Branch
-feature/firebase-authentication
+feature/disease-selection-Page
 
 ## In Progress
-- Connecting login/register to real Firebase Auth
+- Homepage Dashboard
 
 ## Pending Features (in order)
-1. Firebase Authentication connection
-2. Disease Selection Screen
+1. ~~Firebase Authentication connection~~ DONE
+2. ~~Disease Selection Screen~~ DONE
 3. Homepage Dashboard
 4. Health Data Logging
 5. Health Trend Charts
