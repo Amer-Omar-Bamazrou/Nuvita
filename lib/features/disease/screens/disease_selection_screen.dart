@@ -5,7 +5,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../models/patient_model.dart';
 import '../services/patient_service.dart';
-import '../../home/screens/home_screen.dart';
+import '../../home/screens/main_shell.dart';
 
 // ─── Disease option data ──────────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ class _DiseaseSelectionScreenState extends State<DiseaseSelectionScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const MainShell()),
       );
     } catch (_) {
       if (!mounted) return;

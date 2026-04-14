@@ -51,18 +51,23 @@ lib/
 - Firestore database created
 - Disease Selection Screen (Stage 1: condition picker, Stage 2: 7-step personal info flow)
 - PatientModel + PatientService (saves to /users/{uid} profile field)
-- HomeScreen placeholder
+- Homepage Dashboard (greeting, avatar, disease banner, metric cards grid, bottom sheet readings)
+- HealthProvider (local session state for metric values + clinical status evaluation)
+- HealthMetricCard widget (reusable, status badge, add-reading bottom sheet)
+- MainShell (IndexedStack + 4-tab bottom nav: Home, Medications, History, Profile)
+- ProfileScreen (Firestore load, initials avatar, disease badge, sign-out)
+- Medication + History placeholder screens
 
 ## Current Branch
-feature/disease-selection-Page
+feature/homepage-dashboard
 
 ## In Progress
-- Homepage Dashboard
+- None
 
 ## Pending Features (in order)
 1. ~~Firebase Authentication connection~~ DONE
 2. ~~Disease Selection Screen~~ DONE
-3. Homepage Dashboard
+3. ~~Homepage Dashboard~~ DONE
 4. Health Data Logging
 5. Health Trend Charts
 6. Medication Reminders
