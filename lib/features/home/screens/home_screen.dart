@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/health_metric_card.dart';
+import '../../../core/services/preferences_service.dart';
 import '../../dashboard/providers/health_provider.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -95,9 +96,16 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   Future<void> _loadUserProfile() async {
+    // Always try SharedPreferences first — works for both guest and auth users
+    final savedFirstName = await PreferencesService.getFirstName();
+
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      setState(() => _isLoading = false);
+      // Guest user — use the name from onboarding prefs
+      setState(() {
+        _userName = savedFirstName ?? '';
+        _isLoading = false;
+      });
       return;
     }
 
@@ -109,12 +117,17 @@ class _HomeBodyState extends State<_HomeBody> {
 
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
       setState(() {
-        _userName = profile?['name'] as String? ?? '';
+        // Prefer Firestore name, fall back to SharedPreferences name
+        final firestoreName = profile?['name'] as String? ?? '';
+        _userName = firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _isLoading = false;
       });
     } catch (_) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _userName = savedFirstName ?? '';
+        _isLoading = false;
+      });
     }
   }
 
