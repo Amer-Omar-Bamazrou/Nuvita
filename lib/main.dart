@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/preferences_service.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/home/screens/main_shell.dart';
+import 'features/dashboard/providers/health_history_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,11 +39,14 @@ class NuvitaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nuvita',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      home: home,
+    return ChangeNotifierProvider(
+      create: (_) => HealthHistoryProvider(),
+      child: MaterialApp(
+        title: 'Nuvita',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        home: home,
+      ),
     );
   }
 }
