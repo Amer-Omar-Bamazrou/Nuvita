@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../auth/screens/register_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
+  bool _isGuest = false;
   String _name = '';
   String _diseaseType = 'other';
   bool _signingOut = false;
@@ -42,7 +44,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isGuest = true;
+        _isLoading = false;
+      });
       return;
     }
 
@@ -97,6 +102,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    return _isGuest ? _buildGuestView() : _buildProfileView();
+  }
+
+  // Shown when the user skipped account creation during onboarding
+  Widget _buildGuestView() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            children: [
+              const Spacer(),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.cloud_upload_outlined,
+                  color: AppColors.primary,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text('Back up your data', style: AppTextStyles.heading1),
+              const SizedBox(height: 10),
+              Text(
+                'Create an account to save your health data to the cloud and access it from any device.',
+                style: AppTextStyles.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+              const Spacer(),
+              NuvitaButton(
+                label: 'Create Account',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                ),
+              ),
+              const SizedBox(height: 14),
+              NuvitaButton(
+                label: 'Sign In',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                ),
+                isOutlined: true,
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Shown for authenticated users
+  Widget _buildProfileView() {
     final initials = _initials(_name.isEmpty ? '?' : _name);
     final label = _diseaseLabels[_diseaseType] ?? 'General Monitoring';
     final emoji = _diseaseEmojis[_diseaseType] ?? '➕';
@@ -112,7 +176,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Large initials avatar
                     Container(
                       width: 88,
                       height: 88,
@@ -136,7 +199,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: AppTextStyles.heading1,
                     ),
                     const SizedBox(height: 12),
-                    // Disease badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 18, vertical: 10),
@@ -158,7 +220,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            // Sign out at the bottom
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               child: NuvitaButton(

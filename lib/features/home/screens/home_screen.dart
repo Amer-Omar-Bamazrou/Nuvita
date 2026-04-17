@@ -7,6 +7,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/health_metric_card.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../dashboard/providers/health_provider.dart';
+import '../../dashboard/providers/health_history_provider.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -123,6 +124,10 @@ class _HomeBodyState extends State<_HomeBody> {
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _isLoading = false;
       });
+      // Load persisted readings into history provider now that we have the uid
+      if (mounted) {
+        context.read<HealthHistoryProvider>().loadReadings(uid);
+      }
     } catch (_) {
       setState(() {
         _userName = savedFirstName ?? '';
@@ -343,7 +348,13 @@ class _HomeBodyState extends State<_HomeBody> {
           status: status,
           minValue: config.min,
           maxValue: config.max,
-          onSubmit: (v) => provider.updateValue(metric, v),
+          onSubmit: (v) {
+            provider.updateValue(metric, v);
+            final uid = FirebaseAuth.instance.currentUser?.uid;
+            context
+                .read<HealthHistoryProvider>()
+                .addReading(metric, v, uid: uid);
+          },
         );
       }).toList(),
     );
