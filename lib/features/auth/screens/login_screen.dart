@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
+import '../../../core/services/preferences_service.dart';
 import '../services/auth_service.dart';
-import '../../disease/screens/disease_selection_screen.dart';
 import '../../home/screens/main_shell.dart';
+import '../../onboarding/screens/onboarding_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -45,22 +45,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
       if (!mounted) return;
-      // Check if disease selection has been completed
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      bool hasProfile = false;
-      if (uid != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
-        hasProfile = doc.exists && doc.data()?['profile'] != null;
-      }
-      if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              hasProfile ? const MainShell() : const DiseaseSelectionScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const MainShell()),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -77,9 +63,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateToRegister() {
+  Future<void> _navigateToRegister() async {
+    final onboardingDone = await PreferencesService.isOnboardingComplete();
+    if (!mounted) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+      MaterialPageRoute(
+        builder: (_) =>
+            onboardingDone ? const RegisterScreen() : const OnboardingScreen(),
+      ),
     );
   }
 

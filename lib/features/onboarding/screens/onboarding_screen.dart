@@ -6,7 +6,7 @@ import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../auth/screens/register_screen.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../disease/screens/disease_selection_screen.dart';
+import '../../home/screens/main_shell.dart';
 
 // ─── Local data classes ───────────────────────────────────────────────────────
 
@@ -261,9 +261,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               await PreferencesService.setOnboardingComplete();
               if (!mounted) return;
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const DiseaseSelectionScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const MainShell()),
               );
             },
             child: const Text('Skip anyway'),

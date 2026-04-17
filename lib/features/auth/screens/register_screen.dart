@@ -5,7 +5,7 @@ import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../services/auth_service.dart';
 import '../../../core/services/preferences_service.dart';
-import '../../onboarding/screens/welcome_splash_screen.dart';
+import '../../home/screens/main_shell.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -47,14 +47,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _nameController.text,
       );
       if (!mounted) return;
-      // Use the first name saved during onboarding for the splash greeting
-      final firstName = await PreferencesService.getFirstName() ??
-          _nameController.text.trim().split(' ').first;
+      await PreferencesService.setOnboardingComplete();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => WelcomeSplashScreen(firstName: firstName),
-        ),
+        MaterialPageRoute(builder: (_) => const MainShell()),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
