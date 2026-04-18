@@ -348,6 +348,9 @@ class _HomeBodyState extends State<_HomeBody> {
           status: status,
           minValue: config.min,
           maxValue: config.max,
+          suggestion: value != null
+              ? provider.getSuggestionForMetric(metric.name, value)
+              : null,
           onSubmit: (v) {
             provider.updateValue(metric, v);
             final uid = FirebaseAuth.instance.currentUser?.uid;

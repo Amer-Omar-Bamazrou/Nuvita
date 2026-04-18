@@ -19,6 +19,32 @@ class HealthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Returns a short contextual tip when a reading is outside the healthy range.
+  // Blood sugar thresholds are in mg/dL (the app's stored unit).
+  String? getSuggestionForMetric(String metricKey, double value) {
+    switch (metricKey) {
+      case 'bloodSugar':
+        // 180 mg/dL = 10 mmol/L (high threshold), 72 mg/dL = 4 mmol/L (low threshold)
+        if (value > 180) return 'Blood sugar is high — reduce sugary drinks and rest';
+        if (value < 72) return 'Blood sugar is low — eat something small now';
+        return null;
+      case 'systolic':
+        if (value > 140) return 'BP is elevated — avoid caffeine and rest quietly';
+        return null;
+      case 'heartRate':
+        if (value > 100) return 'Heart rate is high — try slow deep breathing';
+        if (value < 55) return 'Heart rate is low — avoid overexertion today';
+        return null;
+      case 'steps':
+        if (value < 3000) return 'Low steps today — a short walk would help';
+        return null;
+      case 'weight':
+        return 'Stay hydrated — drink water regularly';
+      default:
+        return null;
+    }
+  }
+
   // Evaluates a reading against clinical thresholds.
   // Returns null for metrics that have no status evaluation.
   MetricStatus? getStatus(HealthMetric metric, double value) {

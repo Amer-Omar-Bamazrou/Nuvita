@@ -16,6 +16,7 @@ class HealthMetricCard extends StatelessWidget {
     required this.onSubmit,
     this.minValue,
     this.maxValue,
+    this.suggestion,
   });
 
   final String title;
@@ -26,6 +27,7 @@ class HealthMetricCard extends StatelessWidget {
   final void Function(double) onSubmit;
   final double? minValue;
   final double? maxValue;
+  final String? suggestion;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +94,19 @@ class HealthMetricCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            if (suggestion != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                suggestion!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.secondary,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
         ),
       ),

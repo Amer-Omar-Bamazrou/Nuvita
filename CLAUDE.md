@@ -7,16 +7,16 @@
 - Developer: Amer Omar Bamazrrou
 - University: De Montfort University Leicester
 - Module: CTEC3451 Final Year Project
+- Deadline: 22 May 2026
 
 ## Tech Stack
-- Flutter + Dart (mobile app)
-- Firebase Authentication (login/register)
-- Firebase Firestore (database)
-- Firebase Storage (PDF storage)
-- Firebase Cloud Messaging (notifications)
-- FL Chart (health charts)
-- Flutter PDF (report generation)
+- Flutter + Dart
+- Firebase Auth, Firestore, Storage, FCM
 - Provider (state management)
+- SharedPreferences (local storage)
+- Flutter Local Notifications (medication reminders)
+- FL Chart (pending)
+- Flutter PDF (pending)
 
 ## Design System
 - Background: #D6F3F4
@@ -24,77 +24,66 @@
 - Cards: #74B3CE
 - Secondary: #508991
 - Text: #172A3A
-- Style: Minimal, clean, elderly friendly
-
-## Project Structure
-```
-lib/
-  features/
-    auth/screens/       — login, register
-    auth/services/      — auth service
-    dashboard/screens/  — home screen
-    disease/screens/    — disease selection
-    health/screens/     — health logging
-    medication/screens/ — medication
-    onboarding/screens/ — onboarding
-  shared/widgets/       — reusable widgets
-  core/theme/           — colours, styles, theme
-```
+- Card Radius: 16
+- Style: Minimal, elderly friendly
 
 ## Completed Features
-- Flutter setup and Firebase connection
+- Flutter + Firebase setup
 - App theme and colour palette
-- Reusable widgets (NuvitaTextField, NuvitaButton)
-- Login screen UI
-- Register screen UI
-- Firebase Authentication (login + register connected to Firebase)
-- Firestore database created
-- Disease Selection Screen (Stage 1: condition picker, Stage 2: 7-step personal info flow)
-- PatientModel + PatientService (saves to /users/{uid} profile field)
-- Homepage Dashboard (greeting, avatar, disease banner, metric cards grid, bottom sheet readings)
-- HealthProvider (local session state for metric values + clinical status evaluation)
-- HealthMetricCard widget (reusable, status badge, add-reading bottom sheet)
-- MainShell (IndexedStack + 4-tab bottom nav: Home, Medications, History, Profile)
-- ProfileScreen (Firestore load, initials avatar, disease badge, sign-out)
-- Medication + History placeholder screens
+- Reusable widgets: NuvitaTextField, NuvitaButton, HealthMetricCard
+- Authentication: Login, Register, AuthService
+- Onboarding: 7 step flow, SharedPreferences, PreferencesService
+- Homepage: Health metric cards, status badges, health evaluation rules
+- Bottom Navigation: MainShell with IndexedStack, 4 tabs
+- Profile: Firestore load, sign out, guest Create Account section
+- Health History: Filter chips, grouped readings, HealthHistoryProvider
+- Medication Reminders: MyTherapy UX, Today schedule, local notifications
 
-## Current Branch
-feature/homepage-dashboard
+## Known Issue — Critical
+Create Account button directs to Homepage instead of Onboarding.
+Correct flow: Open App → Onboarding → Create Account → Homepage
+This needs to be fixed.
 
-## In Progress
-- None
+## Current Pending Features
+1. Lifestyle Suggestions (next)
+2. Emergency Alert
+3. PDF Report Generation
+4. Appointment Reminders
+5. Health Charts (FL Chart)
+6. Firebase sync for readings and medications
 
-## Pending Features (in order)
-1. ~~Firebase Authentication connection~~ DONE
-2. ~~Disease Selection Screen~~ DONE
-3. ~~Homepage Dashboard~~ DONE
-4. Health Data Logging
-5. Health Trend Charts
-6. Medication Reminders
-7. Lifestyle Suggestion Engine
-8. Emergency Alert
-9. PDF Report Generation
-10. Appointment Reminders
-11. Onboarding Screen (last)
+## Modifications List — Do Later
+- Medication: tap card → detail view, Firebase sync, low pill alert
+- Homepage: daily summary card, trend indicators, warning advice
+- Navigation: fix Create Account → Onboarding flow
+- Security: update Firestore rules before submission
 
-## Coding Rules (ALWAYS FOLLOW)
+## Folder Structure
+lib/core/theme/ — app_colors, app_text_styles, app_theme
+lib/core/services/ — preferences_service, notification_service
+lib/features/auth/ — login, register, auth_service
+lib/features/onboarding/ — onboarding_screen, welcome_splash (dormant)
+lib/features/disease/ — disease_selection (dormant)
+lib/features/home/ — home_screen, main_shell
+lib/features/medication/ — medication_screen, add_medication, model, service
+lib/features/history/ — history_screen
+lib/features/profile/ — profile_screen
+lib/features/dashboard/ — health_provider, health_history_provider
+lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
+
+## Coding Rules — ALWAYS FOLLOW
 - Natural developer style comments only
 - Never AI style comments
 - Clean modular code
-- Follow existing folder structure strictly
-- Never change UI design unless asked
+- Follow existing folder structure
+- Never change UI unless asked
 - Scan for errors after every file
 - Tell me each file created or updated
 - Build one feature at a time
 - Never regenerate existing working code
+- Always ask about modifications after building
 
-## Git Branch Strategy
-- main: stable working code only
+## Git Strategy
+- main: stable code only
 - feature/xxx: one branch per feature
 - Always commit before switching branches
-
-## Important Notes
-- Project folder: C:\Projects\chronic_care_app
-- GitHub: github.com/Amer-Omar-Bamazrou/Nuvita
-- No real patient data — dummy data only
-- Target: Android only
