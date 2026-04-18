@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../health/models/health_reading.dart';
+import '../../health/services/health_reading_service.dart';
 
 // All tracked health metrics across disease types
 enum HealthMetric { bloodSugar, systolic, diastolic, heartRate, weight, steps }
@@ -77,6 +79,57 @@ class HealthProvider extends ChangeNotifier {
       case HealthMetric.weight:
       case HealthMetric.steps:
         return null;
+    }
+  }
+
+  // Restores the latest reading per metric from Firestore so cards
+  // show previous values when the app restarts.
+  Future<void> loadReadingsFromFirebase(String uid) async {
+    try {
+      for (final metric in HealthMetric.values) {
+        final reading =
+            await HealthReadingService.getLatestReading(uid, metric.name);
+        if (reading != null) {
+          _values[metric] = reading.value;
+        }
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  // Persists a single reading to Firestore after the local state has been updated.
+  Future<void> saveReadingToFirebase(
+    String uid,
+    HealthMetric metric,
+    double value,
+    MetricStatus? status,
+    String unit,
+  ) async {
+    try {
+      final reading = HealthReading(
+        id: '',
+        metricType: metric.name,
+        value: value,
+        unit: unit,
+        status: _statusString(status),
+        timestamp: DateTime.now(),
+      );
+      await HealthReadingService.saveReading(uid, reading);
+    } catch (_) {}
+  }
+
+  String _statusString(MetricStatus? status) {
+    switch (status) {
+      case MetricStatus.normal:
+        return 'Normal';
+      case MetricStatus.warning:
+        return 'Warning';
+      case MetricStatus.criticalLow:
+        return 'Low';
+      case MetricStatus.criticalHigh:
+        return 'High';
+      case null:
+        return 'Logged';
     }
   }
 }

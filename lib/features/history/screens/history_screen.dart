@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:collection';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../dashboard/providers/health_provider.dart';
+import '../../health/models/health_reading.dart';
 import '../../home/screens/main_shell.dart';
 
 // Filter chip definition — null metrics means "All"
@@ -31,68 +32,111 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  int _activeFilter = 0; // index into _filters
+  int _activeFilter = 0;
 
-  // Display label for a metric
-  String _metricLabel(HealthMetric m) {
-    if (m == HealthMetric.bloodSugar) return 'Blood Sugar';
-    if (m == HealthMetric.systolic) return 'Systolic BP';
-    if (m == HealthMetric.diastolic) return 'Diastolic BP';
-    if (m == HealthMetric.heartRate) return 'Heart Rate';
-    if (m == HealthMetric.weight) return 'Weight';
-    if (m == HealthMetric.steps) return 'Steps';
-    return '';
+  @override
+  void initState() {
+    super.initState();
+    // Trigger a load in case HomeScreen hasn't done it yet (e.g. deep-link)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        context.read<HealthHistoryProvider>().loadReadings(uid);
+      }
+    });
   }
 
-  String _metricUnit(HealthMetric m) {
-    if (m == HealthMetric.bloodSugar) return 'mg/dL';
-    if (m == HealthMetric.systolic) return 'mmHg';
-    if (m == HealthMetric.diastolic) return 'mmHg';
-    if (m == HealthMetric.heartRate) return 'bpm';
-    if (m == HealthMetric.weight) return 'kg';
-    if (m == HealthMetric.steps) return 'steps';
-    return '';
-  }
+  // ── Display helpers (now take String since HealthReading uses metricType) ──
 
-  IconData _metricIcon(HealthMetric m) {
-    if (m == HealthMetric.bloodSugar) return Icons.water_drop_rounded;
-    if (m == HealthMetric.systolic || m == HealthMetric.diastolic) {
-      return Icons.favorite_rounded;
+  String _metricLabel(String metricType) {
+    switch (metricType) {
+      case 'bloodSugar':
+        return 'Blood Sugar';
+      case 'systolic':
+        return 'Systolic BP';
+      case 'diastolic':
+        return 'Diastolic BP';
+      case 'heartRate':
+        return 'Heart Rate';
+      case 'weight':
+        return 'Weight';
+      case 'steps':
+        return 'Steps';
+      default:
+        return metricType;
     }
-    if (m == HealthMetric.heartRate) return Icons.monitor_heart_rounded;
-    if (m == HealthMetric.weight) return Icons.scale_rounded;
-    if (m == HealthMetric.steps) return Icons.directions_walk_rounded;
-    return Icons.health_and_safety_rounded;
   }
 
-  Color _metricColor(HealthMetric m) {
-    if (m == HealthMetric.bloodSugar) return const Color(0xFF1976D2);
-    if (m == HealthMetric.systolic || m == HealthMetric.diastolic) {
-      return const Color(0xFFD32F2F);
+  String _metricUnit(String metricType) {
+    switch (metricType) {
+      case 'bloodSugar':
+        return 'mg/dL';
+      case 'systolic':
+      case 'diastolic':
+        return 'mmHg';
+      case 'heartRate':
+        return 'bpm';
+      case 'weight':
+        return 'kg';
+      case 'steps':
+        return 'steps';
+      default:
+        return '';
     }
-    if (m == HealthMetric.heartRate) return const Color(0xFFE64A19);
-    if (m == HealthMetric.weight) return const Color(0xFF388E3C);
-    if (m == HealthMetric.steps) return const Color(0xFF7B1FA2);
-    return AppColors.secondary;
   }
 
-  // Badge colour based on status
-  Color _statusColor(MetricStatus? status) {
-    if (status == null) return AppColors.secondary;
-    if (status == MetricStatus.normal) return AppColors.success;
-    if (status == MetricStatus.warning) return AppColors.warning;
-    return AppColors.error;
+  IconData _metricIcon(String metricType) {
+    switch (metricType) {
+      case 'bloodSugar':
+        return Icons.water_drop_rounded;
+      case 'systolic':
+      case 'diastolic':
+        return Icons.favorite_rounded;
+      case 'heartRate':
+        return Icons.monitor_heart_rounded;
+      case 'weight':
+        return Icons.scale_rounded;
+      case 'steps':
+        return Icons.directions_walk_rounded;
+      default:
+        return Icons.health_and_safety_rounded;
+    }
   }
 
-  String _statusLabel(MetricStatus? status) {
-    if (status == null) return 'Logged';
-    if (status == MetricStatus.normal) return 'Normal';
-    if (status == MetricStatus.warning) return 'Warning';
-    if (status == MetricStatus.criticalLow) return 'Low';
-    return 'High';
+  Color _metricColor(String metricType) {
+    switch (metricType) {
+      case 'bloodSugar':
+        return const Color(0xFF1976D2);
+      case 'systolic':
+      case 'diastolic':
+        return const Color(0xFFD32F2F);
+      case 'heartRate':
+        return const Color(0xFFE64A19);
+      case 'weight':
+        return const Color(0xFF388E3C);
+      case 'steps':
+        return const Color(0xFF7B1FA2);
+      default:
+        return AppColors.secondary;
+    }
   }
 
-  // Format time as "9:04 AM"
+  // Status strings are already display-ready ('Normal', 'Warning', 'Low', 'High', 'Logged')
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Normal':
+        return AppColors.success;
+      case 'Warning':
+        return AppColors.warning;
+      case 'Low':
+      case 'High':
+        return AppColors.error;
+      default:
+        return AppColors.secondary;
+    }
+  }
+
   String _formatTime(DateTime dt) {
     final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -100,16 +144,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '$hour:$minute $period';
   }
 
-  // Group a sorted list of readings into Today / Yesterday / date strings
-  LinkedHashMap<String, List<HealthReading>> _groupByDate(
+  // Groups a newest-first list of readings into Today / Yesterday / date strings.
+  // No reversal needed — the provider already keeps the list newest-first.
+  Map<String, List<HealthReading>> _groupByDate(
       List<HealthReading> readings) {
-    final map = LinkedHashMap<String, List<HealthReading>>();
+    final map = <String, List<HealthReading>>{};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    // Reverse so newest first
-    for (final r in readings.reversed) {
+    for (final r in readings) {
       final day = DateTime(r.timestamp.year, r.timestamp.month, r.timestamp.day);
       String key;
       if (day == today) {
@@ -151,7 +195,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       body: Consumer<HealthHistoryProvider>(
         builder: (context, provider, _) {
-          final filtered = provider.filteredReadings(_filters[_activeFilter].metrics);
+          final filtered =
+              provider.filteredReadings(_filters[_activeFilter].metrics);
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          final isLoading = uid != null && !provider.isLoaded;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,9 +206,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildFilterChips(),
               if (provider.allReadings.isNotEmpty) _buildSummaryCard(provider),
               Expanded(
-                child: filtered.isEmpty
-                    ? _buildEmptyState()
-                    : _buildReadingsList(filtered),
+                child: isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : filtered.isEmpty
+                        ? _buildEmptyState()
+                        : _buildReadingsList(filtered),
               ),
             ],
           );
@@ -177,14 +230,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, i) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
           final selected = i == _activeFilter;
           return GestureDetector(
             onTap: () => setState(() => _activeFilter = i),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
                 color: selected ? AppColors.primary : AppColors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -308,7 +362,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               height: 48,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  // Navigate to MainShell at Home tab (index 0)
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const MainShell()),
                     (route) => false,
@@ -348,8 +401,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // Total item count = sum of (1 header + n readings) per group
-  int _countItems(LinkedHashMap<String, List<HealthReading>> grouped) {
+  int _countItems(Map<String, List<HealthReading>> grouped) {
     int count = 0;
     for (final group in grouped.values) {
       count += 1 + group.length;
@@ -358,7 +410,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildItemAtIndex(
-      LinkedHashMap<String, List<HealthReading>> grouped, int index) {
+      Map<String, List<HealthReading>> grouped, int index) {
     int cursor = 0;
     for (final entry in grouped.entries) {
       if (index == cursor) return _buildDateHeader(entry.key);
@@ -388,7 +440,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildReadingTile(HealthReading reading) {
-    final color = _metricColor(reading.metric);
+    final color = _metricColor(reading.metricType);
     final statusColor = _statusColor(reading.status);
 
     return Container(
@@ -415,16 +467,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(_metricIcon(reading.metric), color: color, size: 22),
+            child: Icon(_metricIcon(reading.metricType), color: color, size: 22),
           ),
           const SizedBox(width: 12),
-          // Name + status badge
+          // Metric name + status badge
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _metricLabel(reading.metric),
+                  _metricLabel(reading.metricType),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -433,13 +485,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    _statusLabel(reading.status),
+                    reading.status, // already a display-ready string
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -468,7 +521,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     TextSpan(
-                      text: ' ${_metricUnit(reading.metric)}',
+                      text: ' ${_metricUnit(reading.metricType)}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary,

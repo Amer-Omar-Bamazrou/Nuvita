@@ -124,8 +124,11 @@ class _HomeBodyState extends State<_HomeBody> {
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _isLoading = false;
       });
-      // Load persisted readings into history provider now that we have the uid
       if (mounted) {
+        // Restore latest card values from Firestore so the home screen
+        // shows the previous session's readings on app restart
+        context.read<HealthProvider>().loadReadingsFromFirebase(uid);
+        // Populate the history list
         context.read<HealthHistoryProvider>().loadReadings(uid);
       }
     } catch (_) {
@@ -353,10 +356,12 @@ class _HomeBodyState extends State<_HomeBody> {
               : null,
           onSubmit: (v) {
             provider.updateValue(metric, v);
+            final newStatus = provider.getStatus(metric, v);
             final uid = FirebaseAuth.instance.currentUser?.uid;
-            context
-                .read<HealthHistoryProvider>()
-                .addReading(metric, v, uid: uid);
+            if (uid != null) {
+              provider.saveReadingToFirebase(uid, metric, v, newStatus, config.unit);
+            }
+            context.read<HealthHistoryProvider>().addReading(metric, v);
           },
         );
       }).toList(),
