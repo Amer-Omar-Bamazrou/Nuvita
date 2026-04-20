@@ -33,11 +33,17 @@
 - Reusable widgets: NuvitaTextField, NuvitaButton, HealthMetricCard
 - Authentication: Login, Register, AuthService
 - Onboarding: 7 step flow, SharedPreferences, PreferencesService
-- Homepage: Health metric cards, status badges, health evaluation rules
+- Homepage: Health metric cards, status badges, inline lifestyle tips per card
 - Bottom Navigation: MainShell with IndexedStack, 4 tabs
 - Profile: Firestore load, sign out, guest Create Account section
-- Health History: Filter chips, grouped readings, HealthHistoryProvider
+- Health History: Filter chips, grouped readings, loading spinner, Firestore-backed
 - Medication Reminders: MyTherapy UX, Today schedule, local notifications
+- Lifestyle Suggestions: LifestyleEngine (12 rules), inline tips on HealthMetricCard
+- Firebase Readings Sync: readings saved to /users/{uid}/readings, restored on app start
+
+## Firestore Structure
+/users/{uid}/profile — name, diseaseType
+/users/{uid}/readings/{readingId} — metricType, value, unit, status, timestamp, note
 
 ## Known Issue — Critical
 Create Account button directs to Homepage instead of Onboarding.
@@ -45,18 +51,16 @@ Correct flow: Open App → Onboarding → Create Account → Homepage
 This needs to be fixed.
 
 ## Current Pending Features
-1. Lifestyle Suggestions (next)
-2. Emergency Alert
-3. PDF Report Generation
-4. Appointment Reminders
-5. Health Charts (FL Chart)
-6. Firebase sync for readings and medications
+1. Emergency Alert (next)
+2. PDF Report Generation
+3. Appointment Reminders
+4. Health Charts (FL Chart)
 
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
 - Homepage: daily summary card, trend indicators, warning advice
 - Navigation: fix Create Account → Onboarding flow
-- Security: update Firestore rules before submission
+- Security: update Firestore rules before submission (readings sub-collection needs read/write rule)
 
 ## Folder Structure
 lib/core/theme/ — app_colors, app_text_styles, app_theme
@@ -69,7 +73,17 @@ lib/features/medication/ — medication_screen, add_medication, model, service
 lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider
+lib/features/health/models/ — health_reading
+lib/features/health/services/ — health_reading_service, health_log_service (legacy)
+lib/features/lifestyle/models/ — lifestyle_suggestion
+lib/features/lifestyle/services/ — lifestyle_engine
+lib/features/lifestyle/widgets/ — suggestion_card
+lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wired to nav)
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
+
+## Key Providers
+- HealthProvider (scoped to HomeScreen) — current session metric values, inline tip logic, Firestore save/load
+- HealthHistoryProvider (global, app root in main.dart) — full readings list, loaded from Firestore once per session
 
 ## Coding Rules — ALWAYS FOLLOW
 - Natural developer style comments only

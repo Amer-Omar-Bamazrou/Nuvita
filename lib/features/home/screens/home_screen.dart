@@ -8,6 +8,7 @@ import '../../../shared/widgets/health_metric_card.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
+import '../../notifications/screens/suggestions_panel_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -172,14 +173,6 @@ class _HomeBodyState extends State<_HomeBody> {
     return '${weekdays[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
-  // Returns up to 2 initials from the user's name
-  String _initials(String name) {
-    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    if (parts.isNotEmpty) return parts[0][0].toUpperCase();
-    return '?';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -201,7 +194,7 @@ class _HomeBodyState extends State<_HomeBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(),
+                  _buildHeader(provider),
                   const SizedBox(height: 20),
                   _buildSummaryBanner(),
                   const SizedBox(height: 24),
@@ -219,10 +212,11 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // ── Header: greeting + date + avatar ─────────────────────────────────────
+  // ── Header: greeting + date + notification icon ───────────────────────────
 
-  Widget _buildHeader() {
+  Widget _buildHeader(HealthProvider provider) {
     final firstName = _userName.trim().split(' ').first;
+    final hasBadge = _hasConcerningReadings(provider);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,33 +240,71 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
         const SizedBox(width: 12),
-        // Initials avatar
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+        // Notification icon — taps open the Health Insights panel
+        GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SuggestionsPanelScreen(
+                diseaseType: _diseaseType,
+                currentReadings: {
+                  for (final m in HealthMetric.values)
+                    m.name: provider.getValue(m),
+                },
               ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            _initials(_userName.isEmpty ? '?' : _userName),
-            style: const TextStyle(
-              color: AppColors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
             ),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.notifications_rounded,
+                  color: AppColors.primary,
+                  size: 26,
+                ),
+              ),
+              // Red badge when any metric is in warning or critical range
+              if (hasBadge)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
     );
+  }
+
+  // Returns true if any currently tracked metric is outside the safe range
+  bool _hasConcerningReadings(HealthProvider provider) {
+    for (final m in HealthMetric.values) {
+      final value = provider.getValue(m);
+      if (value == null) continue;
+      final status = provider.getStatus(m, value);
+      if (status == MetricStatus.warning ||
+          status == MetricStatus.criticalLow ||
+          status == MetricStatus.criticalHigh) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ── Summary banner: "Managing: Blood Pressure" ───────────────────────────
