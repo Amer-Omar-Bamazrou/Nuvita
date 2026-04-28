@@ -40,6 +40,8 @@
 - Medication Reminders: MyTherapy UX, Today schedule, local notifications
 - Lifestyle Suggestions: LifestyleEngine (12 rules), inline tips on HealthMetricCard
 - Firebase Readings Sync: readings saved to /users/{uid}/readings, restored on app start
+- Health Insights Panel: notification icon (replaces avatar) with red badge, SuggestionsPanelScreen showing weekly summary, suggestion cards, appointments placeholder
+- Emergency Alert: SOS icon on disease banner, 10-second countdown dialog (barrierDismissible false), cancel window, alert sent confirmation dialog, Simulate Critical Reading button below banner, weekly BP trend snackbar (once per day via SharedPreferences flag)
 
 ## Firestore Structure
 /users/{uid}/profile — name, diseaseType
@@ -51,10 +53,9 @@ Correct flow: Open App → Onboarding → Create Account → Homepage
 This needs to be fixed.
 
 ## Current Pending Features
-1. Emergency Alert (next)
-2. PDF Report Generation
-3. Appointment Reminders
-4. Health Charts (FL Chart)
+1. PDF Report Generation
+2. Appointment Reminders (placeholder exists in SuggestionsPanelScreen)
+3. Health Charts (FL Chart)
 
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
@@ -79,6 +80,8 @@ lib/features/lifestyle/models/ — lifestyle_suggestion
 lib/features/lifestyle/services/ — lifestyle_engine
 lib/features/lifestyle/widgets/ — suggestion_card
 lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wired to nav)
+lib/features/notifications/screens/ — suggestions_panel_screen
+lib/features/emergency/ — emergency_service, trend_warning_service
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
 
 ## Key Providers

@@ -9,6 +9,8 @@ import '../../../core/services/preferences_service.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../notifications/screens/suggestions_panel_screen.dart';
+import '../../emergency/emergency_service.dart';
+import '../../emergency/trend_warning_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -131,6 +133,8 @@ class _HomeBodyState extends State<_HomeBody> {
         context.read<HealthProvider>().loadReadingsFromFirebase(uid);
         // Populate the history list
         context.read<HealthHistoryProvider>().loadReadings(uid);
+        // Check weekly BP trend — shows snackbar at most once per day
+        TrendWarningService.checkBPTrend(context, uid);
       }
     } catch (_) {
       setState(() {
@@ -197,7 +201,9 @@ class _HomeBodyState extends State<_HomeBody> {
                   _buildHeader(provider),
                   const SizedBox(height: 20),
                   _buildSummaryBanner(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 6),
+                  _buildSimulateButton(context),
+                  const SizedBox(height: 16),
                   Text("Today's Readings", style: AppTextStyles.heading3),
                   const SizedBox(height: 12),
                   _buildMetricsGrid(provider),
@@ -335,24 +341,56 @@ class _HomeBodyState extends State<_HomeBody> {
         children: [
           Text(emoji, style: const TextStyle(fontSize: 30)),
           const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Managing',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.white.withOpacity(0.7),
-                  fontSize: 13,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Managing',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.white.withOpacity(0.7),
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: AppTextStyles.heading3.copyWith(color: AppColors.white),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: AppTextStyles.heading3.copyWith(color: AppColors.white),
+                ),
+              ],
+            ),
+          ),
+          // SOS button — tap to start emergency countdown
+          GestureDetector(
+            onTap: () => EmergencyService.showEmergencyFlow(context),
+            child: const Icon(
+              Icons.warning_rounded,
+              color: Colors.red,
+              size: 20,
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Simulate critical reading — quick testing shortcut ───────────────────
+
+  Widget _buildSimulateButton(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: () => EmergencyService.showEmergencyFlow(context),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.error,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: const Text(
+          'Simulate Critical Reading',
+          style: TextStyle(fontSize: 12),
+        ),
       ),
     );
   }
