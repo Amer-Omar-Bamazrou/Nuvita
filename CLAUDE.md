@@ -15,8 +15,9 @@
 - Provider (state management)
 - SharedPreferences (local storage)
 - Flutter Local Notifications (medication reminders)
+- pdf: ^3.10.8 + printing: ^5.14.3 (PDF generation and sharing)
+- share_plus: ^13.1.0
 - FL Chart (pending)
-- Flutter PDF (pending)
 
 ## Design System
 - Background: #D6F3F4
@@ -42,6 +43,7 @@
 - Firebase Readings Sync: readings saved to /users/{uid}/readings, restored on app start
 - Health Insights Panel: notification icon (replaces avatar) with red badge, SuggestionsPanelScreen showing weekly summary, suggestion cards, appointments placeholder
 - Emergency Alert: SOS icon on disease banner, 10-second countdown dialog (barrierDismissible false), cancel window, alert sent confirmation dialog, Simulate Critical Reading button below banner, weekly BP trend snackbar (once per day via SharedPreferences flag)
+- PDF Report Generation: ReportService generates A4 PDF (header, patient summary, readings tables with avg/high/low per metric, medications list, disclaimer), ReportScreen with summary card + Preview and Share buttons, entry card on ProfileScreen above Sign Out
 
 ## Firestore Structure
 /users/{uid}/profile — name, diseaseType
@@ -52,10 +54,11 @@ Create Account button directs to Homepage instead of Onboarding.
 Correct flow: Open App → Onboarding → Create Account → Homepage
 This needs to be fixed.
 
+## Completed Features (continued)
+- Appointment Reminders: AppointmentModel + AppointmentService (SharedPrefs), AppointmentsScreen (Upcoming/Past tabs, swipe-to-delete, mark as done, day badges), AddAppointmentScreen (form with date/time/reminder picker), NotificationService extended with scheduleNotification + cancelNotification, SuggestionsPanelScreen appointments section live, ProfileScreen appointments tile
+
 ## Current Pending Features
-1. PDF Report Generation
-2. Appointment Reminders (placeholder exists in SuggestionsPanelScreen)
-3. Health Charts (FL Chart)
+1. Health Charts (FL Chart)
 
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
@@ -82,6 +85,7 @@ lib/features/lifestyle/widgets/ — suggestion_card
 lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wired to nav)
 lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service
+lib/features/report/ — report_service, report_screen
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
 
 ## Key Providers

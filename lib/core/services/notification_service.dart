@@ -84,8 +84,47 @@ class NotificationService {
     return tz.TZDateTime.from(local.toUtc(), tz.UTC);
   }
 
+  // One-time notification at an absolute local time — used for appointment reminders
+  static Future<void> scheduleNotification({
+    required String id,
+    required String title,
+    required String body,
+    required DateTime scheduledDate,
+  }) async {
+    // Skip if the reminder time has already passed
+    if (scheduledDate.isBefore(DateTime.now())) return;
+
+    final androidDetails = AndroidNotificationDetails(
+      _appointmentChannelId,
+      _appointmentChannelName,
+      channelDescription: 'Reminders for upcoming doctor appointments',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    final details = NotificationDetails(android: androidDetails);
+
+    await _plugin.zonedSchedule(
+      id.hashCode.abs() % 999990,
+      title,
+      body,
+      tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC),
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  static Future<void> cancelNotification(String id) async {
+    await _plugin.cancel(id.hashCode.abs() % 999990);
+  }
+
   // Deterministic int ID per medication + time slot so we can cancel reliably
   static int _notificationId(String medicationId, int timeIndex) {
     return (medicationId.hashCode.abs() % 99990) + timeIndex;
   }
+
+  static const _appointmentChannelId = 'appointment_reminders';
+  static const _appointmentChannelName = 'Appointment Reminders';
 }

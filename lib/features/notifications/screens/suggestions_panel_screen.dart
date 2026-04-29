@@ -5,6 +5,10 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../lifestyle/services/lifestyle_engine.dart';
 import '../../lifestyle/models/lifestyle_suggestion.dart';
+import '../../appointments/models/appointment_model.dart';
+import '../../appointments/services/appointment_service.dart';
+import '../../appointments/screens/appointments_screen.dart';
+import '../../appointments/screens/add_appointment_screen.dart';
 
 class SuggestionsPanelScreen extends StatefulWidget {
   final String diseaseType;
@@ -28,11 +32,19 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
   List<LifestyleSuggestion> _suggestions = [];
   String _summaryText = '';
   int _readingCount = 0;
+  List<AppointmentModel> _upcomingAppointments = [];
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    final appointments = await AppointmentService.getUpcomingAppointments();
+    if (!mounted) return;
+    setState(() => _upcomingAppointments = appointments);
   }
 
   Future<void> _load() async {
@@ -256,28 +268,66 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
     );
   }
 
-  // ── Appointments placeholder ──────────────────────────────────────────────
+  // ── Appointments section — live data from AppointmentService ─────────────
 
   Widget _buildAppointmentsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Upcoming Appointments', style: AppTextStyles.heading3),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Upcoming Appointments', style: AppTextStyles.heading3),
+            if (_upcomingAppointments.isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const AppointmentsScreen()),
+                ),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'View All',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_upcomingAppointments.isEmpty)
+          _buildEmptyAppointments()
+        else
+          ..._upcomingAppointments
+              .take(3)
+              .map(_buildAppointmentItem),
+      ],
+    );
+  }
+
+  Widget _buildEmptyAppointments() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          child: Row(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               const Icon(Icons.calendar_today_rounded,
                   color: AppColors.secondary, size: 24),
@@ -289,17 +339,100 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
                       style: AppTextStyles.label),
                   const SizedBox(height: 4),
                   Text(
-                    'Appointment reminders will appear here',
-                    style:
-                        AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                    'Tap below to add an appointment',
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                   ),
                 ],
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _openAddAppointment,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add Appointment'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildAppointmentItem(AppointmentModel apt) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_month_rounded,
+              color: AppColors.secondary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  apt.doctorName,
+                  style: AppTextStyles.label
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_apptDate(apt.dateTime)}  •  ${_apptTime(apt.dateTime)}',
+                  style:
+                      AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAddAppointment() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AddAppointmentScreen()),
+    );
+    if (result == true && mounted) {
+      _loadAppointments();
+    }
+  }
+
+  String _apptDate(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${dt.day} ${months[dt.month - 1]}';
+  }
+
+  String _apptTime(DateTime dt) {
+    final hour = dt.hour;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    return '$displayHour:$minute $period';
   }
 }
 
