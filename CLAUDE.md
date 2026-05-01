@@ -17,7 +17,7 @@
 - Flutter Local Notifications (medication reminders)
 - pdf: ^3.10.8 + printing: ^5.14.3 (PDF generation and sharing)
 - share_plus: ^13.1.0
-- FL Chart (pending)
+- fl_chart (health charts — trends, zone bands, insights)
 
 ## Design System
 - Background: #D6F3F4
@@ -49,21 +49,21 @@
 /users/{uid}/profile — name, diseaseType
 /users/{uid}/readings/{readingId} — metricType, value, unit, status, timestamp, note
 
-## Known Issue — Critical
-Create Account button directs to Homepage instead of Onboarding.
-Correct flow: Open App → Onboarding → Create Account → Homepage
-This needs to be fixed.
-
 ## Completed Features (continued)
 - Appointment Reminders: AppointmentModel + AppointmentService (SharedPrefs), AppointmentsScreen (Upcoming/Past tabs, swipe-to-delete, mark as done, day badges), AddAppointmentScreen (form with date/time/reminder picker), NotificationService extended with scheduleNotification + cancelNotification, SuggestionsPanelScreen appointments section live, ProfileScreen appointments tile
+- Health Charts: FL Chart integration with trend lines, zone bands (normal/warning/danger), and insights per metric type
+- Navigation Fix: LoginScreen checks onboarding flag before routing Create Account (OnboardingScreen if not done, RegisterScreen if done); RegisterScreen back button + Sign In link both return to OnboardingScreen; registration marks onboarding complete via PreferencesService; WillPopScope guards both screens
+
+## Known Issue — Resolved
+~~Create Account button directs to Homepage instead of Onboarding.~~
+Fixed: login_screen.dart + register_screen.dart updated on feature/navigation-fix branch.
 
 ## Current Pending Features
-1. Health Charts (FL Chart)
+None — all planned features complete.
 
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
 - Homepage: daily summary card, trend indicators, warning advice
-- Navigation: fix Create Account → Onboarding flow
 - Security: update Firestore rules before submission (readings sub-collection needs read/write rule)
 
 ## Folder Structure

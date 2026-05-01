@@ -74,9 +74,20 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _goBackToOnboarding() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async {
+        _goBackToOnboarding();
+        return false;
+      },
+      child: Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
@@ -150,7 +161,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
+    ),   // closes Scaffold
+    );   // closes WillPopScope
   }
 
   Widget _buildLogo() {

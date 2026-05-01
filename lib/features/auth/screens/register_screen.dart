@@ -6,6 +6,7 @@ import '../../../shared/widgets/nuvita_text_field.dart';
 import '../services/auth_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../home/screens/main_shell.dart';
+import '../../onboarding/screens/onboarding_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -67,13 +68,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  void _goBackToOnboarding() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async {
+        _goBackToOnboarding();
+        return false;
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _goBackToOnboarding,
         ),
       ),
       body: SafeArea(
@@ -157,7 +169,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
-    );
+    ),   // closes Scaffold
+    );   // closes WillPopScope
   }
 
   Widget _buildTermsNote() {
@@ -174,7 +187,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         Text('Already have an account?', style: AppTextStyles.bodySmall),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _goBackToOnboarding,
           child: const Text('Sign In'),
         ),
       ],
