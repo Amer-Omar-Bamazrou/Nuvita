@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../charts/screens/charts_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../health/models/health_reading.dart';
@@ -192,6 +193,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.show_chart_rounded, color: AppColors.white),
+            tooltip: 'View Trends',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChartsScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: Consumer<HealthHistoryProvider>(
         builder: (context, provider, _) {
