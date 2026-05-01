@@ -61,10 +61,15 @@ Fixed: login_screen.dart + register_screen.dart updated on feature/navigation-fi
 ## Current Pending Features
 None — all planned features complete.
 
+## Firestore Security Rules
+- Rules file: `firestore.rules` in project root
+- Applied: 2026-05-02 on branch feature/firebase-security-rules
+- Coverage: /users/{userId} (read/write own data), /readings, /alerts, /profile sub-collections (auth + uid match), /share_tokens (public read, auth write)
+- Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
+
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
 - Homepage: daily summary card, trend indicators, warning advice
-- Security: update Firestore rules before submission (readings sub-collection needs read/write rule)
 
 ## Folder Structure
 lib/core/theme/ — app_colors, app_text_styles, app_theme
