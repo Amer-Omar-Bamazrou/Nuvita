@@ -67,9 +67,11 @@ None — all planned features complete.
 - Coverage: /users/{userId} (read/write own data), /readings, /alerts, /profile sub-collections (auth + uid match), /share_tokens (public read, auth write)
 - Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
 
+## Completed Features (continued)
+- Homepage Improvements: Daily summary card (readings today, meds scheduled, last reading time), trend arrows on metric cards (red ↑ worse / green ↓ better per metric type, heart rate moves-toward-75 logic), warning action prompts per metric/status that replace lifestyle suggestion when in warning or critical range
+
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert
-- Homepage: daily summary card, trend indicators, warning advice
 
 ## Folder Structure
 lib/core/theme/ — app_colors, app_text_styles, app_theme

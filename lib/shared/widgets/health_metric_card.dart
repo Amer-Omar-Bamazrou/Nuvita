@@ -3,6 +3,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../features/dashboard/providers/health_provider.dart';
 
+// Carries the icon and colour for a single trend arrow on a metric card.
+class TrendIndicator {
+  final IconData icon;
+  final Color color;
+  const TrendIndicator({required this.icon, required this.color});
+}
+
 // Purely presentational — no provider knowledge here.
 // Parent passes value/status and wires up onSubmit to the provider.
 class HealthMetricCard extends StatelessWidget {
@@ -17,6 +24,8 @@ class HealthMetricCard extends StatelessWidget {
     this.minValue,
     this.maxValue,
     this.suggestion,
+    this.trendIndicator,
+    this.warningAdvice,
   });
 
   final String title;
@@ -28,6 +37,12 @@ class HealthMetricCard extends StatelessWidget {
   final double? minValue;
   final double? maxValue;
   final String? suggestion;
+  // Trend arrow shown next to the value — only set when user has entered
+  // a new reading this session that differs from the Firebase baseline.
+  final TrendIndicator? trendIndicator;
+  // Warning/critical action prompt that replaces the lifestyle suggestion
+  // when the reading is outside the safe range.
+  final String? warningAdvice;
 
   @override
   Widget build(BuildContext context) {
@@ -66,13 +81,26 @@ class HealthMetricCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // Value — large and prominent
-            Text(
-              value != null ? _formatValue(value!) : '---',
-              style: AppTextStyles.heading1.copyWith(
-                fontSize: 28,
-                color: value != null ? _valueColor(status) : AppColors.divider,
-              ),
+            // Value row — trend arrow appears to the right when available
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  value != null ? _formatValue(value!) : '---',
+                  style: AppTextStyles.heading1.copyWith(
+                    fontSize: 28,
+                    color: value != null ? _valueColor(status) : AppColors.divider,
+                  ),
+                ),
+                if (trendIndicator != null) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    trendIndicator!.icon,
+                    color: trendIndicator!.color,
+                    size: 16,
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 2),
             // Unit or tap prompt
@@ -94,7 +122,21 @@ class HealthMetricCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            if (suggestion != null) ...[
+            // warningAdvice takes priority over the lifestyle suggestion —
+            // both aren't shown at the same time to keep the card compact.
+            if (warningAdvice != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                warningAdvice!,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: _valueColor(status),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ] else if (suggestion != null) ...[
               const SizedBox(height: 5),
               Text(
                 suggestion!,

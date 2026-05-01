@@ -11,6 +11,7 @@ import '../../dashboard/providers/health_history_provider.dart';
 import '../../notifications/screens/suggestions_panel_screen.dart';
 import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
+import '../../medication/services/medication_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -38,6 +39,7 @@ class _HomeBodyState extends State<_HomeBody> {
   bool _isLoading = true;
   String _userName = '';
   String _diseaseType = 'other';
+  int _medScheduleCount = 0;
 
   // Maps disease IDs to display labels
   static const _diseaseLabels = {
@@ -97,6 +99,7 @@ class _HomeBodyState extends State<_HomeBody> {
   void initState() {
     super.initState();
     _loadUserProfile();
+    _loadMedSummary();
   }
 
   Future<void> _loadUserProfile() async {
@@ -144,6 +147,22 @@ class _HomeBodyState extends State<_HomeBody> {
     }
   }
 
+  // Counts total doses scheduled for today across all active medications.
+  // Mirrors the schedule logic in MedicationScreen without touching that file.
+  Future<void> _loadMedSummary() async {
+    final meds = await MedicationService.loadAll();
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    var count = 0;
+    for (final med in meds) {
+      if (!med.isActive) continue;
+      final start = med.startDate;
+      if (DateTime(start.year, start.month, start.day).isAfter(todayDate)) continue;
+      count += med.times.length;
+    }
+    if (mounted) setState(() => _medScheduleCount = count);
+  }
+
   // Which metrics to show depends on the user's condition
   List<HealthMetric> get _activeMetrics {
     switch (_diseaseType) {
@@ -188,8 +207,8 @@ class _HomeBodyState extends State<_HomeBody> {
       );
     }
 
-    return Consumer<HealthProvider>(
-      builder: (context, provider, _) {
+    return Consumer2<HealthProvider, HealthHistoryProvider>(
+      builder: (context, provider, historyProvider, _) {
         return Scaffold(
           backgroundColor: AppColors.background,
           body: SafeArea(
@@ -199,7 +218,9 @@ class _HomeBodyState extends State<_HomeBody> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildHeader(provider),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  _buildDailySummaryCard(historyProvider),
+                  const SizedBox(height: 16),
                   _buildSummaryBanner(),
                   const SizedBox(height: 6),
                   _buildSimulateButton(context),
@@ -298,6 +319,116 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
+  // ── Daily summary card ────────────────────────────────────────────────────
+
+  Widget _buildDailySummaryCard(HealthHistoryProvider historyProvider) {
+    final todayCount = historyProvider.todayCount;
+    final lastTime = historyProvider.lastReadingTime;
+    final lastText = _formatLastReadingTime(lastTime);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Today's Summary",
+            style: AppTextStyles.label.copyWith(
+              fontSize: 13,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildSummaryItem(
+                Icons.monitor_heart_rounded,
+                '$todayCount',
+                'readings today',
+                AppColors.success,
+              ),
+              const SizedBox(width: 8),
+              _buildSummaryItem(
+                Icons.medication_rounded,
+                '$_medScheduleCount',
+                'meds scheduled',
+                const Color(0xFF1565C0),
+              ),
+              const SizedBox(width: 8),
+              _buildSummaryItem(
+                Icons.access_time_rounded,
+                lastText,
+                'last reading',
+                AppColors.secondary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(
+      IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: color),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: AppTextStyles.label.copyWith(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  label,
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatLastReadingTime(DateTime? time) {
+    if (time == null) return 'No readings yet';
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    }
+    return '${diff.inDays}d ago';
+  }
+
   // Returns true if any currently tracked metric is outside the safe range
   bool _hasConcerningReadings(HealthProvider provider) {
     for (final m in HealthMetric.values) {
@@ -311,6 +442,73 @@ class _HomeBodyState extends State<_HomeBody> {
       }
     }
     return false;
+  }
+
+  // ── Trend and advice helpers ──────────────────────────────────────────────
+
+  // Computes the trend arrow for a metric card. Returns null when there's
+  // nothing to compare (no new entry this session, or metric has no direction).
+  TrendIndicator? _computeTrend(
+      HealthMetric metric, double? current, double? previous) {
+    if (current == null || previous == null || current == previous) return null;
+    final isIncrease = current > previous;
+
+    switch (metric) {
+      case HealthMetric.bloodSugar:
+      case HealthMetric.systolic:
+      case HealthMetric.diastolic:
+        // Higher values are worse for these metrics
+        return TrendIndicator(
+          icon: isIncrease
+              ? Icons.arrow_upward_rounded
+              : Icons.arrow_downward_rounded,
+          color: isIncrease ? AppColors.error : AppColors.success,
+        );
+
+      case HealthMetric.heartRate:
+        // Good direction is toward resting heart rate of 75 BPM
+        return TrendIndicator(
+          icon: isIncrease
+              ? Icons.arrow_upward_rounded
+              : Icons.arrow_downward_rounded,
+          color: (current - 75).abs() < (previous - 75).abs()
+              ? AppColors.success
+              : AppColors.error,
+        );
+
+      case HealthMetric.weight:
+      case HealthMetric.steps:
+        return null;
+    }
+  }
+
+  // Returns a short actionable prompt for warning/critical readings.
+  // Only called when value is non-null.
+  String? _computeWarningAdvice(
+      HealthMetric metric, double value, MetricStatus? status) {
+    if (status == null || status == MetricStatus.normal) return null;
+
+    switch (metric) {
+      case HealthMetric.bloodSugar:
+        if (status == MetricStatus.criticalLow) return 'Eat something now';
+        if (status == MetricStatus.warning) return 'Consider reducing sugar intake';
+        if (status == MetricStatus.criticalHigh) return 'Seek medical attention immediately';
+        return null;
+
+      case HealthMetric.systolic:
+        if (status == MetricStatus.warning) return 'Rest and avoid caffeine';
+        if (status == MetricStatus.criticalHigh) return 'Stop activity — seek help now';
+        return null;
+
+      case HealthMetric.heartRate:
+        if (status == MetricStatus.criticalLow) return 'Sit down — seek medical attention';
+        if (status == MetricStatus.warning) return 'Rest and breathe slowly';
+        if (status == MetricStatus.criticalHigh) return 'Rest immediately — seek help';
+        return null;
+
+      default:
+        return null;
+    }
   }
 
   // ── Summary banner: "Managing: Blood Pressure" ───────────────────────────
@@ -410,6 +608,7 @@ class _HomeBodyState extends State<_HomeBody> {
       children: metrics.map((metric) {
         final config = _configs[metric]!;
         final value = provider.getValue(metric);
+        final previous = provider.getPreviousValue(metric);
         final status =
             value != null ? provider.getStatus(metric, value) : null;
 
@@ -423,6 +622,10 @@ class _HomeBodyState extends State<_HomeBody> {
           maxValue: config.max,
           suggestion: value != null
               ? provider.getSuggestionForMetric(metric.name, value)
+              : null,
+          trendIndicator: _computeTrend(metric, value, previous),
+          warningAdvice: value != null
+              ? _computeWarningAdvice(metric, value, status)
               : null,
           onSubmit: (v) {
             provider.updateValue(metric, v);

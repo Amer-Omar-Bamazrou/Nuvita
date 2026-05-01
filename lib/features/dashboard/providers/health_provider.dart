@@ -14,7 +14,15 @@ class HealthProvider extends ChangeNotifier {
     for (final m in HealthMetric.values) m: null,
   };
 
+  // Holds the Firebase-loaded baseline so trend arrows can compare against it.
+  // These are set once on load and not updated when the user enters new readings.
+  final Map<HealthMetric, double?> _previousValues = {
+    for (final m in HealthMetric.values) m: null,
+  };
+
   double? getValue(HealthMetric metric) => _values[metric];
+
+  double? getPreviousValue(HealthMetric metric) => _previousValues[metric];
 
   void updateValue(HealthMetric metric, double value) {
     _values[metric] = value;
@@ -83,7 +91,8 @@ class HealthProvider extends ChangeNotifier {
   }
 
   // Restores the latest reading per metric from Firestore so cards
-  // show previous values when the app restarts.
+  // show previous values when the app restarts. Also populates _previousValues
+  // so trend arrows have a baseline to compare against new session entries.
   Future<void> loadReadingsFromFirebase(String uid) async {
     try {
       for (final metric in HealthMetric.values) {
@@ -91,6 +100,7 @@ class HealthProvider extends ChangeNotifier {
             await HealthReadingService.getLatestReading(uid, metric.name);
         if (reading != null) {
           _values[metric] = reading.value;
+          _previousValues[metric] = reading.value;
         }
       }
       notifyListeners();
