@@ -82,20 +82,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       description: 'Set reminders for walking, hydration and exercise',
     ),
     _ServiceDef(
-      id: 'doctor_reports',
-      icon: Icons.description_rounded,
-      iconColor: Color(0xFF6A1B9A),
-      title: 'Doctor Reports',
-      description: 'Generate and share health reports with your doctor',
-    ),
-    _ServiceDef(
-      id: 'emergency_alerts',
-      icon: Icons.emergency_rounded,
-      iconColor: Color(0xFFC62828),
-      title: 'Emergency Alerts',
-      description: 'Get alerted when readings reach dangerous levels',
-    ),
-    _ServiceDef(
       id: 'appointments',
       icon: Icons.calendar_month_rounded,
       iconColor: Color(0xFF00695C),
