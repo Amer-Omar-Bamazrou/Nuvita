@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -45,6 +46,13 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
   Future<void> _load() async {
     await NotificationService.initialize();
+
+    // Sync from Firestore first so local cache is up-to-date on app start
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await MedicationService.syncFromFirebase(user.uid);
+    }
+
     final meds = await MedicationService.loadAll();
     if (mounted) {
       setState(() {

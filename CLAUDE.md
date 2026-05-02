@@ -53,6 +53,9 @@
 - Appointment Reminders: AppointmentModel + AppointmentService (SharedPrefs), AppointmentsScreen (Upcoming/Past tabs, swipe-to-delete, mark as done, day badges), AddAppointmentScreen (form with date/time/reminder picker), NotificationService extended with scheduleNotification + cancelNotification, SuggestionsPanelScreen appointments section live, ProfileScreen appointments tile
 - Health Charts: FL Chart integration with trend lines, zone bands (normal/warning/danger), and insights per metric type
 - Navigation Fix: LoginScreen checks onboarding flag before routing Create Account (OnboardingScreen if not done, RegisterScreen if done); RegisterScreen back button + Sign In link both return to OnboardingScreen; registration marks onboarding complete via PreferencesService; WillPopScope guards both screens
+- Onboarding Step 6 Fix: Removed Doctor Reports and Emergency Alerts from service preferences list — kept only Medications, Measurements, Activities, Appointments (these are core features, not optional services)
+- Firestore Security Rules: firestore.rules created in project root — covers /users/{uid} and all sub-collections (auth + uid match), /share_tokens (public read, auth write); must be manually published in Firebase Console
+- Homepage Improvements: Daily summary card (readings today, meds scheduled, last reading time), trend arrows on metric cards (red ↑ worse / green ↓ better per metric type, heart rate moves-toward-75 logic), warning action prompts per metric/status that replace lifestyle suggestion when in warning or critical range
 
 ## Known Issue — Resolved
 ~~Create Account button directs to Homepage instead of Onboarding.~~
@@ -66,9 +69,6 @@ None — all planned features complete.
 - Applied: 2026-05-02 on branch feature/firebase-security-rules
 - Coverage: /users/{userId} (read/write own data), /readings, /alerts, /profile sub-collections (auth + uid match), /share_tokens (public read, auth write)
 - Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
-
-## Completed Features (continued)
-- Homepage Improvements: Daily summary card (readings today, meds scheduled, last reading time), trend arrows on metric cards (red ↑ worse / green ↓ better per metric type, heart rate moves-toward-75 logic), warning action prompts per metric/status that replace lifestyle suggestion when in warning or critical range
 
 ## Modifications List — Do Later
 - Medication: tap card → detail view, Firebase sync, low pill alert

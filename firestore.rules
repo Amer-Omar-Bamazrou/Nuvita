@@ -19,6 +19,12 @@ service cloud.firestore {
           && request.auth.uid == userId;
       }
 
+      // Medications sub-collection
+      match /medications/{medicationId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
+      }
+
       // Profile documents (wildcard covers nested paths)
       match /profile/{document=**} {
         allow read, write: if request.auth != null

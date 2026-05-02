@@ -11,6 +11,7 @@ class AppointmentModel {
   const AppointmentModel({
     required this.id,
     required this.doctorName,
+
     required this.speciality,
     this.location = '',
     required this.dateTime,
