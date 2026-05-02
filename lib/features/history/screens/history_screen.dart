@@ -7,6 +7,7 @@ import '../../charts/screens/charts_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../health/models/health_reading.dart';
+import '../../health/services/health_reading_service.dart';
 import '../../home/screens/main_shell.dart';
 
 // Filter chip definition — null metrics means "All"
@@ -175,6 +176,121 @@ class _HistoryScreenState extends State<HistoryScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return months[m];
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────────
+
+  void _deleteReading(HealthReading reading) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final provider = context.read<HealthHistoryProvider>();
+
+    provider.removeReading(reading);
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+          SnackBar(
+            content: const Text('Reading deleted'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.black87,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.white,
+              onPressed: () => provider.restoreReading(reading),
+            ),
+          ),
+        )
+        .closed
+        .then((reason) {
+      if (reason != SnackBarClosedReason.action &&
+          uid != null &&
+          reading.id.isNotEmpty) {
+        HealthReadingService.deleteReading(uid, reading.id);
+      }
+    });
+  }
+
+  // ── Edit ──────────────────────────────────────────────────────────────────────
+
+  // Opens the edit sheet and waits for the user's new value.
+  // Controller lifecycle is managed inside _EditReadingSheet — not here —
+  // to avoid disposing it while the exit animation is still running.
+  Future<void> _showEditSheet(HealthReading reading) async {
+    final newValue = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _EditReadingSheet(
+        reading: reading,
+        metricLabel: _metricLabel(reading.metricType),
+        unit: _metricUnit(reading.metricType),
+        validRange: _validRange(reading.metricType),
+      ),
+    );
+
+    if (newValue != null && mounted) {
+      _saveEdit(reading, newValue);
+    }
+  }
+
+  Future<void> _saveEdit(HealthReading reading, double newValue) async {
+    final newStatus = _statusForValue(reading.metricType, newValue);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final provider = context.read<HealthHistoryProvider>();
+
+    provider.patchReading(reading, newValue, newStatus);
+
+    if (uid != null && reading.id.isNotEmpty) {
+      try {
+        await HealthReadingService.updateReading(
+            uid, reading.id, newValue, newStatus);
+      } catch (e) {
+        debugPrint('HistoryScreen._saveEdit: $e');
+      }
+    }
+  }
+
+  // Mirrors HealthProvider.getStatus thresholds to recalculate status on edit
+  String _statusForValue(String metricType, double value) {
+    switch (metricType) {
+      case 'bloodSugar':
+        if (value < 70) return 'Low';
+        if (value <= 180) return 'Normal';
+        if (value <= 300) return 'Warning';
+        return 'High';
+      case 'systolic':
+        if (value < 90) return 'Low';
+        if (value <= 120) return 'Normal';
+        if (value <= 140) return 'Warning';
+        return 'High';
+      case 'diastolic':
+        if (value < 60) return 'Low';
+        if (value <= 80) return 'Normal';
+        if (value <= 90) return 'Warning';
+        return 'High';
+      case 'heartRate':
+        if (value < 50) return 'Low';
+        if (value <= 100) return 'Normal';
+        if (value <= 120) return 'Warning';
+        return 'High';
+      default:
+        return 'Logged';
+    }
+  }
+
+  List<double> _validRange(String metricType) {
+    switch (metricType) {
+      case 'bloodSugar': return [1, 600];
+      case 'systolic':   return [60, 250];
+      case 'diastolic':  return [40, 180];
+      case 'heartRate':  return [30, 250];
+      case 'weight':     return [10, 300];
+      case 'steps':      return [0, 100000];
+      default:           return [0, 99999];
+    }
   }
 
   @override
@@ -456,105 +572,284 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final color = _metricColor(reading.metricType);
     final statusColor = _statusColor(reading.status);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    return Dismissible(
+      key: ValueKey(
+        reading.id.isNotEmpty
+            ? reading.id
+            : '${reading.metricType}_${reading.timestamp.millisecondsSinceEpoch}',
       ),
-      child: Row(
-        children: [
-          // Metric icon bubble
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(_metricIcon(reading.metricType), color: color, size: 22),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => _deleteReading(reading),
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppColors.error,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Icon(Icons.delete_rounded, color: Colors.white, size: 26),
+      ),
+      child: GestureDetector(
+        onLongPress: () => _showEditSheet(reading),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          // Metric name + status badge
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _metricLabel(reading.metricType),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    reading.status, // already a display-ready string
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Value + time
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
             children: [
-              RichText(
-                text: TextSpan(
+              // Metric icon bubble
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_metricIcon(reading.metricType),
+                    color: color, size: 22),
+              ),
+              const SizedBox(width: 12),
+              // Metric name + status badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextSpan(
-                      text: reading.value % 1 == 0
-                          ? reading.value.toInt().toString()
-                          : reading.value.toStringAsFixed(1),
+                    Text(
+                      _metricLabel(reading.metricType),
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textDark,
                       ),
                     ),
-                    TextSpan(
-                      text: ' ${_metricUnit(reading.metricType)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.secondary,
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        reading.status,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                _formatTime(reading.timestamp),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.secondary,
-                ),
+              // Value + time
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: reading.value % 1 == 0
+                              ? reading.value.toInt().toString()
+                              : reading.value.toStringAsFixed(1),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' ${_metricUnit(reading.metricType)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatTime(reading.timestamp),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Edit reading sheet ────────────────────────────────────────────────────────
+// Separate StatefulWidget so the TextEditingController is created in initState
+// and disposed in dispose — after the exit animation fully completes.
+
+class _EditReadingSheet extends StatefulWidget {
+  final HealthReading reading;
+  final String metricLabel;
+  final String unit;
+  final List<double> validRange;
+
+  const _EditReadingSheet({
+    required this.reading,
+    required this.metricLabel,
+    required this.unit,
+    required this.validRange,
+  });
+
+  @override
+  State<_EditReadingSheet> createState() => _EditReadingSheetState();
+}
+
+class _EditReadingSheetState extends State<_EditReadingSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.reading.value;
+    _controller = TextEditingController(
+      text: v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(1),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.reading.value;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text(
+                'Edit ${widget.metricLabel}',
+                style: AppTextStyles.heading3,
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Icon(Icons.close_rounded,
+                    color: AppColors.secondary, size: 22),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Current: ${v % 1 == 0 ? v.toInt() : v.toStringAsFixed(1)} ${widget.unit}',
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _controller,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            style: const TextStyle(fontSize: 16, color: AppColors.textDark),
+            decoration: InputDecoration(
+              labelText: 'New value',
+              labelStyle: const TextStyle(color: AppColors.secondary),
+              suffixText: widget.unit,
+              suffixStyle: const TextStyle(
+                  color: AppColors.secondary, fontSize: 14),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _onSave,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Save'),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  void _onSave() {
+    final raw = double.tryParse(_controller.text.trim());
+    final range = widget.validRange;
+    if (raw == null || raw < range[0] || raw > range[1]) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Enter a value between ${range[0].toInt()} and ${range[1].toInt()} ${widget.unit}',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    // Pop and return the new value to _showEditSheet in the parent screen
+    Navigator.pop(context, raw);
   }
 }

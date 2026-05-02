@@ -61,4 +61,12 @@ class HealthReadingService {
   static Future<void> deleteReading(String uid, String readingId) async {
     await _col(uid).doc(readingId).delete();
   }
+
+  static Future<void> updateReading(
+      String uid, String readingId, double newValue, String newStatus) async {
+    await _col(uid).doc(readingId).update({
+      'value': newValue,
+      'status': newStatus,
+    });
+  }
 }

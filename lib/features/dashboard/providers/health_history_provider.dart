@@ -55,6 +55,58 @@ class HealthHistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Removes a reading from the in-memory list.
+  // Matches by Firestore ID when available, falls back to metricType + timestamp.
+  void removeReading(HealthReading reading) {
+    if (reading.id.isNotEmpty) {
+      _readings.removeWhere((r) => r.id == reading.id);
+    } else {
+      _readings.removeWhere((r) =>
+          r.metricType == reading.metricType &&
+          r.timestamp.millisecondsSinceEpoch ==
+              reading.timestamp.millisecondsSinceEpoch);
+    }
+    notifyListeners();
+  }
+
+  // Re-inserts a reading while maintaining newest-first order (undo delete).
+  void restoreReading(HealthReading reading) {
+    final i = _readings.indexWhere(
+      (r) => r.timestamp.isBefore(reading.timestamp),
+    );
+    if (i == -1) {
+      _readings.add(reading);
+    } else {
+      _readings.insert(i, reading);
+    }
+    notifyListeners();
+  }
+
+  // Updates a reading's value and status in the in-memory list.
+  void patchReading(HealthReading original, double newValue, String newStatus) {
+    int i;
+    if (original.id.isNotEmpty) {
+      i = _readings.indexWhere((r) => r.id == original.id);
+    } else {
+      i = _readings.indexWhere((r) =>
+          r.metricType == original.metricType &&
+          r.timestamp.millisecondsSinceEpoch ==
+              original.timestamp.millisecondsSinceEpoch);
+    }
+    if (i == -1) return;
+    final old = _readings[i];
+    _readings[i] = HealthReading(
+      id: old.id,
+      metricType: old.metricType,
+      value: newValue,
+      unit: old.unit,
+      status: newStatus,
+      timestamp: old.timestamp,
+      note: old.note,
+    );
+    notifyListeners();
+  }
+
   // Returns readings filtered by metric set, or all if filter is null/empty.
   // Compares metric names as strings since HealthReading uses string-based metricType.
   List<HealthReading> filteredReadings(Set<HealthMetric>? metrics) {
