@@ -49,6 +49,9 @@ class MedicationService {
       'startDate': Timestamp.fromDate(med.startDate),
       'isActive': med.isActive,
       'notes': med.notes,
+      'pillsRemaining': med.pillsRemaining,
+      'pillsPerDose': med.pillsPerDose,
+      'lowSupplyNotified': med.lowSupplyNotified,
     };
   }
 
@@ -66,6 +69,9 @@ class MedicationService {
       startDate: startDate,
       isActive: data['isActive'] as bool? ?? true,
       notes: data['notes'] as String? ?? '',
+      pillsRemaining: data['pillsRemaining'] as int?,
+      pillsPerDose: data['pillsPerDose'] as int? ?? 1,
+      lowSupplyNotified: data['lowSupplyNotified'] as bool? ?? false,
     );
   }
 
@@ -135,6 +141,72 @@ class MedicationService {
         } catch (e) {
           debugPrint('MedicationService.update: $e');
         }
+      }
+    }
+  }
+
+  // ── Pills tracking ─────────────────────────────────────────────────────────
+
+  // Decrements pillsRemaining by pillsPerDose and persists.
+  // Returns the updated model, or the original if pills are not tracked.
+  static Future<MedicationModel?> takeMedication(String id) async {
+    final meds = await loadAll();
+    final i = meds.indexWhere((m) => m.id == id);
+    if (i == -1) return null;
+
+    final med = meds[i];
+    if (med.pillsRemaining == null) return med;
+
+    final newCount = (med.pillsRemaining! - med.pillsPerDose).clamp(0, 999999);
+    final updated = med.copyWith(pillsRemaining: newCount);
+    meds[i] = updated;
+    await _saveAll(meds);
+
+    final uid = _uid;
+    if (uid != null) {
+      try {
+        await _medsRef(uid).doc(updated.id).set(_toFirestoreMap(updated));
+      } catch (e) {
+        debugPrint('MedicationService.takeMedication: $e');
+      }
+    }
+    return updated;
+  }
+
+  // True when a medication is active, tracked, and has 7 or fewer pills left.
+  static bool checkLowSupply(MedicationModel med) {
+    return med.isActive &&
+        med.pillsRemaining != null &&
+        med.pillsRemaining! <= 7;
+  }
+
+  static Future<List<MedicationModel>> getLowSupplyMedications() async {
+    final meds = await loadAll();
+    return meds.where(checkLowSupply).toList();
+  }
+
+  // Update pill count directly (e.g. after a refill from the edit screen).
+  // Resets lowSupplyNotified when count goes above the threshold.
+  static Future<void> updatePillsRemaining(String id, int newCount) async {
+    final meds = await loadAll();
+    final i = meds.indexWhere((m) => m.id == id);
+    if (i == -1) return;
+
+    final med = meds[i];
+    final resetFlag = newCount > 7;
+    final updated = med.copyWith(
+      pillsRemaining: newCount,
+      lowSupplyNotified: resetFlag ? false : med.lowSupplyNotified,
+    );
+    meds[i] = updated;
+    await _saveAll(meds);
+
+    final uid = _uid;
+    if (uid != null) {
+      try {
+        await _medsRef(uid).doc(updated.id).set(_toFirestoreMap(updated));
+      } catch (e) {
+        debugPrint('MedicationService.updatePillsRemaining: $e');
       }
     }
   }

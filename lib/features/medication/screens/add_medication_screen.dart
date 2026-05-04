@@ -8,7 +8,10 @@ import '../models/medication_model.dart';
 import '../services/medication_service.dart';
 
 class AddMedicationScreen extends StatefulWidget {
-  const AddMedicationScreen({super.key});
+  const AddMedicationScreen({super.key, this.existing});
+
+  // Pass an existing medication to pre-fill the form and enter edit mode
+  final MedicationModel? existing;
 
   @override
   State<AddMedicationScreen> createState() => _AddMedicationScreenState();
@@ -19,30 +22,65 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   final _nameController = TextEditingController();
   final _dosageController = TextEditingController();
   final _notesController = TextEditingController();
+  final _pillsController = TextEditingController();
 
   String _frequency = 'Once daily';
-  // TimeOfDay list — size changes with frequency
   List<TimeOfDay> _times = [const TimeOfDay(hour: 8, minute: 0)];
   DateTime _startDate = DateTime.now();
   bool _isSaving = false;
 
-  static const _frequencies = ['Once daily', 'Twice daily', 'Three times daily'];
-  static const _frequencyTimeCounts = {'Once daily': 1, 'Twice daily': 2, 'Three times daily': 3};
+  bool get _isEditMode => widget.existing != null;
 
-  // Default times per slot
+  static const _frequencies = [
+    'Once daily',
+    'Twice daily',
+    'Three times daily',
+  ];
+  static const _frequencyTimeCounts = {
+    'Once daily': 1,
+    'Twice daily': 2,
+    'Three times daily': 3,
+  };
   static const _defaultTimes = [
     TimeOfDay(hour: 8, minute: 0),
     TimeOfDay(hour: 14, minute: 0),
     TimeOfDay(hour: 20, minute: 0),
   ];
+  static const _timeLabels = [
+    'Morning dose',
+    'Afternoon dose',
+    'Evening dose',
+  ];
 
-  static const _timeLabels = ['Morning dose', 'Afternoon dose', 'Evening dose'];
+  @override
+  void initState() {
+    super.initState();
+    final med = widget.existing;
+    if (med != null) {
+      _nameController.text = med.name;
+      _dosageController.text = med.dosage;
+      _notesController.text = med.notes;
+      _frequency = med.frequency;
+      _startDate = med.startDate;
+      if (med.pillsRemaining != null) {
+        _pillsController.text = med.pillsRemaining.toString();
+      }
+      _times = med.times.map((t) {
+        final parts = t.split(':');
+        return TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+        );
+      }).toList();
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _dosageController.dispose();
     _notesController.dispose();
+    _pillsController.dispose();
     super.dispose();
   }
 
@@ -50,7 +88,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     final count = _frequencyTimeCounts[freq]!;
     setState(() {
       _frequency = freq;
-      _times = List.generate(count, (i) => i < _times.length ? _times[i] : _defaultTimes[i]);
+      _times = List.generate(
+        count,
+        (i) => i < _times.length ? _times[i] : _defaultTimes[i],
+      );
     });
   }
 
@@ -96,27 +137,56 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     }
   }
 
+  int? _parsedPills() {
+    final text = _pillsController.text.trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text);
+  }
+
   Future<void> _onSave() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
+    final existing = widget.existing;
+    final pills = _parsedPills();
+    final resetNotified = pills != null && pills > 7;
+
     final med = MedicationModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text.trim(),
       dosage: _dosageController.text.trim(),
       frequency: _frequency,
       times: _times.map(_formatTime).toList(),
       startDate: _startDate,
       notes: _notesController.text.trim(),
+      pillsRemaining: pills,
+      pillsPerDose: 1,
+      // Clear the notification flag if the user refilled above threshold
+      lowSupplyNotified: resetNotified ? false : (existing?.lowSupplyNotified ?? false),
     );
 
-    await MedicationService.add(med);
     await NotificationService.initialize();
     await NotificationService.requestPermissions();
-    await NotificationService.scheduleMedicationReminder(med);
+
+    if (_isEditMode) {
+      // Cancel old scheduled reminders before re-scheduling with updated times
+      await NotificationService.cancelMedicationReminder(
+          existing!.id, existing.times.length);
+      await MedicationService.update(med);
+      await NotificationService.scheduleMedicationReminder(med);
+
+      // If the user refilled above threshold, cancel any pending supply alert
+      if (resetNotified) {
+        await NotificationService.cancelLowSupplyAlert(med.id);
+      }
+    } else {
+      await MedicationService.add(med);
+      await NotificationService.scheduleMedicationReminder(med);
+    }
 
     if (!mounted) return;
-    Navigator.of(context).pop(true); // true signals caller to reload
+    // Pop with the saved model so callers can update their state immediately
+    Navigator.of(context).pop(med);
   }
 
   String _formatTime(TimeOfDay t) {
@@ -145,7 +215,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               color: AppColors.primary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Add Medication', style: AppTextStyles.heading3),
+        title: Text(
+          _isEditMode ? 'Edit Medication' : 'Add Medication',
+          style: AppTextStyles.heading3,
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -191,6 +264,23 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               Text('Start date', style: AppTextStyles.heading3),
               const SizedBox(height: 12),
               _buildDatePicker(),
+              const SizedBox(height: 24),
+              Text('Pill supply', style: AppTextStyles.heading3),
+              const SizedBox(height: 12),
+              NuvitaTextField(
+                label: 'Number of pills remaining (optional)',
+                hint: 'Leave empty to skip tracking',
+                controller: _pillsController,
+                prefixIcon: Icons.inventory_2_rounded,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  final n = int.tryParse(v.trim());
+                  if (n == null || n < 0) return 'Enter a valid number';
+                  return null;
+                },
+              ),
               const SizedBox(height: 20),
               NuvitaTextField(
                 label: 'Notes (optional)',
@@ -201,7 +291,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               ),
               const SizedBox(height: 32),
               NuvitaButton(
-                label: 'Save Medication',
+                label: _isEditMode ? 'Save Changes' : 'Save Medication',
                 onPressed: _onSave,
                 isLoading: _isSaving,
                 icon: Icons.check_rounded,
@@ -244,15 +334,18 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               children: [
                 Icon(
                   Icons.repeat_rounded,
-                  color: isSelected ? AppColors.primary : AppColors.secondary,
+                  color:
+                      isSelected ? AppColors.primary : AppColors.secondary,
                   size: 22,
                 ),
                 const SizedBox(width: 14),
                 Text(
                   freq,
                   style: AppTextStyles.body.copyWith(
-                    color: isSelected ? AppColors.primary : AppColors.textDark,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color:
+                        isSelected ? AppColors.primary : AppColors.textDark,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
                 const Spacer(),

@@ -7,6 +7,9 @@ class MedicationModel {
   final DateTime startDate;
   final bool isActive;
   final String notes;
+  final int? pillsRemaining;    // null = pill tracking disabled
+  final int pillsPerDose;       // pills consumed per Take Now tap (default 1)
+  final bool lowSupplyNotified; // prevents repeat low-supply alerts
 
   const MedicationModel({
     required this.id,
@@ -17,18 +20,35 @@ class MedicationModel {
     required this.startDate,
     this.isActive = true,
     this.notes = '',
+    this.pillsRemaining,
+    this.pillsPerDose = 1,
+    this.lowSupplyNotified = false,
   });
 
-  MedicationModel copyWith({bool? isActive}) {
+  MedicationModel copyWith({
+    String? name,
+    String? dosage,
+    String? frequency,
+    List<String>? times,
+    DateTime? startDate,
+    bool? isActive,
+    String? notes,
+    int? pillsRemaining,
+    int? pillsPerDose,
+    bool? lowSupplyNotified,
+  }) {
     return MedicationModel(
       id: id,
-      name: name,
-      dosage: dosage,
-      frequency: frequency,
-      times: times,
-      startDate: startDate,
+      name: name ?? this.name,
+      dosage: dosage ?? this.dosage,
+      frequency: frequency ?? this.frequency,
+      times: times ?? this.times,
+      startDate: startDate ?? this.startDate,
       isActive: isActive ?? this.isActive,
-      notes: notes,
+      notes: notes ?? this.notes,
+      pillsRemaining: pillsRemaining ?? this.pillsRemaining,
+      pillsPerDose: pillsPerDose ?? this.pillsPerDose,
+      lowSupplyNotified: lowSupplyNotified ?? this.lowSupplyNotified,
     );
   }
 
@@ -41,6 +61,9 @@ class MedicationModel {
         'startDate': startDate.toIso8601String(),
         'isActive': isActive,
         'notes': notes,
+        'pillsRemaining': pillsRemaining,
+        'pillsPerDose': pillsPerDose,
+        'lowSupplyNotified': lowSupplyNotified,
       };
 
   factory MedicationModel.fromMap(Map<String, dynamic> map) {
@@ -53,6 +76,9 @@ class MedicationModel {
       startDate: DateTime.parse(map['startDate'] as String),
       isActive: map['isActive'] as bool? ?? true,
       notes: map['notes'] as String? ?? '',
+      pillsRemaining: map['pillsRemaining'] as int?,
+      pillsPerDose: map['pillsPerDose'] as int? ?? 1,
+      lowSupplyNotified: map['lowSupplyNotified'] as bool? ?? false,
     );
   }
 }

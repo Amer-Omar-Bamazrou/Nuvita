@@ -120,11 +120,43 @@ class NotificationService {
     await _plugin.cancel(id.hashCode.abs() % 999990);
   }
 
+  // One-time alert when a medication's pill count drops to 7 or below
+  static Future<void> scheduleLowSupplyAlert(
+      String id, String name, int remaining) async {
+    final androidDetails = AndroidNotificationDetails(
+      _lowSupplyChannelId,
+      _lowSupplyChannelName,
+      channelDescription: 'Alerts when pill supply is running low',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    final details = NotificationDetails(android: androidDetails);
+
+    await _plugin.show(
+      _lowSupplyNotificationId(id),
+      'Low Pill Supply',
+      '$name is running low. You have $remaining pills left.',
+      details,
+    );
+  }
+
+  static Future<void> cancelLowSupplyAlert(String id) async {
+    await _plugin.cancel(_lowSupplyNotificationId(id));
+  }
+
   // Deterministic int ID per medication + time slot so we can cancel reliably
   static int _notificationId(String medicationId, int timeIndex) {
     return (medicationId.hashCode.abs() % 99990) + timeIndex;
   }
 
+  // Range 999991–1099980 — avoids overlap with medication (0–99992) and appointment (0–999989) IDs
+  static int _lowSupplyNotificationId(String id) {
+    return id.hashCode.abs() % 99990 + 999991;
+  }
+
   static const _appointmentChannelId = 'appointment_reminders';
   static const _appointmentChannelName = 'Appointment Reminders';
+  static const _lowSupplyChannelId = 'low_pill_supply';
+  static const _lowSupplyChannelName = 'Low Pill Supply';
 }

@@ -6,6 +6,9 @@ import '../../../core/services/notification_service.dart';
 import '../models/medication_model.dart';
 import '../services/medication_service.dart';
 import 'add_medication_screen.dart';
+import 'medication_detail_screen.dart';
+
+const _orange = Color(0xFFFF6F00);
 
 // ── Schedule entry ─────────────────────────────────────────────────────────────
 
@@ -34,6 +37,8 @@ class MedicationScreen extends StatefulWidget {
 
 class _MedicationScreenState extends State<MedicationScreen> {
   List<MedicationModel> _medications = [];
+  List<MedicationModel> _lowSupplyMeds = [];
+  bool _bannerDismissed = false;
   // Session-only taken state — resets each app restart (acceptable for daily use)
   final Set<String> _takenToday = {};
   bool _isLoading = true;
@@ -54,19 +59,42 @@ class _MedicationScreenState extends State<MedicationScreen> {
     }
 
     final meds = await MedicationService.loadAll();
+    final lowSupply = await MedicationService.getLowSupplyMedications();
+
     if (mounted) {
       setState(() {
         _medications = meds;
+        _lowSupplyMeds = lowSupply;
+        _bannerDismissed = false; // re-evaluate on each load
         _isLoading = false;
       });
     }
   }
 
   Future<void> _openAddScreen() async {
-    final added = await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<MedicationModel>(
       MaterialPageRoute(builder: (_) => const AddMedicationScreen()),
     );
-    if (added == true) _load();
+    if (result != null) _load();
+  }
+
+  Future<void> _openDetailScreen(MedicationModel med) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MedicationDetailScreen(medication: med),
+      ),
+    );
+    // Always reload — user may have edited, deleted, or taken a dose
+    _load();
+  }
+
+  Future<void> _openEditScreen(MedicationModel med) async {
+    final result = await Navigator.of(context).push<MedicationModel>(
+      MaterialPageRoute(
+        builder: (_) => AddMedicationScreen(existing: med),
+      ),
+    );
+    if (result != null) _load();
   }
 
   Future<void> _toggleActive(MedicationModel med) async {
@@ -85,6 +113,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
     await MedicationService.delete(med.id);
     await NotificationService.cancelMedicationReminder(
         med.id, med.times.length);
+    await NotificationService.cancelLowSupplyAlert(med.id);
     _load();
   }
 
@@ -203,7 +232,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
   Widget _buildContent() {
     final schedule = _todaySchedule;
     final groups = _groupByPeriod(schedule);
-    final takenCount = schedule.where((e) => _takenToday.contains(e.key)).length;
+    final takenCount =
+        schedule.where((e) => _takenToday.contains(e.key)).length;
     final total = schedule.length;
 
     return SingleChildScrollView(
@@ -211,6 +241,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Low supply banner ──────────────────────────────────────────────
+          if (_lowSupplyMeds.isNotEmpty && !_bannerDismissed)
+            _buildLowSupplyBanner(),
+
           // ── Today header with progress badge ──────────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -227,8 +261,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
               ),
               if (total > 0)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: takenCount == total
                         ? AppColors.success.withOpacity(0.12)
@@ -276,6 +310,95 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
+  // ── Low supply banner ─────────────────────────────────────────────────────────
+
+  Widget _buildLowSupplyBanner() {
+    final count = _lowSupplyMeds.length;
+    final message = count == 1
+        ? '⚠️ ${_lowSupplyMeds[0].name} has ${_lowSupplyMeds[0].pillsRemaining} pills remaining'
+        : '⚠️ $count medications running low';
+
+    return GestureDetector(
+      onTap: _showLowSupplyDialog,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _orange,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _bannerDismissed = true),
+              child: const Icon(Icons.close_rounded,
+                  color: Colors.white, size: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLowSupplyDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Low Pill Supply'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _lowSupplyMeds.length,
+            itemBuilder: (_, i) {
+              final med = _lowSupplyMeds[i];
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.medication_rounded,
+                    color: _orange),
+                title:
+                    Text(med.name, style: AppTextStyles.label),
+                subtitle: Text(
+                  '${med.pillsRemaining} pills remaining',
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _openEditScreen(med);
+                  },
+                  child: const Text(
+                    'Refill',
+                    style: TextStyle(color: AppColors.primary),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Schedule section builders ─────────────────────────────────────────────────
 
   Widget _buildEmptyScheduleCard() {
@@ -302,7 +425,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
-  Widget _buildPeriodGroup(String period, List<_ScheduleEntry> entries) {
+  Widget _buildPeriodGroup(
+      String period, List<_ScheduleEntry> entries) {
     const periodIcons = {
       'Morning': Icons.wb_sunny_outlined,
       'Afternoon': Icons.wb_cloudy_outlined,
@@ -314,12 +438,12 @@ class _MedicationScreenState extends State<MedicationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period label
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
             child: Row(
               children: [
-                Icon(periodIcons[period], size: 14, color: AppColors.secondary),
+                Icon(periodIcons[period], size: 14,
+                    color: AppColors.secondary),
                 const SizedBox(width: 6),
                 Text(
                   period,
@@ -331,7 +455,6 @@ class _MedicationScreenState extends State<MedicationScreen> {
               ],
             ),
           ),
-          // Entries card
           Container(
             decoration: BoxDecoration(
               color: AppColors.white,
@@ -373,7 +496,6 @@ class _MedicationScreenState extends State<MedicationScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            // Prominent time — left anchor of the row
             SizedBox(
               width: 54,
               child: Text(
@@ -385,10 +507,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 ),
               ),
             ),
-            // Subtle vertical separator
             Container(width: 1, height: 36, color: AppColors.divider),
             const SizedBox(width: 14),
-            // Medication name + dosage
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +533,6 @@ class _MedicationScreenState extends State<MedicationScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            // Dedicated circular check button — only tap target for marking taken
             GestureDetector(
               onTap: () => setState(() {
                 if (isTaken) {
@@ -427,17 +546,21 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: isTaken ? AppColors.success : Colors.transparent,
+                  color:
+                      isTaken ? AppColors.success : Colors.transparent,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isTaken ? AppColors.success : AppColors.divider,
+                    color: isTaken
+                        ? AppColors.success
+                        : AppColors.divider,
                     width: 2,
                   ),
                 ),
                 child: Icon(
                   Icons.check_rounded,
                   size: 18,
-                  color: isTaken ? AppColors.white : AppColors.divider,
+                  color:
+                      isTaken ? AppColors.white : AppColors.divider,
                 ),
               ),
             ),
@@ -450,6 +573,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
   // ── Medication card (compact) ─────────────────────────────────────────────────
 
   Widget _buildMedicationCard(MedicationModel med) {
+    final isLow = MedicationService.checkLowSupply(med);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Dismissible(
@@ -467,71 +592,91 @@ class _MedicationScreenState extends State<MedicationScreen> {
           child: const Icon(Icons.delete_rounded,
               color: Colors.white, size: 26),
         ),
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 250),
-          opacity: med.isActive ? 1.0 : 0.45,
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.textDark.withOpacity(0.06),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Pill icon
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: med.isActive
-                        ? AppColors.primary.withOpacity(0.1)
-                        : AppColors.divider.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(14),
+        child: GestureDetector(
+          onTap: () => _openDetailScreen(med),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: med.isActive ? 1.0 : 0.45,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.textDark.withOpacity(0.06),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
                   ),
-                  child: Icon(
-                    Icons.medication_rounded,
-                    size: 24,
-                    color: med.isActive
-                        ? AppColors.primary
-                        : AppColors.secondary,
+                ],
+              ),
+              child: Row(
+                children: [
+                  // Pill icon — orange tint when supply is low
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isLow
+                          ? _orange.withOpacity(0.12)
+                          : med.isActive
+                              ? AppColors.primary.withOpacity(0.1)
+                              : AppColors.divider.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.medication_rounded,
+                      size: 24,
+                      color: isLow
+                          ? _orange
+                          : med.isActive
+                              ? AppColors.primary
+                              : AppColors.secondary,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                // Name and dosage · frequency (2 lines, no times row)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        med.name,
-                        style: AppTextStyles.label.copyWith(fontSize: 15),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${med.dosage}  ·  ${med.frequency}',
-                        style: AppTextStyles.bodySmall.copyWith(fontSize: 13),
-                      ),
-                    ],
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          med.name,
+                          style: AppTextStyles.label
+                              .copyWith(fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${med.dosage}  ·  ${med.frequency}',
+                          style: AppTextStyles.bodySmall
+                              .copyWith(fontSize: 13),
+                        ),
+                        // Pills remaining hint when tracked and low
+                        if (isLow) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            '${med.pillsRemaining} pills left',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _orange,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                // Active toggle
-                Switch(
-                  value: med.isActive,
-                  onChanged: (_) => _toggleActive(med),
-                  activeColor: AppColors.primary,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ],
+                  Switch(
+                    value: med.isActive,
+                    onChanged: (_) => _toggleActive(med),
+                    activeColor: AppColors.primary,
+                    materialTapTargetSize:
+                        MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -555,8 +700,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete medication?'),
         content: Text('Remove "$name" and cancel its reminders?'),
         actions: [
@@ -566,7 +711,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: AppColors.error),
             child: const Text('Delete'),
           ),
         ],
