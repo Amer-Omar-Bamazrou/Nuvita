@@ -34,6 +34,17 @@ class AuthService {
     return patientId;
   }
 
+  // Returns the email address linked to a Patient ID, throws if not found
+  Future<String> resolveEmailFromPatientId(String patientId) async {
+    final query = await _firestore
+        .collection('users')
+        .where('patientId', isEqualTo: patientId.toUpperCase().trim())
+        .limit(1)
+        .get();
+    if (query.docs.isEmpty) throw Exception('patient-id-not-found');
+    return query.docs.first.data()['email'] as String;
+  }
+
   // Looks up the email linked to a Patient ID then signs in with it
   Future<User?> signInWithPatientId(String patientId, String password) async {
     final query = await _firestore
@@ -46,6 +57,24 @@ class AuthService {
     }
     final email = query.docs.first.data()['email'] as String;
     return signIn(email, password);
+  }
+
+  // Merges onboarding profile data (gender, dob, name) into the user's Firestore doc
+  Future<void> saveOnboardingProfile({
+    required String uid,
+    required String firstName,
+    required String lastName,
+    required String gender,
+    required String dobIso,
+  }) async {
+    await _firestore.collection('users').doc(uid).set({
+      'profile': {
+        'name': '$firstName $lastName'.trim(),
+        'gender': gender,
+        'dob': dobIso,
+        'diseaseType': 'other',
+      },
+    }, SetOptions(merge: true));
   }
 
   Future<void> signOut() async {

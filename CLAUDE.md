@@ -60,7 +60,7 @@
 - Medication Firebase Sync: MedicationService syncs to /users/{uid}/medications — add/delete/update mirror to Firestore after local SharedPreferences write; syncFromFirebase(uid) fetches on app start and merges (Firestore wins on same ID, local-only entries kept); guest users remain local only; all Firebase calls fail silently
 - Health History Improvements: swipe-to-delete on each reading tile (optimistic — Firestore delete deferred until 3 s undo snackbar expires without undo action); long-press to edit (modal bottom sheet, pre-filled value, per-metric validation ranges, status recalculated on save); HealthHistoryProvider extended with removeReading, restoreReading, patchReading; HealthReadingService extended with updateReading
 
-## Known Issue — Resolved
+## Known Issues — Resolved
 ~~Create Account button directs to Homepage instead of Onboarding.~~
 Fixed: login_screen.dart + register_screen.dart updated on feature/navigation-fix branch.
 
@@ -70,10 +70,34 @@ None — all planned features complete.
 ## Completed Features (continued)
 - Medication Detail View and Low Pill Supply Alert: MedicationModel extended with pillsRemaining (int?), pillsPerDose (int=1), lowSupplyNotified (bool); MedicationDetailScreen (name card, details card, pills card, Take Now button, Edit/Delete actions); AddMedicationScreen updated to support edit mode (existing: MedicationModel?) and optional pills remaining field; MedicationScreen shows orange low supply banner (dismiss for session, tap to show refill dialog), medication card taps open detail screen; NotificationService extended with scheduleLowSupplyAlert + cancelLowSupplyAlert; MedicationService extended with takeMedication, checkLowSupply, getLowSupplyMedications, updatePillsRemaining
 
+- Patient ID Authentication (branch: feature/patient-id-auth):
+  - AuthService: signUp() now returns patientId (String); saves patientId, name, email, createdAt, registered:true to Firestore root doc; added signInWithPatientId(), resolveEmailFromPatientId(), saveOnboardingProfile()
+  - LoginScreen: accepts Email OR 6-char alphanumeric Patient ID; validator updated; routes to signInWithPatientId if no @ and matches pattern
+  - RegisterScreen: receives patientId from signUp, reads SharedPrefs (gender/dob/name), calls saveOnboardingProfile() then shows Patient ID dialog before navigating to MainShell
+  - ProfileScreen: loads patientId from Firestore root doc; Patient ID card with copy + share (share_plus) buttons; name fix (falls back data['name'] if profile['name'] missing)
+
+- Doctor Dashboard Web App (branch: feature/web-doctor-dashboard):
+  - Flutter web platform enabled via flutterfire configure
+  - main.dart: kIsWeb → DoctorLoginScreen, else existing mobile routing
+  - lib/features/doctor/services/doctor_service.dart: isDoctorAccount, getDoctorName, getAllPatients, getPatientReadings, getPatientMedications, updateMedication, sendSuggestion, getCriticalReadingsCount, getLowMedicationsCount, getTotalSuggestionsCount, getRecentReadingsAllPatients (collectionGroup)
+  - lib/features/doctor/screens/doctor_login_screen.dart: web login, checks /doctors/{uid} existence, rejects non-doctors
+  - lib/features/doctor/screens/doctor_dashboard_screen.dart: 220px sidebar (#004346), IndexedStack for Overview/Patients/Settings
+  - lib/features/doctor/screens/doctor_overview_screen.dart: 4 stat cards, recent activity feed via collectionGroup
+  - lib/features/doctor/screens/doctor_patients_screen.dart: search + disease filter, patient cards grid, tap → detail
+  - lib/features/doctor/screens/doctor_patient_detail_screen.dart: personal info, disease-aware metric cards, inline medication edit, readings table, send suggestion
+  - lib/features/doctor/screens/doctor_settings_screen.dart: account card, change password (re-auth + updatePassword), sign out
+  - firestore.rules updated: isDoctor() helper, /users allow read if isDoctor(), collectionGroup rules for readings + suggestions
+
+- Password Management (branch: feature/patient-id-auth):
+  - lib/features/auth/screens/change_password_screen.dart: for users who know current password — Email/Patient ID + current password + new password + confirm; re-authenticates via EmailAuthProvider then updatePassword(); signs out on success
+  - lib/features/auth/screens/forgot_password_sent_screen.dart: "Check your inbox" screen — shown after reset email is sent; email icon, instructions, spam reminder, Back to Sign In button
+  - login_screen.dart: "Forgot password?" opens _ForgotPasswordDialog (email/Patient ID field + Send Link); on success pops dialog and pushes ForgotPasswordSentScreen; controller owned by dialog state (fixes disposal crash)
+  - Forgot password flow: dialog → sendPasswordResetEmail (resolves Patient ID first if needed) → ForgotPasswordSentScreen; user clicks Firebase email link to complete reset on web, then signs in
+
 ## Firestore Security Rules
 - Rules file: `firestore.rules` in project root
-- Applied: 2026-05-02 on branch feature/firebase-security-rules
-- Coverage: /users/{userId} (read/write own data), /readings, /alerts, /medications, /profile sub-collections (auth + uid match), /share_tokens (public read, auth write)
+- Applied: 2026-05-02 on branch feature/firebase-security-rules; updated 2026-05-06 for doctor access
+- Coverage: /users/{userId} (read/write own data OR isDoctor()), /readings, /alerts, /medications, /profile sub-collections, /share_tokens (public read, auth write), /doctors/{doctorId} (read own only), collectionGroup readings + suggestions (doctor read)
 - Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
 
 ## Modifications List — Do Later
@@ -82,7 +106,7 @@ None — all planned features complete.
 ## Folder Structure
 lib/core/theme/ — app_colors, app_text_styles, app_theme
 lib/core/services/ — preferences_service, notification_service
-lib/features/auth/ — login, register, auth_service
+lib/features/auth/ — login_screen, register_screen, change_password_screen, forgot_password_sent_screen, auth_service
 lib/features/onboarding/ — onboarding_screen, welcome_splash (dormant)
 lib/features/disease/ — disease_selection (dormant)
 lib/features/home/ — home_screen, main_shell
@@ -99,6 +123,8 @@ lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wir
 lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service
 lib/features/report/ — report_service, report_screen
+lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen
+lib/features/doctor/services/ — doctor_service
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
 
 ## Key Providers

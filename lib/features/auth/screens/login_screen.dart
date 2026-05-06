@@ -9,6 +9,8 @@ import '../services/auth_service.dart';
 import '../../home/screens/main_shell.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import 'register_screen.dart';
+import 'change_password_screen.dart';
+import 'forgot_password_sent_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -81,6 +83,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final prefill = _emailController.text.trim().contains('@')
+        ? _emailController.text.trim()
+        : '';
+    await showDialog(
+      context: context,
+      builder: (ctx) => _ForgotPasswordDialog(
+        initialValue: prefill,
+        authService: _authService,
+        onSent: () {
+          Navigator.of(ctx).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ForgotPasswordSentScreen()),
+          );
+        },
+      ),
+    );
+  }
+
   void _goBackToOnboarding() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -136,9 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        // TODO: forgot password flow
-                      },
+                      onPressed: _showForgotPasswordDialog,
                       child: const Text('Forgot password?'),
                     ),
                   ),
@@ -235,3 +254,126 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 }
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  final String initialValue;
+  final AuthService authService;
+  final VoidCallback onSent;
+
+  const _ForgotPasswordDialog({
+    required this.initialValue,
+    required this.authService,
+    required this.onSent,
+  });
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _controller;
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final input = _controller.text.trim();
+    if (input.isEmpty) {
+      setState(() => _error = 'Please enter your email or Patient ID');
+      return;
+    }
+    setState(() { _sending = true; _error = null; });
+    try {
+      String email = input;
+      if (!input.contains('@')) {
+        email = await widget.authService.resolveEmailFromPatientId(input);
+      }
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      widget.onSent();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.code == 'user-not-found'
+            ? 'No account found with this email'
+            : 'Could not send reset email. Try again.';
+        _sending = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().contains('not-found')
+            ? 'No account found with this Patient ID'
+            : 'Could not send reset email. Try again.';
+        _sending = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Forgot your password?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Enter your email or Patient ID and we\'ll send you a reset link.',
+            style: TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Email or Patient ID',
+              prefixIcon: const Icon(Icons.email_outlined, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorText: _error,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _sending ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _sending ? null : _send,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+          child: _sending
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Send Link'),
+        ),
+      ],
+    );
+  }
+}
+

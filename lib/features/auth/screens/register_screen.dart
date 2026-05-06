@@ -50,6 +50,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       if (!mounted) return;
       await PreferencesService.setOnboardingComplete();
+
+      // Sync onboarding profile data (gender, dob) to Firestore so the doctor dashboard can read them
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final firstName = await PreferencesService.getFirstName() ?? _nameController.text.trim().split(' ').first;
+        final lastName  = await PreferencesService.getLastName()  ?? '';
+        final gender    = await PreferencesService.getGender()    ?? '';
+        final dob       = await PreferencesService.getDateOfBirth();
+        await _authService.saveOnboardingProfile(
+          uid: uid,
+          firstName: firstName,
+          lastName: lastName,
+          gender: gender,
+          dobIso: dob?.toIso8601String() ?? '',
+        );
+      }
+
       if (!mounted) return;
       await _showPatientIdDialog(patientId);
       if (!mounted) return;

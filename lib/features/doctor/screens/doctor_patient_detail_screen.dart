@@ -1,0 +1,896 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/doctor_service.dart';
+
+class DoctorPatientDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> patient;
+
+  const DoctorPatientDetailScreen({super.key, required this.patient});
+
+  @override
+  State<DoctorPatientDetailScreen> createState() =>
+      _DoctorPatientDetailScreenState();
+}
+
+class _DoctorPatientDetailScreenState
+    extends State<DoctorPatientDetailScreen> {
+  final _service = DoctorService();
+
+  bool _loadingReadings = true;
+  bool _loadingMeds = true;
+  List<Map<String, dynamic>> _readings = [];
+  List<Map<String, dynamic>> _medications = [];
+  List<Map<String, dynamic>> _suggestions = [];
+
+  // Which medication row is being edited (by med id)
+  String? _editingMedId;
+  final Map<String, TextEditingController> _editCtrls = {};
+
+  final _suggestionCtrl = TextEditingController();
+  bool _sendingSuggestion = false;
+
+  static const _primary = Color(0xFF004346);
+
+  String get _uid => widget.patient['uid'] as String? ?? '';
+  String get _patientName =>
+      widget.patient['name'] as String? ??
+      (widget.patient['profile'] as Map?)?['name'] as String? ??
+      'Unknown';
+
+  String _formatDob(String iso) {
+    if (iso.isEmpty) return '—';
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReadings();
+    _loadMedications();
+    _loadSuggestions();
+  }
+
+  @override
+  void dispose() {
+    _suggestionCtrl.dispose();
+    for (final c in _editCtrls.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadReadings() async {
+    setState(() => _loadingReadings = true);
+    try {
+      final r = await _service.getPatientReadings(_uid);
+      if (!mounted) return;
+      setState(() {
+        _readings = r;
+        _loadingReadings = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingReadings = false);
+    }
+  }
+
+  Future<void> _loadMedications() async {
+    setState(() => _loadingMeds = true);
+    try {
+      final m = await _service.getPatientMedications(_uid);
+      if (!mounted) return;
+      setState(() {
+        _medications = m;
+        _loadingMeds = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingMeds = false);
+    }
+  }
+
+  Future<void> _loadSuggestions() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('suggestions')
+          .orderBy('timestamp', descending: true)
+          .limit(3)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _suggestions =
+            snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      });
+    } catch (_) {}
+  }
+
+  void _startEdit(Map<String, dynamic> med) {
+    final id = med['id'] as String;
+    _editCtrls['name'] =
+        TextEditingController(text: med['name'] as String? ?? '');
+    _editCtrls['dosage'] =
+        TextEditingController(text: med['dosage'] as String? ?? '');
+    _editCtrls['frequency'] =
+        TextEditingController(text: med['frequency'] as String? ?? '');
+    _editCtrls['pills'] = TextEditingController(
+        text: med['pillsRemaining']?.toString() ?? '');
+    setState(() => _editingMedId = id);
+  }
+
+  Future<void> _saveEdit(String medId) async {
+    await _service.updateMedication(_uid, medId, {
+      'name': _editCtrls['name']!.text.trim(),
+      'dosage': _editCtrls['dosage']!.text.trim(),
+      'frequency': _editCtrls['frequency']!.text.trim(),
+      'pillsRemaining': int.tryParse(_editCtrls['pills']!.text),
+    });
+    _cancelEdit();
+    _loadMedications();
+  }
+
+  void _cancelEdit() {
+    for (final c in _editCtrls.values) {
+      c.dispose();
+    }
+    _editCtrls.clear();
+    setState(() => _editingMedId = null);
+  }
+
+  Future<void> _sendSuggestion(String doctorName) async {
+    final text = _suggestionCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _sendingSuggestion = true);
+    try {
+      await _service.sendSuggestion(_uid, text, doctorName);
+      _suggestionCtrl.clear();
+      await _loadSuggestions();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _sendingSuggestion = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF172A3A),
+        elevation: 0,
+        titleSpacing: 0,
+        title: Text(
+          _patientName,
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFFEEEEEE)),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left column — 40%
+            Flexible(
+              flex: 4,
+              child: Column(
+                children: [
+                  _buildPersonalInfo(),
+                  const SizedBox(height: 16),
+                  _buildMeasurementCards(),
+                ],
+              ),
+            ),
+            const SizedBox(width: 20),
+            // Right column — 60%
+            Flexible(
+              flex: 6,
+              child: Column(
+                children: [
+                  _buildMedicationsSection(),
+                  const SizedBox(height: 16),
+                  _buildReadingsSection(),
+                  const SizedBox(height: 16),
+                  _buildSuggestionsSection(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Left column ───────────────────────────────────────────────────────────
+
+  Widget _buildPersonalInfo() {
+    final profile =
+        widget.patient['profile'] as Map<String, dynamic>? ?? {};
+    final patientId = widget.patient['patientId'] as String? ?? '—';
+    final email = widget.patient['email'] as String? ?? '—';
+    final diseaseType = profile['diseaseType'] as String? ?? 'other';
+    final gender = profile['gender'] as String? ?? '—';
+    final dobRaw = profile['dob'] as String? ?? '';
+    final dob = _formatDob(dobRaw);
+    final createdAt = widget.patient['createdAt'];
+    String memberSince = '—';
+    if (createdAt is Timestamp) {
+      final dt = createdAt.toDate();
+      memberSince = '${dt.day}/${dt.month}/${dt.year}';
+    }
+
+    final diseaseLabels = {
+      'diabetes': 'Diabetes',
+      'blood_pressure': 'Blood Pressure',
+      'heart': 'Heart Condition',
+      'other': 'General Monitoring',
+    };
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Personal Information'),
+          const SizedBox(height: 14),
+          _InfoRow('Patient ID', patientId, mono: true),
+          _InfoRow('Email', email),
+          _InfoRow('Gender', gender),
+          _InfoRow('Date of Birth', dob),
+          _InfoRow('Condition',
+              diseaseLabels[diseaseType] ?? 'General Monitoring'),
+          _InfoRow('Member Since', memberSince),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeasurementCards() {
+    if (_loadingReadings) {
+      return const _Card(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(
+              child: CircularProgressIndicator(color: _primary)),
+        ),
+      );
+    }
+
+    final profile =
+        widget.patient['profile'] as Map<String, dynamic>? ?? {};
+    final diseaseType = profile['diseaseType'] as String? ?? 'other';
+
+    // Find latest value for each metric
+    Map<String, Map<String, dynamic>> latest = {};
+    for (final r in _readings) {
+      final metric = r['metricType'] as String? ?? '';
+      if (!latest.containsKey(metric)) latest[metric] = r;
+    }
+
+    List<_MetricDef> metrics;
+    switch (diseaseType) {
+      case 'blood_pressure':
+        metrics = [
+          _MetricDef('bloodPressureSystolic', 'Systolic BP', 'mmHg'),
+          _MetricDef('bloodPressureDiastolic', 'Diastolic BP', 'mmHg'),
+        ];
+        break;
+      case 'diabetes':
+        metrics = [
+          _MetricDef('bloodSugar', 'Blood Sugar', 'mg/dL'),
+          _MetricDef('weight', 'Weight', 'kg'),
+        ];
+        break;
+      case 'heart':
+        metrics = [
+          _MetricDef('heartRate', 'Heart Rate', 'bpm'),
+          _MetricDef('weight', 'Weight', 'kg'),
+        ];
+        break;
+      default:
+        metrics = [
+          _MetricDef('bloodSugar', 'Blood Sugar', 'mg/dL'),
+          _MetricDef('heartRate', 'Heart Rate', 'bpm'),
+        ];
+    }
+
+    return Column(
+      children: metrics.map((m) {
+        final data = latest[m.metricType];
+        final value = data?['value']?.toString() ?? '—';
+        final status = data?['status'] as String? ?? '—';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _Card(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(m.label,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600)),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            value,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF172A3A),
+                            ),
+                          ),
+                          if (value != '—') ...[
+                            const SizedBox(width: 4),
+                            Text(m.unit,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade500)),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (status != '—') _StatusBadge(status: status),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Right column ──────────────────────────────────────────────────────────
+
+  Widget _buildMedicationsSection() {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Medications'),
+          const SizedBox(height: 14),
+          if (_loadingMeds)
+            const Center(
+                child: CircularProgressIndicator(color: _primary))
+          else if (_medications.isEmpty)
+            Text('No medications recorded.',
+                style: TextStyle(
+                    fontSize: 13, color: Colors.grey.shade500))
+          else
+            ..._medications.map(_buildMedRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMedRow(Map<String, dynamic> med) {
+    final id = med['id'] as String;
+    final isEditing = _editingMedId == id;
+    final pills = med['pillsRemaining'] as int?;
+    final isLow = pills != null && pills <= 7;
+
+    if (isEditing) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F8F8),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF004346).withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: _editField(_editCtrls['name']!, 'Medication name')),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: _editField(_editCtrls['dosage']!, 'Dosage')),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                    child:
+                        _editField(_editCtrls['frequency']!, 'Frequency')),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: _editField(
+                        _editCtrls['pills']!, 'Pills remaining',
+                        numeric: true)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _cancelEdit,
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => _saveEdit(id),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 8),
+                  ),
+                  child:
+                      const Text('Save', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9F9F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      med['name'] as String? ?? '—',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF172A3A)),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isLow)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Low Supply',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFFFF6F00),
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${med['dosage'] ?? ''} · ${med['frequency'] ?? ''}'
+                  '${pills != null ? ' · $pills pills left' : ''}',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => _startEdit(med),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            color: Colors.grey.shade500,
+            tooltip: 'Edit',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editField(
+    TextEditingController ctrl,
+    String hint, {
+    bool numeric = false,
+  }) {
+    return TextField(
+      controller: ctrl,
+      keyboardType:
+          numeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle:
+            TextStyle(fontSize: 12, color: Colors.grey.shade400),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      style: const TextStyle(fontSize: 13),
+    );
+  }
+
+  Widget _buildReadingsSection() {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Recent Readings'),
+          const SizedBox(height: 14),
+          if (_loadingReadings)
+            const Center(
+                child: CircularProgressIndicator(color: _primary))
+          else if (_readings.isEmpty)
+            Text('No readings recorded.',
+                style: TextStyle(
+                    fontSize: 13, color: Colors.grey.shade500))
+          else ...[
+            // Table header
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Row(
+                children: [
+                  Expanded(
+                      flex: 3, child: _TableHeader('Date')),
+                  Expanded(
+                      flex: 3, child: _TableHeader('Metric')),
+                  Expanded(
+                      flex: 2, child: _TableHeader('Value')),
+                  Expanded(
+                      flex: 2, child: _TableHeader('Status')),
+                ],
+              ),
+            ),
+            ..._readings.asMap().entries.map((e) =>
+                _buildReadingRow(e.key, e.value)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadingRow(int index, Map<String, dynamic> r) {
+    final ts = r['timestamp'];
+    String date = '—';
+    if (ts is Timestamp) {
+      final dt = ts.toDate();
+      date =
+          '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+    final metric = r['metricType'] as String? ?? '—';
+    final value = r['value']?.toString() ?? '—';
+    final unit = r['unit'] as String? ?? '';
+    final status = r['status'] as String? ?? 'Logged';
+
+    return Container(
+      color: index.isOdd
+          ? const Color(0xFFF9F9F9)
+          : Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+              flex: 3,
+              child: Text(date,
+                  style: const TextStyle(fontSize: 12))),
+          Expanded(
+              flex: 3,
+              child: Text(metric,
+                  style: const TextStyle(fontSize: 12))),
+          Expanded(
+              flex: 2,
+              child: Text('$value $unit',
+                  style: const TextStyle(fontSize: 12))),
+          Expanded(
+              flex: 2,
+              child: _StatusBadge(status: status)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsSection() {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Send Suggestion'),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _suggestionCtrl,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText:
+                  'Write a health suggestion for this patient…',
+              hintStyle: TextStyle(
+                  fontSize: 13, color: Colors.grey.shade400),
+              filled: true,
+              fillColor: const Color(0xFFF9F9F9),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _primary),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: _sendingSuggestion
+                  ? null
+                  : () => _sendSuggestion(
+                        widget.patient['doctorName'] as String? ?? 'Doctor',
+                      ),
+              icon: _sendingSuggestion
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white),
+                    )
+                  : const Icon(Icons.send_rounded, size: 16),
+              label: const Text('Send',
+                  style: TextStyle(fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 10),
+              ),
+            ),
+          ),
+          if (_suggestions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Recent suggestions',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            ..._suggestions.map(_buildSuggestionItem),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionItem(Map<String, dynamic> s) {
+    final ts = s['timestamp'];
+    String time = '';
+    if (ts is Timestamp) {
+      final dt = ts.toDate();
+      time = '${dt.day}/${dt.month}/${dt.year}';
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F8F8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF004346).withOpacity(0.15)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle_outline_rounded,
+              size: 14, color: Color(0xFF004346)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              s['text'] as String? ?? '',
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF172A3A)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(time,
+              style: TextStyle(
+                  fontSize: 11, color: Colors.grey.shade400)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
+
+class _Card extends StatelessWidget {
+  final Widget child;
+  const _Card({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF172A3A),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool mono;
+  const _InfoRow(this.label, this.value, {this.mono = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                color: const Color(0xFF172A3A),
+                fontWeight: mono ? FontWeight.w600 : FontWeight.normal,
+                letterSpacing: mono ? 1.5 : 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableHeader extends StatelessWidget {
+  final String text;
+  const _TableHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF508991),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String status;
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    Color bg;
+    Color fg;
+    switch (status) {
+      case 'Normal':
+        bg = const Color(0xFFE8F5E9);
+        fg = const Color(0xFF2E7D32);
+        break;
+      case 'Warning':
+        bg = const Color(0xFFFFF3E0);
+        fg = const Color(0xFFFF6F00);
+        break;
+      case 'Critical':
+      case 'High':
+      case 'Low':
+        bg = const Color(0xFFFFEBEE);
+        fg = const Color(0xFFD32F2F);
+        break;
+      default:
+        bg = const Color(0xFFF5F5F5);
+        fg = Colors.grey;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricDef {
+  final String metricType;
+  final String label;
+  final String unit;
+  const _MetricDef(this.metricType, this.label, this.unit);
+}

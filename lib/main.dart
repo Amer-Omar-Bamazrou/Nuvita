@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/home/screens/main_shell.dart';
 import 'features/dashboard/providers/health_history_provider.dart';
+import 'features/doctor/screens/doctor_login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,17 +18,23 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  final onboardingDone = await PreferencesService.isOnboardingComplete();
-  final user = FirebaseAuth.instance.currentUser;
-
-  // Decide where to land based on onboarding state and auth state
   Widget home;
-  if (!onboardingDone) {
-    home = const OnboardingScreen();
-  } else if (user != null) {
-    home = const MainShell();
+
+  if (kIsWeb) {
+    // Web build always lands on the doctor portal
+    home = const DoctorLoginScreen();
   } else {
-    home = const LoginScreen();
+    // Mobile routing unchanged
+    final onboardingDone = await PreferencesService.isOnboardingComplete();
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (!onboardingDone) {
+      home = const OnboardingScreen();
+    } else if (user != null) {
+      home = const MainShell();
+    } else {
+      home = const LoginScreen();
+    }
   }
 
   runApp(NuvitaApp(home: home));

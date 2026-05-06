@@ -2,37 +2,59 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can only access their own data
+    // Helper — true if the requester has a document in /doctors
+    function isDoctor() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/doctors/$(request.auth.uid));
+    }
+
+    // Users can access their own data; doctors can read/write any patient
     match /users/{userId} {
       allow read, write: if request.auth != null
-        && request.auth.uid == userId;
+        && (request.auth.uid == userId || isDoctor());
 
-      // Health readings sub-collection
       match /readings/{readingId} {
         allow read, write: if request.auth != null
-          && request.auth.uid == userId;
+          && (request.auth.uid == userId || isDoctor());
       }
 
-      // Emergency alerts sub-collection
       match /alerts/{alertId} {
         allow read, write: if request.auth != null
-          && request.auth.uid == userId;
+          && (request.auth.uid == userId || isDoctor());
       }
 
-      // Medications sub-collection
       match /medications/{medicationId} {
         allow read, write: if request.auth != null
-          && request.auth.uid == userId;
+          && (request.auth.uid == userId || isDoctor());
       }
 
-      // Profile documents (wildcard covers nested paths)
       match /profile/{document=**} {
         allow read, write: if request.auth != null
-          && request.auth.uid == userId;
+          && (request.auth.uid == userId || isDoctor());
+      }
+
+      match /suggestions/{suggestionId} {
+        allow read, write: if request.auth != null
+          && (request.auth.uid == userId || isDoctor());
       }
     }
 
-    // Share tokens — anyone can read a token link, only auth users can write
+    // Collection group queries for readings and suggestions (used by doctor overview)
+    match /{path=**}/readings/{readingId} {
+      allow read: if isDoctor();
+    }
+
+    match /{path=**}/suggestions/{suggestionId} {
+      allow read: if isDoctor();
+    }
+
+    // Doctors collection — only the doctor themselves or admins can read their own doc
+    match /doctors/{doctorId} {
+      allow read: if request.auth != null && request.auth.uid == doctorId;
+      allow write: if false; // admin-only via Firebase Console
+    }
+
+    // Share tokens — anyone can read, auth users can write
     match /share_tokens/{tokenId} {
       allow read: if true;
       allow write: if request.auth != null;

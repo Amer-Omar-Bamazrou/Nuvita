@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -59,4 +56,14 @@ class DefaultFirebaseOptions {
     projectId: 'chronic-care-app-aaa8a',
     storageBucket: 'chronic-care-app-aaa8a.firebasestorage.app',
   );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyCELIWQ7Digh7wEyeC2q3SutJPz3DFGN7I',
+    appId: '1:376892464711:web:180d9582d7a30f86865b62',
+    messagingSenderId: '376892464711',
+    projectId: 'chronic-care-app-aaa8a',
+    authDomain: 'chronic-care-app-aaa8a.firebaseapp.com',
+    storageBucket: 'chronic-care-app-aaa8a.firebasestorage.app',
+  );
+
 }
