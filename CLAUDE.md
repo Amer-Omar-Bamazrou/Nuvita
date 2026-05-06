@@ -86,7 +86,7 @@ lib/features/auth/ — login, register, auth_service
 lib/features/onboarding/ — onboarding_screen, welcome_splash (dormant)
 lib/features/disease/ — disease_selection (dormant)
 lib/features/home/ — home_screen, main_shell
-lib/features/medication/ — medication_screen, add_medication, model, service
+lib/features/medication/ — medication_screen, medication_detail_screen, add_medication_screen, model, service
 lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider

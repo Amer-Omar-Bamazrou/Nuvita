@@ -2,34 +2,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can only access their own data
+    // Helper: check if the requesting user has doctor role
+    function isDoctor() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/doctors/$(request.auth.uid));
+    }
+
+    // Users can only access their own data; doctors can read any patient document
     match /users/{userId} {
-      allow read, write: if request.auth != null
+      allow read: if (request.auth != null && request.auth.uid == userId)
+        || isDoctor();
+      allow write: if request.auth != null
         && request.auth.uid == userId;
 
       // Health readings sub-collection
       match /readings/{readingId} {
-        allow read, write: if request.auth != null
+        allow read: if (request.auth != null && request.auth.uid == userId)
+          || isDoctor();
+        allow write: if request.auth != null
           && request.auth.uid == userId;
       }
 
       // Emergency alerts sub-collection
       match /alerts/{alertId} {
-        allow read, write: if request.auth != null
+        allow read: if (request.auth != null && request.auth.uid == userId)
+          || isDoctor();
+        allow write: if request.auth != null
           && request.auth.uid == userId;
       }
 
       // Medications sub-collection
       match /medications/{medicationId} {
-        allow read, write: if request.auth != null
+        allow read: if (request.auth != null && request.auth.uid == userId)
+          || isDoctor();
+        allow write: if request.auth != null
           && request.auth.uid == userId;
       }
 
       // Profile documents (wildcard covers nested paths)
       match /profile/{document=**} {
-        allow read, write: if request.auth != null
+        allow read: if (request.auth != null && request.auth.uid == userId)
+          || isDoctor();
+        allow write: if request.auth != null
           && request.auth.uid == userId;
       }
+
+      // Doctor suggestions for this patient
+      match /suggestions/{suggestionId} {
+        allow read: if request.auth != null
+          && request.auth.uid == userId;
+        allow write: if isDoctor();
+      }
+    }
+
+    // Doctors collection — doctors can read their own record; patients cannot
+    match /doctors/{doctorId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == doctorId;
     }
 
     // Share tokens — anyone can read a token link, only auth users can write

@@ -4,7 +4,6 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
-import '../../auth/screens/register_screen.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../home/screens/main_shell.dart';
 
@@ -172,15 +171,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  // Navigating to register marks onboarding done first
-  Future<void> _navigateToRegister() async {
-    await PreferencesService.setOnboardingComplete();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-    );
-  }
-
   // Navigating to login marks onboarding done first
   Future<void> _navigateToLogin() async {
     await PreferencesService.setOnboardingComplete();
@@ -231,33 +221,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _showSkipAccountDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Skip account creation?'),
-        content: const Text(
-          "Your data will only be stored on this device. If you uninstall the app your data will be lost.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await PreferencesService.setOnboardingComplete();
-              if (!mounted) return;
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const MainShell()),
-              );
-            },
-            child: const Text('Skip anyway'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Create Account'),
-          ),
-        ],
-      ),
+  Future<void> _skipToGuestMode() async {
+    await PreferencesService.setOnboardingComplete();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const MainShell()),
     );
   }
 
@@ -879,27 +847,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 28),
           const Text(
-            'Secure your data',
+            'Ready to get started?',
             style: AppTextStyles.heading1,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           const Text(
-            'Create an account to back up your health data',
+            'Sign in with your Patient ID provided by your doctor',
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
           const Spacer(),
-          NuvitaButton(label: 'Create Account', onPressed: _navigateToRegister),
-          const SizedBox(height: 14),
-          NuvitaButton(
-            label: 'Sign In',
-            onPressed: _navigateToLogin,
-            isOutlined: true,
-          ),
+          NuvitaButton(label: 'Sign In', onPressed: _navigateToLogin),
           const SizedBox(height: 28),
           GestureDetector(
-            onTap: _showSkipAccountDialog,
+            onTap: _skipToGuestMode,
             child: const Text(
               'Skip for now →',
               style: TextStyle(
