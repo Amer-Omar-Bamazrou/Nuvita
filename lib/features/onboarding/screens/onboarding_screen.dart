@@ -4,7 +4,6 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
-import '../../auth/screens/register_screen.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../home/screens/main_shell.dart';
 
@@ -41,8 +40,8 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  // Step index: 0=welcome, 1=firstName, 2=lastName, 3=gender, 4=dob,
-  //            5=services, 6=account
+  // Steps: 0=welcome, 1=intro, 2=name(combined), 3=gender, 4=dob,
+  //        5=services, 6=account
   int _step = 0;
   bool _goingForward = true;
   bool _isSaving = false;
@@ -100,13 +99,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── Validation ────────────────────────────────────────────────────────────
 
   bool _validateCurrentStep() {
-    if (_step == 1 && _firstNameController.text.trim().isEmpty) {
-      _showError('Please enter your first name');
-      return false;
-    }
-    if (_step == 2 && _lastNameController.text.trim().isEmpty) {
-      _showError('Please enter your last name');
-      return false;
+    if (_step == 2) {
+      if (_firstNameController.text.trim().isEmpty) {
+        _showError('Please enter your first name');
+        return false;
+      }
+      if (_lastNameController.text.trim().isEmpty) {
+        _showError('Please enter your last name');
+        return false;
+      }
     }
     if (_step == 3 && _gender == null) {
       _showError('Please select your gender');
@@ -142,7 +143,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     FocusScope.of(context).unfocus();
     if (_isSaving || !_validateCurrentStep()) return;
 
-    // Persist the onboarding data when leaving the services step
+    // Persist onboarding data when leaving the services step
     if (_step == 5) {
       setState(() => _isSaving = true);
       await PreferencesService.saveOnboardingData(
@@ -172,21 +173,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  // Navigating to register marks onboarding done first
-  Future<void> _navigateToRegister() async {
-    await PreferencesService.setOnboardingComplete();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-    );
-  }
-
-  // Navigating to login marks onboarding done first
   Future<void> _navigateToLogin() async {
     await PreferencesService.setOnboardingComplete();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  Future<void> _skipToGuest() async {
+    await PreferencesService.setOnboardingComplete();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const MainShell()),
     );
   }
 
@@ -206,7 +205,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             onPressed: () async {
               Navigator.of(ctx).pop();
               if (_gender == null || _dob == null) return;
-              // Save with empty services and move to account step
               await PreferencesService.saveOnboardingData(
                 firstName: _firstNameController.text.trim(),
                 lastName: _lastNameController.text.trim(),
@@ -231,46 +229,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _showSkipAccountDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Skip account creation?'),
-        content: const Text(
-          "Your data will only be stored on this device. If you uninstall the app your data will be lost.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await PreferencesService.setOnboardingComplete();
-              if (!mounted) return;
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const MainShell()),
-              );
-            },
-            child: const Text('Skip anyway'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Create Account'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Date picker ───────────────────────────────────────────────────────────
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final maxDate = DateTime(now.year - 18, now.month, now.day);
+    final lastDate = DateTime.now().subtract(const Duration(days: 365 * 17));
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dob ?? maxDate,
-      firstDate: DateTime(1900),
-      lastDate: maxDate,
+      initialDate: _dob ?? DateTime(1990),
+      firstDate: DateTime(1930),
+      lastDate: lastDate,
       helpText: 'SELECT YOUR DATE OF BIRTH',
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
@@ -305,9 +272,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Progress header — only shown on personal info steps 1–5
-            if (_step >= 1 && _step <= 5) _buildStepHeader(),
-            // Animated step content fills the remaining space
+            // Progress header shown only on personal info steps (name through services)
+            if (_step >= 2 && _step <= 5) _buildStepHeader(),
             Expanded(child: _buildAnimatedStep()),
           ],
         ),
@@ -318,15 +284,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── Progress header ───────────────────────────────────────────────────────
 
   Widget _buildStepHeader() {
-    // On step 1: 1 dot filled. On step 5: 5 dots filled.
-    final filledCount = _step;
+    // step 2 → 1 dot filled, step 5 → 4 dots filled
+    final filledCount = _step - 1;
     final showSkip = _step == 5;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
-          // Back button
           GestureDetector(
             onTap: _goBack,
             child: Container(
@@ -349,11 +314,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
-          // Progress dots — width animates from narrow to wide when filled
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (i) {
+              children: List.generate(4, (i) {
                 final filled = i < filledCount;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -369,7 +333,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               }),
             ),
           ),
-          // Fixed-width slot — holds Skip button on services step, empty otherwise
           SizedBox(
             width: 56,
             child: showSkip
@@ -399,8 +362,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── AnimatedSwitcher with slide transition ────────────────────────────────
 
   Widget _buildAnimatedStep() {
-    // Capture direction here so the closure below uses the value from
-    // this build pass, not a future one.
     final goingForward = _goingForward;
 
     return AnimatedSwitcher(
@@ -432,8 +393,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _buildCurrentStep() {
     return switch (_step) {
       0 => _buildWelcomeStep(),
-      1 => _buildFirstNameStep(),
-      2 => _buildLastNameStep(),
+      1 => _buildIntroStep(),
+      2 => _buildNameStep(),
       3 => _buildGenderStep(),
       4 => _buildDobStep(),
       5 => _buildServicesStep(),
@@ -442,7 +403,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     };
   }
 
-  // ── Step 1: Welcome ───────────────────────────────────────────────────────
+  // ── Step 0: Welcome ───────────────────────────────────────────────────────
 
   Widget _buildWelcomeStep() {
     return Padding(
@@ -491,9 +452,58 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 2: First Name ────────────────────────────────────────────────────
+  // ── Step 1: Introduction ──────────────────────────────────────────────────
 
-  Widget _buildFirstNameStep() {
+  Widget _buildIntroStep() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
+      child: Column(
+        children: [
+          const Spacer(flex: 2),
+          Container(
+            width: 96,
+            height: 96,
+            decoration: const BoxDecoration(
+              color: Color(0xFF004346),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.favorite_rounded,
+              color: Colors.white,
+              size: 50,
+            ),
+          ),
+          const SizedBox(height: 36),
+          const Text(
+            'Your Health Companion',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+              letterSpacing: -0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'In Nuvita we will manage your health, track your medications, measurements and daily habits so you can live a better and healthier life',
+            style: TextStyle(
+              fontSize: 16,
+              color: AppColors.secondary,
+              height: 1.6,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const Spacer(flex: 2),
+          NuvitaButton(label: 'Get Started', onPressed: _goNext),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 2: Name (combined first + last) ──────────────────────────────────
+
+  Widget _buildNameStep() {
     return Column(
       children: [
         Expanded(
@@ -502,7 +512,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("What's your first name?", style: AppTextStyles.heading1),
+                const Text("What's your name?", style: AppTextStyles.heading1),
                 const SizedBox(height: 28),
                 NuvitaTextField(
                   label: 'First Name',
@@ -510,33 +520,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   controller: _firstNameController,
                   keyboardType: TextInputType.name,
                   prefixIcon: Icons.person_outline_rounded,
-                  textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.next,
                 ),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          child: NuvitaButton(label: 'Next', onPressed: _goNext),
-        ),
-      ],
-    );
-  }
-
-  // ── Step 3: Last Name ─────────────────────────────────────────────────────
-
-  Widget _buildLastNameStep() {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 36, 24, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("What's your last name?", style: AppTextStyles.heading1),
-                const SizedBox(height: 28),
+                const SizedBox(height: 16),
                 NuvitaTextField(
                   label: 'Last Name',
                   hint: 'Enter your last name',
@@ -557,7 +543,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 4: Gender ────────────────────────────────────────────────────────
+  // ── Step 3: Gender ────────────────────────────────────────────────────────
 
   Widget _buildGenderStep() {
     return Column(
@@ -642,7 +628,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 5: Date of Birth ─────────────────────────────────────────────────
+  // ── Step 4: Date of Birth ─────────────────────────────────────────────────
 
   Widget _buildDobStep() {
     return Column(
@@ -735,7 +721,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 6: Service Preferences ───────────────────────────────────────────
+  // ── Step 5: Service Preferences ───────────────────────────────────────────
 
   Widget _buildServicesStep() {
     return Column(
@@ -802,7 +788,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         child: Row(
           children: [
-            // Icon container
             Container(
               width: 48,
               height: 48,
@@ -813,7 +798,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Icon(service.icon, color: service.iconColor, size: 26),
             ),
             const SizedBox(width: 14),
-            // Title and description
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,7 +815,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            // Toggle button: + becomes checkmark when selected
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 32,
@@ -856,7 +839,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 7: Account Setup ─────────────────────────────────────────────────
+  // ── Step 6: Secure Your Data ──────────────────────────────────────────────
 
   Widget _buildAccountStep() {
     return Padding(
@@ -879,27 +862,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 28),
           const Text(
-            'Secure your data',
+            'Ready to get started?',
             style: AppTextStyles.heading1,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           const Text(
-            'Create an account to back up your health data',
+            'Sign in to protect and sync your health data',
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
           const Spacer(),
-          NuvitaButton(label: 'Create Account', onPressed: _navigateToRegister),
-          const SizedBox(height: 14),
-          NuvitaButton(
-            label: 'Sign In',
-            onPressed: _navigateToLogin,
-            isOutlined: true,
-          ),
+          NuvitaButton(label: 'Sign In', onPressed: _navigateToLogin),
           const SizedBox(height: 28),
           GestureDetector(
-            onTap: _showSkipAccountDialog,
+            onTap: _skipToGuest,
             child: const Text(
               'Skip for now →',
               style: TextStyle(

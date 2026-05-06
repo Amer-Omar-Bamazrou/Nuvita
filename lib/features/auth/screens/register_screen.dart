@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
@@ -42,13 +43,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      await _authService.signUp(
+      final patientId = await _authService.signUp(
         _emailController.text,
         _passwordController.text,
         _nameController.text,
       );
       if (!mounted) return;
       await PreferencesService.setOnboardingComplete();
+      if (!mounted) return;
+      await _showPatientIdDialog(patientId);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainShell()),
@@ -68,6 +71,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Future<void> _showPatientIdDialog(String patientId) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Account Created!',
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.green,
+              size: 52,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Your Patient ID is:',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              patientId,
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+                letterSpacing: 6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Share this with your doctor',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _goBackToOnboarding() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -82,95 +138,95 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return false;
       },
       child: Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: _goBackToOnboarding,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            onPressed: _goBackToOnboarding,
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Text('Create Account', style: AppTextStyles.heading1),
-                const SizedBox(height: 8),
-                Text(
-                  'Start your health journey with Nuvita',
-                  style: AppTextStyles.bodySmall,
-                ),
-                const SizedBox(height: 36),
-                NuvitaTextField(
-                  label: 'Full Name',
-                  hint: 'John Doe',
-                  controller: _nameController,
-                  keyboardType: TextInputType.name,
-                  prefixIcon: Icons.person_outline_rounded,
-                  textInputAction: TextInputAction.next,
-                  validator: _validateName,
-                ),
-                const SizedBox(height: 20),
-                NuvitaTextField(
-                  label: 'Email',
-                  hint: 'your@email.com',
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  textInputAction: TextInputAction.next,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 20),
-                NuvitaTextField(
-                  label: 'Password',
-                  hint: 'At least 6 characters',
-                  controller: _passwordController,
-                  isPassword: true,
-                  prefixIcon: Icons.lock_outline,
-                  textInputAction: TextInputAction.next,
-                  validator: _validatePassword,
-                ),
-                const SizedBox(height: 20),
-                NuvitaTextField(
-                  label: 'Confirm Password',
-                  hint: 'Repeat your password',
-                  controller: _confirmPasswordController,
-                  isPassword: true,
-                  prefixIcon: Icons.lock_outline,
-                  textInputAction: TextInputAction.done,
-                  validator: _validateConfirmPassword,
-                ),
-                const SizedBox(height: 12),
-                _buildTermsNote(),
-                const SizedBox(height: 32),
-                if (_errorMessage != null) ...[
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Text('Create Account', style: AppTextStyles.heading1),
+                  const SizedBox(height: 8),
                   Text(
-                    _errorMessage!,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: Colors.red.shade700,
-                    ),
-                    textAlign: TextAlign.center,
+                    'Start your health journey with Nuvita',
+                    style: AppTextStyles.bodySmall,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 36),
+                  NuvitaTextField(
+                    label: 'Full Name',
+                    hint: 'John Doe',
+                    controller: _nameController,
+                    keyboardType: TextInputType.name,
+                    prefixIcon: Icons.person_outline_rounded,
+                    textInputAction: TextInputAction.next,
+                    validator: _validateName,
+                  ),
+                  const SizedBox(height: 20),
+                  NuvitaTextField(
+                    label: 'Email',
+                    hint: 'your@email.com',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    prefixIcon: Icons.email_outlined,
+                    textInputAction: TextInputAction.next,
+                    validator: _validateEmail,
+                  ),
+                  const SizedBox(height: 20),
+                  NuvitaTextField(
+                    label: 'Password',
+                    hint: 'At least 6 characters',
+                    controller: _passwordController,
+                    isPassword: true,
+                    prefixIcon: Icons.lock_outline,
+                    textInputAction: TextInputAction.next,
+                    validator: _validatePassword,
+                  ),
+                  const SizedBox(height: 20),
+                  NuvitaTextField(
+                    label: 'Confirm Password',
+                    hint: 'Repeat your password',
+                    controller: _confirmPasswordController,
+                    isPassword: true,
+                    prefixIcon: Icons.lock_outline,
+                    textInputAction: TextInputAction.done,
+                    validator: _validateConfirmPassword,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTermsNote(),
+                  const SizedBox(height: 32),
+                  if (_errorMessage != null) ...[
+                    Text(
+                      _errorMessage!,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.red.shade700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  NuvitaButton(
+                    label: 'Create Account',
+                    onPressed: _onRegisterPressed,
+                    isLoading: _isLoading,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildLoginRow(),
+                  const SizedBox(height: 24),
                 ],
-                NuvitaButton(
-                  label: 'Create Account',
-                  onPressed: _onRegisterPressed,
-                  isLoading: _isLoading,
-                ),
-                const SizedBox(height: 24),
-                _buildLoginRow(),
-                const SizedBox(height: 24),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    ),   // closes Scaffold
-    );   // closes WillPopScope
+    );
   }
 
   Widget _buildTermsNote() {

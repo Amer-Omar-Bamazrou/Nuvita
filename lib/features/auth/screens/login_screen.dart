@@ -40,10 +40,17 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.signIn(
-        _emailController.text,
-        _passwordController.text,
-      );
+      final input = _emailController.text.trim();
+      // If no @ symbol and exactly 6 alphanumeric chars, treat as Patient ID
+      final isPatientId =
+          !input.contains('@') && RegExp(r'^[A-Za-z0-9]{6}$').hasMatch(input);
+
+      if (isPatientId) {
+        await _authService.signInWithPatientId(input, _passwordController.text);
+      } else {
+        await _authService.signIn(input, _passwordController.text);
+      }
+
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainShell()),
@@ -88,81 +95,88 @@ class _LoginScreenState extends State<LoginScreen> {
         return false;
       },
       child: Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 32),
-                _buildLogo(),
-                const SizedBox(height: 40),
-                Text('Welcome back', style: AppTextStyles.heading1),
-                const SizedBox(height: 8),
-                Text(
-                  'Sign in to continue tracking your health',
-                  style: AppTextStyles.bodySmall,
-                ),
-                const SizedBox(height: 40),
-                NuvitaTextField(
-                  label: 'Email',
-                  hint: 'your@email.com',
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  textInputAction: TextInputAction.next,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 20),
-                NuvitaTextField(
-                  label: 'Password',
-                  hint: 'Enter your password',
-                  controller: _passwordController,
-                  isPassword: true,
-                  prefixIcon: Icons.lock_outline,
-                  textInputAction: TextInputAction.done,
-                  validator: _validatePassword,
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: forgot password flow
-                    },
-                    child: const Text('Forgot password?'),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                if (_errorMessage != null) ...[
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 32),
+                  _buildLogo(),
+                  const SizedBox(height: 40),
+                  Text('Welcome back', style: AppTextStyles.heading1),
+                  const SizedBox(height: 8),
                   Text(
-                    _errorMessage!,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: Colors.red.shade700,
-                    ),
-                    textAlign: TextAlign.center,
+                    'Sign in to continue tracking your health',
+                    style: AppTextStyles.bodySmall,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 40),
+                  NuvitaTextField(
+                    label: 'Email or Patient ID',
+                    hint: 'your@email.com or ABC123',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    prefixIcon: Icons.person_outline_rounded,
+                    textInputAction: TextInputAction.next,
+                    validator: _validateEmailOrId,
+                  ),
+                  const SizedBox(height: 20),
+                  NuvitaTextField(
+                    label: 'Password',
+                    hint: 'Enter your password',
+                    controller: _passwordController,
+                    isPassword: true,
+                    prefixIcon: Icons.lock_outline,
+                    textInputAction: TextInputAction.done,
+                    validator: _validatePassword,
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        // TODO: forgot password flow
+                      },
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  if (_errorMessage != null) ...[
+                    Text(
+                      _errorMessage!,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.red.shade700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  NuvitaButton(
+                    label: 'Sign In',
+                    onPressed: _onLoginPressed,
+                    isLoading: _isLoading,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('New user?', style: AppTextStyles.bodySmall),
+                      TextButton(
+                        onPressed: _navigateToRegister,
+                        child: const Text('Create Account'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                 ],
-                NuvitaButton(
-                  label: 'Sign In',
-                  onPressed: _onLoginPressed,
-                  isLoading: _isLoading,
-                ),
-                const SizedBox(height: 32),
-                _buildDivider(),
-                const SizedBox(height: 32),
-                _buildRegisterRow(),
-                const SizedBox(height: 24),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    ),   // closes Scaffold
-    );   // closes WillPopScope
+    );
   }
 
   Widget _buildLogo() {
@@ -193,36 +207,22 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildDivider() {
-    return Row(
-      children: [
-        const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text("Don't have an account?", style: AppTextStyles.bodySmall),
-        ),
-        const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
-      ],
-    );
-  }
-
-  Widget _buildRegisterRow() {
-    return NuvitaButton(
-      label: 'Create Account',
-      onPressed: _navigateToRegister,
-      isOutlined: true,
-    );
-  }
-
-  String? _validateEmail(String? value) {
+  String? _validateEmailOrId(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
+      return 'Email or Patient ID is required';
     }
-    final emailRegex = RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Enter a valid email address';
+    final input = value.trim();
+    // Accept valid email
+    if (input.contains('@')) {
+      final emailRegex = RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
+      if (!emailRegex.hasMatch(input)) {
+        return 'Enter a valid email address';
+      }
+      return null;
     }
-    return null;
+    // Accept 6-character alphanumeric Patient ID
+    if (RegExp(r'^[A-Za-z0-9]{6}$').hasMatch(input)) return null;
+    return 'Enter your email or 6-character Patient ID';
   }
 
   String? _validatePassword(String? value) {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -21,6 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isGuest = false;
   String _name = '';
   String _diseaseType = 'other';
+  String _patientId = '';
   bool _signingOut = false;
 
   static const _diseaseLabels = {
@@ -59,10 +62,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .doc(uid)
           .get();
 
-      final profile = doc.data()?['profile'] as Map<String, dynamic>?;
+      final data = doc.data();
+      final profile = data?['profile'] as Map<String, dynamic>?;
       setState(() {
-        _name = profile?['name'] as String? ?? '';
+        // Name may be in the root doc (new registrations) or nested under 'profile' (onboarding saves)
+        _name = profile?['name'] as String? ??
+            data?['name'] as String? ??
+            '';
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+        _patientId = data?['patientId'] as String? ?? '';
         _isLoading = false;
       });
     } catch (_) {
@@ -75,7 +83,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
-      // Remove entire stack — landing on LoginScreen starts fresh
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
@@ -84,6 +91,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       setState(() => _signingOut = false);
     }
+  }
+
+  void _copyPatientId() {
+    Clipboard.setData(ClipboardData(text: _patientId));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Patient ID copied to clipboard'),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _sharePatientId() {
+    SharePlus.instance.share(
+      ShareParams(text: 'My Nuvita Patient ID: $_patientId\nShare this with your doctor.'),
+    );
   }
 
   String _initials(String name) {
@@ -172,7 +199,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Profile info — centered in the available space
             Expanded(
               child: Center(
                 child: Column(
@@ -227,6 +253,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Patient ID card
+                  if (_patientId.isNotEmpty) ...[
+                    Text(
+                      'Your Patient ID',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.badge_rounded,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _patientId,
+                              style: AppTextStyles.heading2.copyWith(
+                                letterSpacing: 4,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _copyPatientId,
+                            icon: const Icon(
+                              Icons.copy_rounded,
+                              color: AppColors.secondary,
+                              size: 20,
+                            ),
+                            tooltip: 'Copy',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            onPressed: _sharePatientId,
+                            icon: const Icon(
+                              Icons.share_rounded,
+                              color: AppColors.secondary,
+                              size: 20,
+                            ),
+                            tooltip: 'Share',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
                     'Health Report',
                     style: AppTextStyles.bodySmall.copyWith(
