@@ -4,8 +4,13 @@ import '../services/doctor_service.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
+  final String doctorName;
 
-  const DoctorPatientDetailScreen({super.key, required this.patient});
+  const DoctorPatientDetailScreen({
+    super.key,
+    required this.patient,
+    required this.doctorName,
+  });
 
   @override
   State<DoctorPatientDetailScreen> createState() =>
@@ -142,12 +147,18 @@ class _DoctorPatientDetailScreenState
     setState(() => _editingMedId = null);
   }
 
-  Future<void> _sendSuggestion(String doctorName) async {
+  Future<void> _sendSuggestion() async {
     final text = _suggestionCtrl.text.trim();
     if (text.isEmpty) return;
     setState(() => _sendingSuggestion = true);
     try {
-      await _service.sendSuggestion(_uid, text, doctorName);
+      await _service.sendSuggestion(
+        _uid,
+        text,
+        widget.doctorName,
+        patientName: _patientName,
+        patientId: widget.patient['patientId'] as String? ?? '',
+      );
       _suggestionCtrl.clear();
       await _loadSuggestions();
     } catch (_) {}
@@ -663,11 +674,7 @@ class _DoctorPatientDetailScreenState
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
-              onPressed: _sendingSuggestion
-                  ? null
-                  : () => _sendSuggestion(
-                        widget.patient['doctorName'] as String? ?? 'Doctor',
-                      ),
+              onPressed: _sendingSuggestion ? null : _sendSuggestion,
               icon: _sendingSuggestion
                   ? const SizedBox(
                       width: 14,

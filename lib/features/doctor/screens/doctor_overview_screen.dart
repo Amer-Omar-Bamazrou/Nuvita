@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
+import 'doctor_suggestions_history_screen.dart';
 
 class DoctorOverviewScreen extends StatefulWidget {
   final String doctorName;
@@ -35,38 +36,66 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
+
+    // Load each stat independently — a failed collectionGroup query
+    // won't zero out everything else
+    List<Map<String, dynamic>> patients = [];
+    int critical = 0;
+    int lowMeds = 0;
+    int suggestions = 0;
+    List<Map<String, dynamic>> recent = [];
+
     try {
-      final patients = await _service.getAllPatients();
-      final critical = await _service.getCriticalReadingsCount();
-      final lowMeds = await _service.getLowMedicationsCount();
-      final suggestions =
-          await _service.getTotalSuggestionsCount(widget.doctorName);
-      final recent = await _service.getRecentReadingsAllPatients();
-
-      // Build uid → name map for the recent readings list
-      final names = <String, String>{};
-      for (final p in patients) {
-        final uid = p['uid'] as String;
-        final name = p['name'] as String? ??
-            (p['profile'] as Map?)?['name'] as String? ??
-            'Unknown';
-        names[uid] = name;
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _totalPatients = patients.length;
-        _criticalToday = critical;
-        _lowMedications = lowMeds;
-        _totalSuggestions = suggestions;
-        _recentReadings = recent;
-        _patientNames = names;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      patients = await _service.getAllPatients();
+    } catch (e) {
+      debugPrint('Overview: getAllPatients failed: $e');
     }
+
+    try {
+      critical = await _service.getCriticalReadingsCount();
+    } catch (e) {
+      debugPrint('Overview: getCriticalReadingsCount failed: $e');
+    }
+
+    try {
+      lowMeds = await _service.getLowMedicationsCount();
+    } catch (e) {
+      debugPrint('Overview: getLowMedicationsCount failed: $e');
+    }
+
+    try {
+      suggestions =
+          await _service.getTotalSuggestionsCount(widget.doctorName);
+    } catch (e) {
+      debugPrint('Overview: getTotalSuggestionsCount failed: $e');
+    }
+
+    try {
+      recent = await _service.getRecentReadingsAllPatients();
+    } catch (e) {
+      debugPrint('Overview: getRecentReadingsAllPatients failed: $e');
+    }
+
+    // Build uid → name map for the recent readings list
+    final names = <String, String>{};
+    for (final p in patients) {
+      final uid = p['uid'] as String;
+      final name = p['name'] as String? ??
+          (p['profile'] as Map?)?['name'] as String? ??
+          'Unknown';
+      names[uid] = name;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _totalPatients = patients.length;
+      _criticalToday = critical;
+      _lowMedications = lowMeds;
+      _totalSuggestions = suggestions;
+      _recentReadings = recent;
+      _patientNames = names;
+      _loading = false;
+    });
   }
 
   @override
@@ -123,6 +152,18 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
         icon: Icons.send_rounded,
         iconColor: const Color(0xFF2E7D32),
         iconBg: const Color(0xFFE8F5E9),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DoctorSuggestionsHistoryScreen(
+                doctorName: widget.doctorName,
+              ),
+            ),
+          );
+          // Refresh count when returning from history
+          _loadData();
+        },
       ),
     ];
 

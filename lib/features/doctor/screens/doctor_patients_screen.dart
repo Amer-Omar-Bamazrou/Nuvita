@@ -4,8 +4,13 @@ import 'doctor_patient_detail_screen.dart';
 
 class DoctorPatientsScreen extends StatefulWidget {
   final void Function(Map<String, dynamic> patient) onSelectPatient;
+  final String doctorName;
 
-  const DoctorPatientsScreen({super.key, required this.onSelectPatient});
+  const DoctorPatientsScreen({
+    super.key,
+    required this.onSelectPatient,
+    required this.doctorName,
+  });
 
   @override
   State<DoctorPatientsScreen> createState() => _DoctorPatientsScreenState();
@@ -213,7 +218,10 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => DoctorPatientDetailScreen(patient: patient),
+            builder: (_) => DoctorPatientDetailScreen(
+              patient: patient,
+              doctorName: widget.doctorName,
+            ),
           ),
         );
       },

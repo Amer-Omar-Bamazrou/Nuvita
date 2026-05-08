@@ -84,7 +84,7 @@ None — all planned features complete.
   - lib/features/doctor/screens/doctor_dashboard_screen.dart: 220px sidebar (#004346), IndexedStack for Overview/Patients/Settings
   - lib/features/doctor/screens/doctor_overview_screen.dart: 4 stat cards, recent activity feed via collectionGroup
   - lib/features/doctor/screens/doctor_patients_screen.dart: search + disease filter, patient cards grid, tap → detail
-  - lib/features/doctor/screens/doctor_patient_detail_screen.dart: personal info, disease-aware metric cards, inline medication edit, readings table, send suggestion
+  - lib/features/doctor/screens/doctor_patient_detail_screen.dart: personal info, disease-aware metric cards, inline medication edit, readings table, send suggestion; now requires doctorName param; sendSuggestion stores patientName + patientId in the doc
   - lib/features/doctor/screens/doctor_settings_screen.dart: account card, change password (re-auth + updatePassword), sign out
   - firestore.rules updated: isDoctor() helper, /users allow read if isDoctor(), collectionGroup rules for readings + suggestions
 
@@ -99,6 +99,25 @@ None — all planned features complete.
 - Applied: 2026-05-02 on branch feature/firebase-security-rules; updated 2026-05-06 for doctor access
 - Coverage: /users/{userId} (read/write own data OR isDoctor()), /readings, /alerts, /medications, /profile sub-collections, /share_tokens (public read, auth write), /doctors/{doctorId} (read own only), collectionGroup readings + suggestions (doctor read)
 - Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
+
+- Doctor Suggestions History (branch: feature/doctor-suggestions):
+  - Root cause fix: DoctorPatientDetailScreen was saving suggestions with doctorName='Doctor' (wrong field); now doctorName flows Dashboard → PatientsScreen → PatientDetailScreen via required param
+  - DoctorService.sendSuggestion: now stores patientName + patientId in the suggestion doc (optional named params, old calls unaffected)
+  - DoctorService.getSentSuggestionsHistory(doctorName): queries each patient's /suggestions subcollection individually (regular collection queries, no composite index needed); enriches old suggestions with patientName/patientId from patient doc; sorts client-side newest first
+  - DoctorService.getTotalSuggestionsCount: delegates to getSentSuggestionsHistory, returns length
+  - doctor_suggestions_history_screen.dart: list of all suggestions sent by this doctor; each item shows patient avatar, name, patient ID badge, message body, formatted date; pull-to-refresh; empty state; debugPrint on error
+  - doctor_overview_screen.dart: "Suggestions Sent" card tappable → opens DoctorSuggestionsHistoryScreen; refreshes count on return; _loadData refactored to fault-tolerant per-stat try/catch — one failing collectionGroup query no longer zeros out all counts
+  - DoctorPatientsScreen: now requires doctorName param; passes it to DoctorPatientDetailScreen
+  - DoctorDashboardScreen: passes doctorName to DoctorPatientsScreen
+  - No Firebase Console changes required — per-patient subcollection queries use auto-indexed single fields; existing rules already cover doctor read on /users/{uid}/suggestions
+
+- Doctor Suggestions in Patient App (branch: feature/doctor-suggestions):
+  - lib/features/doctor/services/patient_suggestion_service.dart: listenToAllSuggestions (realtime stream ordered by timestamp desc), listenToUnreadCount (stream of unread count for badge), markAsRead (uid + suggestionId, rethrows on error), timeAgo (manual calc — Just now / X minutes / X hours / X days)
+  - home_screen.dart: bell badge now combines unread doctor messages + warning/critical readings; guest users skip stream; StreamBuilder<int> on listenToUnreadCount drives badge; _buildBellIcon extracted for reuse
+  - suggestions_panel_screen.dart: doctor messages section added at very top (logged-in only); StreamBuilder on listenToAllSuggestions; cards with left border (primary=unread, grey=read), expand/collapse via _expandedIds Set, markAsRead on tap, UNREAD chip, timeAgo timestamp; empty state with message icon; all existing sections (weekly summary, lifestyle, appointments) preserved below
+
+## Firestore Structure (continued)
+/users/{uid}/suggestions/{suggestionId} — text, doctorName, timestamp, read (bool)
 
 ## Modifications List — Do Later
 - (none — all modifications complete)
@@ -124,7 +143,7 @@ lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service
 lib/features/report/ — report_service, report_screen
 lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen
-lib/features/doctor/services/ — doctor_service
+lib/features/doctor/services/ — doctor_service, patient_suggestion_service
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
 
 ## Key Providers

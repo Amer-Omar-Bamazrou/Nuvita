@@ -235,6 +235,9 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
         ),
         DoctorPatientsScreen(
           onSelectPatient: (_) => setState(() => _selectedIndex = 1),
+          doctorName: widget.doctorName.isNotEmpty
+              ? widget.doctorName
+              : widget.doctorEmail,
         ),
         DoctorSettingsScreen(
           doctorEmail: widget.doctorEmail,

@@ -12,6 +12,7 @@ import '../../notifications/screens/suggestions_panel_screen.dart';
 import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
+import '../../doctor/services/patient_suggestion_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -40,6 +41,7 @@ class _HomeBodyState extends State<_HomeBody> {
   String _userName = '';
   String _diseaseType = 'other';
   int _medScheduleCount = 0;
+  final _suggestionService = PatientSuggestionService();
 
   // Maps disease IDs to display labels
   static const _diseaseLabels = {
@@ -243,7 +245,8 @@ class _HomeBodyState extends State<_HomeBody> {
 
   Widget _buildHeader(HealthProvider provider) {
     final firstName = _userName.trim().split(' ').first;
-    final hasBadge = _hasConcerningReadings(provider);
+    final hasWarning = _hasConcerningReadings(provider);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,40 +284,52 @@ class _HomeBodyState extends State<_HomeBody> {
               ),
             ),
           ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
+          // Badge combines unread doctor messages + warning/critical readings
+          child: uid == null
+              ? _buildBellIcon(hasWarning)
+              : StreamBuilder<int>(
+                  stream: _suggestionService.listenToUnreadCount(uid),
+                  builder: (context, snap) {
+                    final showBadge = (snap.data ?? 0) > 0 || hasWarning;
+                    return _buildBellIcon(showBadge);
+                  },
                 ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.notifications_rounded,
-                  color: AppColors.primary,
-                  size: 26,
-                ),
-              ),
-              // Red badge when any metric is in warning or critical range
-              if (hasBadge)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.error,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBellIcon(bool hasBadge) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.notifications_rounded,
+            color: AppColors.primary,
+            size: 26,
           ),
         ),
+        if (hasBadge)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: AppColors.error,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
       ],
     );
   }

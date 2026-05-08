@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../health/services/health_reading_service.dart';
@@ -9,6 +10,7 @@ import '../../appointments/models/appointment_model.dart';
 import '../../appointments/services/appointment_service.dart';
 import '../../appointments/screens/appointments_screen.dart';
 import '../../appointments/screens/add_appointment_screen.dart';
+import '../../doctor/services/patient_suggestion_service.dart';
 
 class SuggestionsPanelScreen extends StatefulWidget {
   final String diseaseType;
@@ -33,6 +35,8 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
   String _summaryText = '';
   int _readingCount = 0;
   List<AppointmentModel> _upcomingAppointments = [];
+  final PatientSuggestionService _service = PatientSuggestionService();
+  final Set<String> _expandedIds = {};
 
   @override
   void initState() {
@@ -171,6 +175,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
               children: [
+                if (!_isGuest) _buildDoctorSection(),
                 _buildSummaryCard(),
                 const SizedBox(height: 24),
                 Text('Suggestions', style: AppTextStyles.heading3),
@@ -180,6 +185,194 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
                 _buildAppointmentsSection(),
               ],
             ),
+    );
+  }
+
+  // ── Doctor messages section — shown at top for logged-in users only ─────
+
+  Widget _buildDoctorSection() {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Messages from Your Doctor',
+          style: AppTextStyles.heading3.copyWith(color: AppColors.textDark),
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _service.listenToAllSuggestions(uid),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              );
+            }
+            if (snap.hasError) {
+              debugPrint('Doctor suggestions error: ${snap.error}');
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to load doctor messages'),
+                    ),
+                  );
+                }
+              });
+              return const SizedBox.shrink();
+            }
+            final messages = snap.data ?? [];
+            if (messages.isEmpty) return _buildDoctorEmptyState();
+            return Column(
+              children: messages
+                  .map((msg) => _buildDoctorCard(uid, msg))
+                  .toList(),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildDoctorCard(String uid, Map<String, dynamic> data) {
+    final id = data['id'] as String;
+    final text = data['text'] as String? ?? '';
+    final doctorName = data['doctorName'] as String? ?? 'Your Doctor';
+    final isRead = data['read'] as bool? ?? false;
+    final timestamp = data['timestamp'] as Timestamp?;
+    final isExpanded = _expandedIds.contains(id);
+
+    return GestureDetector(
+      onTap: () async {
+        // Toggle expand/collapse first, then mark as read if needed
+        setState(() {
+          if (isExpanded) {
+            _expandedIds.remove(id);
+          } else {
+            _expandedIds.add(id);
+          }
+        });
+        if (!isRead) {
+          try {
+            await _service.markAsRead(uid, id);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'Failed to mark as read. Please try again.'),
+                ),
+              );
+            }
+          }
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(
+            left: BorderSide(
+              color: isRead
+                  ? const Color(0xFFCCCCCC)
+                  : AppColors.primary,
+              width: 3,
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.local_hospital_rounded,
+                    color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  doctorName,
+                  style: AppTextStyles.label
+                      .copyWith(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (!isRead)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.error,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'UNREAD',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              text,
+              maxLines: isExpanded ? null : 2,
+              overflow: isExpanded
+                  ? TextOverflow.visible
+                  : TextOverflow.ellipsis,
+              style: AppTextStyles.bodySmall,
+            ),
+            if (timestamp != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  _service.timeAgo(timestamp),
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.grey,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoctorEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.message_outlined, color: Colors.grey, size: 40),
+            const SizedBox(height: 12),
+            Text('No messages from your doctor yet',
+                style: AppTextStyles.label),
+            const SizedBox(height: 4),
+            Text(
+              'Messages from your doctor will appear here',
+              style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

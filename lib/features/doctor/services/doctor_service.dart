@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DoctorService {
@@ -62,17 +63,71 @@ class DoctorService {
   }
 
   // Saves a doctor suggestion to /users/{uid}/suggestions
+  // patientName and patientId are stored so the history screen doesn't need extra lookups
   Future<void> sendSuggestion(
     String uid,
     String text,
-    String doctorName,
-  ) async {
+    String doctorName, {
+    String patientName = '',
+    String patientId = '',
+  }) async {
     await _db.collection('users').doc(uid).collection('suggestions').add({
       'text': text,
       'doctorName': doctorName,
       'timestamp': FieldValue.serverTimestamp(),
       'read': false,
+      if (patientName.isNotEmpty) 'patientName': patientName,
+      if (patientId.isNotEmpty) 'patientId': patientId,
     });
+  }
+
+  // All suggestions sent by this doctor, newest first.
+  // Queries each patient's /suggestions subcollection individually to avoid
+  // needing a Firestore composite or collectionGroup index.
+  // Also enriches old suggestions with patientName/patientId from patient data.
+  Future<List<Map<String, dynamic>>> getSentSuggestionsHistory(
+      String doctorName) async {
+    final patients = await getAllPatients();
+    final results = <Map<String, dynamic>>[];
+
+    for (final patient in patients) {
+      final uid = patient['uid'] as String;
+      final patientName = patient['name'] as String? ??
+          (patient['profile'] as Map?)?['name'] as String? ??
+          'Unknown';
+      final patientId = patient['patientId'] as String? ?? '—';
+
+      try {
+        final snap = await _db
+            .collection('users')
+            .doc(uid)
+            .collection('suggestions')
+            .where('doctorName', isEqualTo: doctorName)
+            .get();
+
+        for (final doc in snap.docs) {
+          results.add({
+            'id': doc.id,
+            'patientUid': uid,
+            // Use stored values if present, fall back to patient document data
+            'patientName': doc.data()['patientName'] ?? patientName,
+            'patientId': doc.data()['patientId'] ?? patientId,
+            ...doc.data(),
+          });
+        }
+      } catch (e) {
+        debugPrint('getSentSuggestionsHistory for $uid: $e');
+      }
+    }
+
+    results.sort((a, b) {
+      final aTs = a['timestamp'];
+      final bTs = b['timestamp'];
+      if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+      return 0;
+    });
+
+    return results;
   }
 
   // Count of Critical/High readings across all patients today (in-memory filter)
@@ -103,13 +158,10 @@ class DoctorService {
     return count;
   }
 
-  // Total suggestions sent by this doctor to all patients
+  // Total suggestions sent by this doctor — delegates to history to reuse same query
   Future<int> getTotalSuggestionsCount(String doctorName) async {
-    final snap = await _db
-        .collectionGroup('suggestions')
-        .where('doctorName', isEqualTo: doctorName)
-        .get();
-    return snap.docs.length;
+    final history = await getSentSuggestionsHistory(doctorName);
+    return history.length;
   }
 
   // Recent readings across all patients — up to 10, newest first
