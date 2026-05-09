@@ -56,6 +56,7 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   Future<void> _loadPatients() async {
     setState(() => _loading = true);
     try {
+      // getAllPatients already filters out active == false patients
       final patients = await _service.getAllPatients();
       if (!mounted) return;
       setState(() {
@@ -63,9 +64,63 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
         _filtered = patients;
         _loading = false;
       });
+      _applyFilters();
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _confirmDeactivate(Map<String, dynamic> patient) async {
+    final uid = patient['uid'] as String;
+    final name = _patientName(patient);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Deactivate Patient'),
+        content: Text(
+          'Deactivate $name? They will no longer be able to sign in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+            ),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _service.deactivatePatient(uid, widget.doctorName);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$name has been deactivated'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+      _loadPatients();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to deactivate patient')),
+      );
     }
   }
 
@@ -299,6 +354,18 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                       ),
                     ],
                   ),
+                ),
+                // Deactivate button
+                IconButton(
+                  onPressed: () => _confirmDeactivate(patient),
+                  icon: const Icon(
+                    Icons.person_remove_rounded,
+                    size: 18,
+                  ),
+                  color: Colors.red.shade400,
+                  tooltip: 'Deactivate patient',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),

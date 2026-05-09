@@ -20,10 +20,13 @@ class DoctorService {
     }
   }
 
-  // Returns all user documents from /users as raw maps
+  // Returns all active user documents (active != false) from /users
   Future<List<Map<String, dynamic>>> getAllPatients() async {
     final snap = await _db.collection('users').get();
-    return snap.docs.map((d) => {'uid': d.id, ...d.data()}).toList();
+    return snap.docs
+        .where((d) => d.data()['active'] != false)
+        .map((d) => {'uid': d.id, ...d.data()})
+        .toList();
   }
 
   // Last 10 readings for a patient, newest first
@@ -62,8 +65,21 @@ class DoctorService {
         .update(data);
   }
 
+  // Adds a new medication to /users/{uid}/medications (assigned by doctor)
+  Future<void> addMedication(String uid, Map<String, dynamic> data) async {
+    final docRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('medications')
+        .doc();
+    await docRef.set({
+      'id': docRef.id,
+      'isActive': true,
+      ...data,
+    });
+  }
+
   // Saves a doctor suggestion to /users/{uid}/suggestions
-  // patientName and patientId are stored so the history screen doesn't need extra lookups
   Future<void> sendSuggestion(
     String uid,
     String text,
@@ -82,9 +98,6 @@ class DoctorService {
   }
 
   // All suggestions sent by this doctor, newest first.
-  // Queries each patient's /suggestions subcollection individually to avoid
-  // needing a Firestore composite or collectionGroup index.
-  // Also enriches old suggestions with patientName/patientId from patient data.
   Future<List<Map<String, dynamic>>> getSentSuggestionsHistory(
       String doctorName) async {
     final patients = await getAllPatients();
@@ -109,7 +122,6 @@ class DoctorService {
           results.add({
             'id': doc.id,
             'patientUid': uid,
-            // Use stored values if present, fall back to patient document data
             'patientName': doc.data()['patientName'] ?? patientName,
             'patientId': doc.data()['patientId'] ?? patientId,
             ...doc.data(),
@@ -130,18 +142,44 @@ class DoctorService {
     return results;
   }
 
-  // Count of Critical/High readings across all patients today (in-memory filter)
-  Future<int> getCriticalReadingsCount() async {
-    final today = DateTime.now();
-    final startOfDay = DateTime(today.year, today.month, today.day);
+  // Total suggestions sent by this doctor
+  Future<int> getTotalSuggestionsCount(String doctorName) async {
+    final history = await getSentSuggestionsHistory(doctorName);
+    return history.length;
+  }
 
-    final snap = await _db
-        .collectionGroup('readings')
-        .where('status', whereIn: ['Critical', 'High', 'Low'])
-        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-        .get();
+  // Emergency alerts fired today (cancelled == false) across all patients
+  Future<List<Map<String, dynamic>>> getEmergencyAlertsToday() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
 
-    return snap.docs.length;
+    try {
+      final snap = await _db
+          .collectionGroup('alerts')
+          .where('cancelled', isEqualTo: false)
+          .where(
+            'timestamp',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .get();
+
+      final results = snap.docs.map((d) {
+        final uid = d.reference.parent.parent?.id ?? '';
+        return {'id': d.id, 'patientUid': uid, ...d.data()};
+      }).toList();
+
+      results.sort((a, b) {
+        final aTs = a['timestamp'];
+        final bTs = b['timestamp'];
+        if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+        return 0;
+      });
+
+      return results;
+    } catch (e) {
+      debugPrint('getEmergencyAlertsToday: $e');
+      return [];
+    }
   }
 
   // Count of medications with pillsRemaining <= 7 across all patients
@@ -158,12 +196,6 @@ class DoctorService {
     return count;
   }
 
-  // Total suggestions sent by this doctor — delegates to history to reuse same query
-  Future<int> getTotalSuggestionsCount(String doctorName) async {
-    final history = await getSentSuggestionsHistory(doctorName);
-    return history.length;
-  }
-
   // Recent readings across all patients — up to 10, newest first
   Future<List<Map<String, dynamic>>> getRecentReadingsAllPatients() async {
     final snap = await _db
@@ -172,10 +204,68 @@ class DoctorService {
         .limit(10)
         .get();
 
-    // Attach patient uid from the document reference path
     return snap.docs.map((d) {
       final uid = d.reference.parent.parent?.id ?? '';
       return {'id': d.id, 'patientUid': uid, ...d.data()};
     }).toList();
+  }
+
+  // ── Patient Messages (Mod 2) ───────────────────────────────────────────────
+
+  // Stream of all patient messages, newest first
+  Stream<List<Map<String, dynamic>>> getPatientMessages() {
+    return _db
+        .collectionGroup('messages')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) {
+              final uid = d.reference.parent.parent?.id ?? '';
+              return {'id': d.id, 'patientUid': uid, ...d.data()};
+            }).toList());
+  }
+
+  // Mark a patient message as read by the doctor
+  Future<void> markMessageAsRead(String patientUid, String msgId) async {
+    await _db
+        .collection('users')
+        .doc(patientUid)
+        .collection('messages')
+        .doc(msgId)
+        .update({'readByDoctor': true});
+  }
+
+  // Real-time count of unread patient messages
+  Stream<int> getUnreadMessagesCount() {
+    return _db
+        .collectionGroup('messages')
+        .where('readByDoctor', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
+
+  // ── Patient Deactivation (Mod 5) ───────────────────────────────────────────
+
+  Future<void> deactivatePatient(String uid, String doctorName) async {
+    await _db.collection('users').doc(uid).update({
+      'active': false,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'deletedBy': doctorName,
+    });
+  }
+
+  Future<void> restorePatient(String uid) async {
+    await _db.collection('users').doc(uid).update({
+      'active': true,
+      'deletedAt': FieldValue.delete(),
+      'deletedBy': FieldValue.delete(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getDeactivatedPatients() async {
+    final snap = await _db
+        .collection('users')
+        .where('active', isEqualTo: false)
+        .get();
+    return snap.docs.map((d) => {'uid': d.id, ...d.data()}).toList();
   }
 }

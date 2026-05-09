@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 import 'doctor_suggestions_history_screen.dart';
+import 'doctor_messages_screen.dart';
+import 'critical_alerts_screen.dart';
+import 'deleted_patients_screen.dart';
 
 class DoctorOverviewScreen extends StatefulWidget {
   final String doctorName;
@@ -25,6 +28,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
   int _criticalToday = 0;
   int _lowMedications = 0;
   int _totalSuggestions = 0;
+  int _deactivated = 0;
   List<Map<String, dynamic>> _recentReadings = [];
   Map<String, String> _patientNames = {};
 
@@ -37,12 +41,11 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
 
-    // Load each stat independently — a failed collectionGroup query
-    // won't zero out everything else
     List<Map<String, dynamic>> patients = [];
     int critical = 0;
     int lowMeds = 0;
     int suggestions = 0;
+    int deactivated = 0;
     List<Map<String, dynamic>> recent = [];
 
     try {
@@ -52,9 +55,10 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     }
 
     try {
-      critical = await _service.getCriticalReadingsCount();
+      final alerts = await _service.getEmergencyAlertsToday();
+      critical = alerts.length;
     } catch (e) {
-      debugPrint('Overview: getCriticalReadingsCount failed: $e');
+      debugPrint('Overview: getEmergencyAlertsToday failed: $e');
     }
 
     try {
@@ -71,12 +75,18 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     }
 
     try {
+      final deactivatedList = await _service.getDeactivatedPatients();
+      deactivated = deactivatedList.length;
+    } catch (e) {
+      debugPrint('Overview: getDeactivatedPatients failed: $e');
+    }
+
+    try {
       recent = await _service.getRecentReadingsAllPatients();
     } catch (e) {
       debugPrint('Overview: getRecentReadingsAllPatients failed: $e');
     }
 
-    // Build uid → name map for the recent readings list
     final names = <String, String>{};
     for (final p in patients) {
       final uid = p['uid'] as String;
@@ -92,6 +102,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
       _criticalToday = critical;
       _lowMedications = lowMeds;
       _totalSuggestions = suggestions;
+      _deactivated = deactivated;
       _recentReadings = recent;
       _patientNames = names;
       _loading = false;
@@ -138,6 +149,17 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
         icon: Icons.warning_rounded,
         iconColor: const Color(0xFFD32F2F),
         iconBg: const Color(0xFFFFEBEE),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CriticalAlertsScreen(
+                doctorName: widget.doctorName,
+              ),
+            ),
+          );
+          _loadData();
+        },
       ),
       _StatCard(
         label: 'Low Medications',
@@ -161,7 +183,24 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
               ),
             ),
           );
-          // Refresh count when returning from history
+          _loadData();
+        },
+      ),
+      _StatCard(
+        label: 'Deactivated',
+        value: '$_deactivated',
+        icon: Icons.person_off_rounded,
+        iconColor: const Color(0xFF757575),
+        iconBg: const Color(0xFFF5F5F5),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DeletedPatientsScreen(
+                doctorName: widget.doctorName,
+              ),
+            ),
+          );
           _loadData();
         },
       ),
@@ -170,7 +209,35 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     return Wrap(
       spacing: 16,
       runSpacing: 16,
-      children: stats.map((s) => _buildStatCard(s)).toList(),
+      children: [
+        ...stats.map(_buildStatCard),
+        _buildMessagesCard(),
+      ],
+    );
+  }
+
+  // Patient Messages card uses a real-time stream for the unread count
+  Widget _buildMessagesCard() {
+    return StreamBuilder<int>(
+      stream: _service.getUnreadMessagesCount(),
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        return _buildStatCard(_StatCard(
+          label: 'Unread Messages',
+          value: '$count',
+          icon: Icons.message_rounded,
+          iconColor: const Color(0xFF1565C0),
+          iconBg: const Color(0xFFE3F2FD),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const DoctorMessagesScreen(),
+              ),
+            );
+          },
+        ));
+      },
     );
   }
 
@@ -304,7 +371,6 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          // Patient avatar
           Container(
             width: 36,
             height: 36,
@@ -323,7 +389,6 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          // Patient name + metric
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

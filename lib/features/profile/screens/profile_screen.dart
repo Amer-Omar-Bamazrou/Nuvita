@@ -11,6 +11,7 @@ import '../../auth/screens/register_screen.dart';
 import '../../report/screens/report_screen.dart';
 import '../../appointments/screens/appointments_screen.dart';
 import '../../../core/services/notification_service.dart';
+import 'dart:math';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -26,6 +27,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _diseaseType = 'other';
   String _patientId = '';
   bool _signingOut = false;
+  final _messageCtrl = TextEditingController();
+  bool _sendingMessage = false;
 
   static const _diseaseLabels = {
     'diabetes': 'Diabetes',
@@ -77,6 +80,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {
       setState(() => _isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageCtrl.text.trim();
+    if (text.isEmpty) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _sendingMessage = true);
+    try {
+      final random = Random();
+      final msgId = List.generate(
+        20,
+        (_) => '0123456789abcdefghijklmnopqrstuvwxyz'[
+            random.nextInt(36)],
+      ).join();
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('messages')
+          .doc(msgId)
+          .set({
+        'text': text,
+        'timestamp': FieldValue.serverTimestamp(),
+        'readByDoctor': false,
+        'patientName': _name.isEmpty ? 'Unknown' : _name,
+        'patientId': _patientId,
+      });
+
+      _messageCtrl.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Message sent to your doctor'),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send message')),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _sendingMessage = false);
   }
 
   Future<void> _signOut() async {
@@ -467,6 +527,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Message Your Doctor',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _messageCtrl,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            hintText:
+                                'Write a message for your doctor…',
+                            hintStyle: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.secondary.withOpacity(0.6),
+                            ),
+                            filled: true,
+                            fillColor: AppColors.inputFill,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                  color: AppColors.divider),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                  color: AppColors.divider),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: AppColors.primary),
+                            ),
+                          ),
+                          style: AppTextStyles.bodySmall,
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: NuvitaButton(
+                            label: 'Send Message',
+                            onPressed: _sendingMessage ? null : _sendMessage,
+                            isLoading: _sendingMessage,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

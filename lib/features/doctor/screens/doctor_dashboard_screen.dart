@@ -103,6 +103,8 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           ..._navItems.asMap().entries.map((e) =>
               _buildNavItem(e.key, e.value)),
           const Spacer(),
+          // Session status indicator
+          _buildSessionIndicator(),
           Divider(color: Colors.white.withOpacity(0.15), height: 1),
           // Doctor info + logout
           Padding(
@@ -150,6 +152,59 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionIndicator() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF4CAF50),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Session active',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () async {
+              try {
+                await FirebaseAuth.instance.currentUser?.getIdToken(true);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Session refreshed'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              } catch (_) {}
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
+                'Refresh',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                ),
+              ),
             ),
           ),
         ],

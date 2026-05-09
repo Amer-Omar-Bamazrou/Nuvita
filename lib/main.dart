@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -37,8 +38,25 @@ void main() async {
     if (!onboardingDone) {
       home = const OnboardingScreen();
     } else if (user != null) {
-      home = const MainShell();
-      scheduleWellness = true;
+      // Check if account was deactivated by a doctor before restoring session
+      bool deactivated = false;
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (doc.data()?['active'] == false) {
+          await FirebaseAuth.instance.signOut();
+          deactivated = true;
+        }
+      } catch (_) {}
+
+      if (deactivated) {
+        home = const LoginScreen();
+      } else {
+        home = const MainShell();
+        scheduleWellness = true;
+      }
     } else {
       home = const LoginScreen();
     }

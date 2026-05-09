@@ -37,9 +37,14 @@ service cloud.firestore {
         allow read, write: if request.auth != null
           && (request.auth.uid == userId || isDoctor());
       }
+
+      match /messages/{msgId} {
+        allow read, write: if request.auth != null
+          && (request.auth.uid == userId || isDoctor());
+      }
     }
 
-    // Collection group queries for readings and suggestions (used by doctor overview)
+    // Collection group queries for doctor read access
     match /{path=**}/readings/{readingId} {
       allow read: if isDoctor();
     }
@@ -48,7 +53,15 @@ service cloud.firestore {
       allow read: if isDoctor();
     }
 
-    // Doctors collection — only the doctor themselves or admins can read their own doc
+    match /{path=**}/alerts/{alertId} {
+      allow read: if isDoctor();
+    }
+
+    match /{path=**}/messages/{msgId} {
+      allow read, write: if isDoctor();
+    }
+
+    // Doctors collection — only the doctor themselves can read their own doc
     match /doctors/{doctorId} {
       allow read: if request.auth != null && request.auth.uid == doctorId;
       allow write: if false; // admin-only via Firebase Console

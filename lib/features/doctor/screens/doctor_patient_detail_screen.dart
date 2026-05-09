@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
+import '../data/medicine_library.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -372,8 +373,26 @@ class _DoctorPatientDetailScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle('Medications'),
-          const SizedBox(height: 14),
+          Row(
+            children: [
+              const _SectionTitle('Medications'),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _showAssignMedicationSheet,
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text(
+                  'Assign',
+                  style: TextStyle(fontSize: 13),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: _primary,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           if (_loadingMeds)
             const Center(
                 child: CircularProgressIndicator(color: _primary))
@@ -384,6 +403,36 @@ class _DoctorPatientDetailScreenState
           else
             ..._medications.map(_buildMedRow),
         ],
+      ),
+    );
+  }
+
+  void _showAssignMedicationSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _AssignMedicationSheet(
+        onAssign: (data) async {
+          try {
+            await _service.addMedication(_uid, data);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Medication assigned successfully'),
+                backgroundColor: Color(0xFF2E7D32),
+              ),
+            );
+            _loadMedications();
+          } catch (_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Failed to assign medication')),
+            );
+          }
+        },
       ),
     );
   }
@@ -900,4 +949,399 @@ class _MetricDef {
   final String label;
   final String unit;
   const _MetricDef(this.metricType, this.label, this.unit);
+}
+
+// ── Assign Medication bottom sheet ────────────────────────────────────────────
+
+class _AssignMedicationSheet extends StatefulWidget {
+  final Future<void> Function(Map<String, dynamic> data) onAssign;
+  const _AssignMedicationSheet({required this.onAssign});
+
+  @override
+  State<_AssignMedicationSheet> createState() =>
+      _AssignMedicationSheetState();
+}
+
+class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
+  static const _primary = Color(0xFF004346);
+
+  final _searchCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _dosageCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  final _pillsCtrl = TextEditingController();
+
+  static const _frequencies = [
+    'Once daily',
+    'Twice daily',
+    'Three times daily',
+    'As needed',
+    'Weekly',
+  ];
+
+  String _selectedFrequency = 'Once daily';
+  List<Medicine> _filtered = medicineLibrary;
+  Medicine? _selected;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(_onSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _nameCtrl.dispose();
+    _dosageCtrl.dispose();
+    _notesCtrl.dispose();
+    _pillsCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearch() {
+    final query = _searchCtrl.text.toLowerCase();
+    setState(() {
+      _filtered = query.isEmpty
+          ? medicineLibrary
+          : medicineLibrary
+              .where((m) =>
+                  m.name.toLowerCase().contains(query) ||
+                  m.category.toLowerCase().contains(query))
+              .toList();
+    });
+  }
+
+  void _selectMedicine(Medicine med) {
+    setState(() {
+      _selected = med;
+      _nameCtrl.text = med.name;
+      _dosageCtrl.text = med.defaultDosage;
+      _selectedFrequency = _frequencies.contains(med.defaultFrequency)
+          ? med.defaultFrequency
+          : 'Once daily';
+    });
+  }
+
+  List<String> _timesForFrequency(String freq) {
+    switch (freq) {
+      case 'Twice daily':
+        return ['08:00', '20:00'];
+      case 'Three times daily':
+        return ['08:00', '14:00', '20:00'];
+      case 'Weekly':
+        return ['08:00'];
+      case 'As needed':
+        return [];
+      default:
+        return ['08:00'];
+    }
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    final dosage = _dosageCtrl.text.trim();
+    if (name.isEmpty || dosage.isEmpty) return;
+
+    setState(() => _saving = true);
+
+    final data = {
+      'name': name,
+      'dosage': dosage,
+      'frequency': _selectedFrequency,
+      'times': _timesForFrequency(_selectedFrequency),
+      'startDate': Timestamp.now(),
+      'notes': _notesCtrl.text.trim(),
+      'pillsRemaining': int.tryParse(_pillsCtrl.text),
+      'pillsPerDose': 1,
+      'lowSupplyNotified': false,
+      'reminderEnabled': false,
+    };
+
+    await widget.onAssign(data);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(0, 0, 0, bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Row(
+              children: [
+                const Text(
+                  'Assign Medication',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF172A3A),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  color: Colors.grey.shade500,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Search field
+                  TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search medicines by name or category…',
+                      hintStyle: TextStyle(
+                          fontSize: 13, color: Colors.grey.shade400),
+                      prefixIcon:
+                          const Icon(Icons.search_rounded, size: 18),
+                      filled: true,
+                      fillColor: const Color(0xFFF9F9F9),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Medicine list (max 200px scrollable)
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _filtered.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: Text(
+                                'No medicines found',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _filtered.length,
+                            itemBuilder: (ctx, i) {
+                              final med = _filtered[i];
+                              final isSelected = _selected == med;
+                              return InkWell(
+                                onTap: () => _selectMedicine(med),
+                                child: Container(
+                                  color: isSelected
+                                      ? _primary.withOpacity(0.06)
+                                      : Colors.transparent,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              med.name,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                                color: isSelected
+                                                    ? _primary
+                                                    : const Color(
+                                                        0xFF172A3A),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${med.category} · ${med.defaultDosage} · ${med.type}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          color: _primary,
+                                          size: 16,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Form
+                  Row(
+                    children: [
+                      Expanded(child: _field(_nameCtrl, 'Medication name')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _field(_dosageCtrl, 'Dosage')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _selectedFrequency,
+                    items: _frequencies
+                        .map((f) => DropdownMenuItem(
+                              value: f,
+                              child: Text(f,
+                                  style: const TextStyle(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _selectedFrequency = v);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Frequency',
+                      labelStyle: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _field(_pillsCtrl, 'Pills remaining (optional)',
+                              numeric: true)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _field(_notesCtrl, 'Notes (optional)')),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Save button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white),
+                            )
+                          : const Text(
+                              'Assign Medication',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(
+    TextEditingController ctrl,
+    String hint, {
+    bool numeric = false,
+  }) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle:
+            TextStyle(fontSize: 12, color: Colors.grey.shade400),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      style: const TextStyle(fontSize: 13),
+    );
+  }
 }
