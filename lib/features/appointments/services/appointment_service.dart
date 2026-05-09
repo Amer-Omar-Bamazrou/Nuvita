@@ -44,6 +44,24 @@ class AppointmentService {
       ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
   }
 
+  static Future<AppointmentModel?> getAppointmentById(String id) async {
+    final list = await getAppointments();
+    try {
+      return list.firstWhere((a) => a.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> updateAppointment(AppointmentModel updated) async {
+    final list = await getAppointments();
+    final i = list.indexWhere((a) => a.id == updated.id);
+    if (i != -1) {
+      list[i] = updated;
+      await _saveAll(list);
+    }
+  }
+
   static Future<void> deleteAppointment(String id) async {
     await cancelReminder(id);
     final list = await getAppointments();
@@ -70,6 +88,7 @@ class AppointmentService {
       title: 'Appointment Reminder',
       body: 'Your appointment with ${appointment.doctorName} is coming up',
       scheduledDate: reminderTime,
+      payload: 'appt:${appointment.id}',
     );
   }
 

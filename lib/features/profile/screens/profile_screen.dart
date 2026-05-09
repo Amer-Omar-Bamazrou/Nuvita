@@ -10,6 +10,7 @@ import '../../auth/screens/login_screen.dart';
 import '../../auth/screens/register_screen.dart';
 import '../../report/screens/report_screen.dart';
 import '../../appointments/screens/appointments_screen.dart';
+import '../../../core/services/notification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -81,6 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _signOut() async {
     setState(() => _signingOut = true);
     try {
+      await NotificationService.cancelWellnessReminder();
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

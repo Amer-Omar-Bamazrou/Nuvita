@@ -114,6 +114,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
     await NotificationService.cancelMedicationReminder(
         med.id, med.times.length);
     await NotificationService.cancelLowSupplyAlert(med.id);
+    if (med.reminderEnabled) {
+      await NotificationService.cancelDailyMedicationReminders(
+          med.id, med.times);
+    }
     _load();
   }
 

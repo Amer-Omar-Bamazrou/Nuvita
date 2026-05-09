@@ -10,6 +10,7 @@ class MedicationModel {
   final int? pillsRemaining;    // null = pill tracking disabled
   final int pillsPerDose;       // pills consumed per Take Now tap (default 1)
   final bool lowSupplyNotified; // prevents repeat low-supply alerts
+  final bool reminderEnabled;   // daily dose reminders on/off
 
   const MedicationModel({
     required this.id,
@@ -23,6 +24,7 @@ class MedicationModel {
     this.pillsRemaining,
     this.pillsPerDose = 1,
     this.lowSupplyNotified = false,
+    this.reminderEnabled = false,
   });
 
   MedicationModel copyWith({
@@ -36,6 +38,7 @@ class MedicationModel {
     int? pillsRemaining,
     int? pillsPerDose,
     bool? lowSupplyNotified,
+    bool? reminderEnabled,
   }) {
     return MedicationModel(
       id: id,
@@ -49,6 +52,7 @@ class MedicationModel {
       pillsRemaining: pillsRemaining ?? this.pillsRemaining,
       pillsPerDose: pillsPerDose ?? this.pillsPerDose,
       lowSupplyNotified: lowSupplyNotified ?? this.lowSupplyNotified,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
     );
   }
 
@@ -64,6 +68,7 @@ class MedicationModel {
         'pillsRemaining': pillsRemaining,
         'pillsPerDose': pillsPerDose,
         'lowSupplyNotified': lowSupplyNotified,
+        'reminderEnabled': reminderEnabled,
       };
 
   factory MedicationModel.fromMap(Map<String, dynamic> map) {
@@ -79,6 +84,7 @@ class MedicationModel {
       pillsRemaining: map['pillsRemaining'] as int?,
       pillsPerDose: map['pillsPerDose'] as int? ?? 1,
       lowSupplyNotified: map['lowSupplyNotified'] as bool? ?? false,
+      reminderEnabled: map['reminderEnabled'] as bool? ?? false,
     );
   }
 }

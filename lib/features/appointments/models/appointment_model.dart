@@ -7,6 +7,7 @@ class AppointmentModel {
   final String notes;
   final int reminderMinutes;
   final bool isCompleted;
+  final bool isConfirmed; // user confirmed attendance via notification tap
 
   const AppointmentModel({
     required this.id,
@@ -18,9 +19,10 @@ class AppointmentModel {
     this.notes = '',
     this.reminderMinutes = 60,
     this.isCompleted = false,
+    this.isConfirmed = false,
   });
 
-  AppointmentModel copyWith({bool? isCompleted}) {
+  AppointmentModel copyWith({bool? isCompleted, bool? isConfirmed}) {
     return AppointmentModel(
       id: id,
       doctorName: doctorName,
@@ -30,6 +32,7 @@ class AppointmentModel {
       notes: notes,
       reminderMinutes: reminderMinutes,
       isCompleted: isCompleted ?? this.isCompleted,
+      isConfirmed: isConfirmed ?? this.isConfirmed,
     );
   }
 
@@ -42,6 +45,7 @@ class AppointmentModel {
         'notes': notes,
         'reminderMinutes': reminderMinutes,
         'isCompleted': isCompleted,
+        'isConfirmed': isConfirmed,
       };
 
   factory AppointmentModel.fromMap(Map<String, dynamic> map) {
@@ -54,6 +58,7 @@ class AppointmentModel {
       notes: map['notes'] as String? ?? '',
       reminderMinutes: map['reminderMinutes'] as int? ?? 60,
       isCompleted: map['isCompleted'] as bool? ?? false,
+      isConfirmed: map['isConfirmed'] as bool? ?? false,
     );
   }
 }

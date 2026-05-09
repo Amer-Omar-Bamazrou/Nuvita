@@ -3,18 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../health/services/health_reading_service.dart';
-import '../../lifestyle/services/lifestyle_engine.dart';
-import '../../lifestyle/models/lifestyle_suggestion.dart';
-import '../../appointments/models/appointment_model.dart';
-import '../../appointments/services/appointment_service.dart';
-import '../../appointments/screens/appointments_screen.dart';
-import '../../appointments/screens/add_appointment_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
 
 class SuggestionsPanelScreen extends StatefulWidget {
+  // Kept for backward compat — home_screen.dart passes these
   final String diseaseType;
-  // Snapshot of current session readings from HealthProvider (used for guest path)
   final Map<String, double?> currentReadings;
 
   const SuggestionsPanelScreen({
@@ -29,129 +22,17 @@ class SuggestionsPanelScreen extends StatefulWidget {
 }
 
 class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
-  bool _isLoading = true;
   bool _isGuest = false;
-  List<LifestyleSuggestion> _suggestions = [];
-  String _summaryText = '';
-  int _readingCount = 0;
-  List<AppointmentModel> _upcomingAppointments = [];
   final PatientSuggestionService _service = PatientSuggestionService();
   final Set<String> _expandedIds = {};
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _loadAppointments();
+    _isGuest = FirebaseAuth.instance.currentUser == null;
   }
 
-  Future<void> _loadAppointments() async {
-    final appointments = await AppointmentService.getUpcomingAppointments();
-    if (!mounted) return;
-    setState(() => _upcomingAppointments = appointments);
-  }
-
-  Future<void> _load() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    _isGuest = uid == null;
-
-    if (_isGuest) {
-      _loadFromSession();
-    } else {
-      await _loadFromFirestore(uid!);
-    }
-  }
-
-  // Guest: derive suggestions from whatever was entered this session
-  void _loadFromSession() {
-    final readings = <String, dynamic>{};
-    widget.currentReadings.forEach((key, value) {
-      if (value != null) readings[key] = value;
-    });
-
-    final suggestions =
-        LifestyleEngine().getSuggestions(widget.diseaseType, readings);
-
-    setState(() {
-      _suggestions = suggestions;
-      _readingCount = readings.length;
-      _summaryText = readings.isEmpty
-          ? 'No readings logged yet today.'
-          : "Based on today's readings:";
-      _isLoading = false;
-    });
-  }
-
-  // Logged-in: fetch last 7 days, average each metric, run suggestions engine
-  Future<void> _loadFromFirestore(String uid) async {
-    try {
-      final readings = await HealthReadingService.getReadingsLastDays(uid, 7);
-      _readingCount = readings.length;
-
-      // Group values by metric type
-      final grouped = <String, List<double>>{};
-      for (final r in readings) {
-        grouped.putIfAbsent(r.metricType, () => []).add(r.value);
-      }
-
-      // Average per metric — this is what gets passed to the engine
-      final averages = <String, dynamic>{};
-      grouped.forEach((metric, values) {
-        averages[metric] = values.reduce((a, b) => a + b) / values.length;
-      });
-
-      // Find the metric with the most concerning entries (Warning / High / Low)
-      final concernCount = <String, int>{};
-      for (final r in readings) {
-        if (r.status == 'Warning' || r.status == 'High' || r.status == 'Low') {
-          concernCount[r.metricType] = (concernCount[r.metricType] ?? 0) + 1;
-        }
-      }
-
-      String mostConcerning = '';
-      if (concernCount.isNotEmpty) {
-        mostConcerning = concernCount.entries
-            .reduce((a, b) => a.value >= b.value ? a : b)
-            .key;
-      }
-
-      final suggestions =
-          LifestyleEngine().getSuggestions(widget.diseaseType, averages);
-
-      setState(() {
-        _suggestions = suggestions;
-        _summaryText = _buildSummaryText(mostConcerning);
-        _isLoading = false;
-      });
-    } catch (_) {
-      // Fall back to session data if Firestore fails
-      _loadFromSession();
-    }
-  }
-
-  String _buildSummaryText(String mostConcerning) {
-    if (_readingCount == 0) {
-      return 'No readings logged in the past 7 days.';
-    }
-
-    const metricLabels = {
-      'bloodSugar': 'blood sugar',
-      'systolic': 'blood pressure',
-      'diastolic': 'blood pressure',
-      'heartRate': 'heart rate',
-      'weight': 'weight',
-      'steps': 'daily steps',
-    };
-
-    if (mostConcerning.isNotEmpty) {
-      final label = metricLabels[mostConcerning] ?? mostConcerning;
-      return 'This week you logged $_readingCount readings. '
-          'Your $label readings need attention.';
-    }
-
-    return 'This week you logged $_readingCount readings. '
-        'Keep up the great work!';
-  }
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -161,84 +42,110 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon:
-              const Icon(Icons.arrow_back_rounded, color: AppColors.primary),
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.primary),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Health Insights', style: AppTextStyles.heading2),
+        title: Text('Notifications', style: AppTextStyles.heading2),
         centerTitle: true,
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+      body: _isGuest ? _buildGuestState() : _buildStream(),
+    );
+  }
+
+  // ── Stream ─────────────────────────────────────────────────────────────────
+
+  Widget _buildStream() {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _service.listenToAllSuggestions(uid),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        }
+        if (snap.hasError) {
+          debugPrint('Notifications stream error: ${snap.error}');
+          return _buildEmptyState(isError: true);
+        }
+        final messages = snap.data ?? [];
+        if (messages.isEmpty) return _buildEmptyState();
+        return _buildList(uid, messages);
+      },
+    );
+  }
+
+  // ── List ───────────────────────────────────────────────────────────────────
+
+  Widget _buildList(String uid, List<Map<String, dynamic>> messages) {
+    final unreadCount =
+        messages.where((m) => !(m['read'] as bool? ?? false)).length;
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 40),
+      itemCount: messages.length + 1,
+      separatorBuilder: (_, i) => i == 0
+          ? const SizedBox.shrink()
+          : Divider(
+              height: 1,
+              indent: 82,
+              endIndent: 20,
+              color: AppColors.divider.withOpacity(0.5),
+            ),
+      itemBuilder: (context, i) {
+        if (i == 0) return _buildHeader(unreadCount);
+        return _buildTile(uid, messages[i - 1]);
+      },
+    );
+  }
+
+  Widget _buildHeader(int unreadCount) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      child: Row(
+        children: [
+          Text('Doctor Messages', style: AppTextStyles.heading3),
+          const Spacer(),
+          if (unreadCount > 0)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$unreadCount unread',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+          else
+            Row(
               children: [
-                if (!_isGuest) _buildDoctorSection(),
-                _buildSummaryCard(),
-                const SizedBox(height: 24),
-                Text('Suggestions', style: AppTextStyles.heading3),
-                const SizedBox(height: 12),
-                ..._buildSuggestionCards(),
-                const SizedBox(height: 24),
-                _buildAppointmentsSection(),
+                const Icon(Icons.check_circle_rounded,
+                    size: 14, color: AppColors.success),
+                const SizedBox(width: 4),
+                Text(
+                  'All caught up',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
+        ],
+      ),
     );
   }
 
-  // ── Doctor messages section — shown at top for logged-in users only ─────
+  // ── Notification tile ──────────────────────────────────────────────────────
 
-  Widget _buildDoctorSection() {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Messages from Your Doctor',
-          style: AppTextStyles.heading3.copyWith(color: AppColors.textDark),
-        ),
-        const SizedBox(height: 12),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _service.listenToAllSuggestions(uid),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                ),
-              );
-            }
-            if (snap.hasError) {
-              debugPrint('Doctor suggestions error: ${snap.error}');
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Failed to load doctor messages'),
-                    ),
-                  );
-                }
-              });
-              return const SizedBox.shrink();
-            }
-            final messages = snap.data ?? [];
-            if (messages.isEmpty) return _buildDoctorEmptyState();
-            return Column(
-              children: messages
-                  .map((msg) => _buildDoctorCard(uid, msg))
-                  .toList(),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  Widget _buildDoctorCard(String uid, Map<String, dynamic> data) {
+  Widget _buildTile(String uid, Map<String, dynamic> data) {
     final id = data['id'] as String;
     final text = data['text'] as String? ?? '';
     final doctorName = data['doctorName'] as String? ?? 'Your Doctor';
@@ -246,9 +153,8 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
     final timestamp = data['timestamp'] as Timestamp?;
     final isExpanded = _expandedIds.contains(id);
 
-    return GestureDetector(
+    return InkWell(
       onTap: () async {
-        // Toggle expand/collapse first, then mark as read if needed
         setState(() {
           if (isExpanded) {
             _expandedIds.remove(id);
@@ -262,111 +168,151 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
           } catch (_) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                      'Failed to mark as read. Please try again.'),
-                ),
+                const SnackBar(content: Text('Failed to mark as read')),
               );
             }
           }
         }
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border(
-            left: BorderSide(
-              color: isRead
-                  ? const Color(0xFFCCCCCC)
-                  : AppColors.primary,
-              width: 3,
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
+        color: isRead ? Colors.transparent : AppColors.primary.withOpacity(0.03),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            // Doctor avatar with unread dot
+            Stack(
+              clipBehavior: Clip.none,
               children: [
-                const Icon(Icons.local_hospital_rounded,
-                    color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  doctorName,
-                  style: AppTextStyles.label
-                      .copyWith(fontWeight: FontWeight.bold),
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: isRead
+                        ? AppColors.secondary.withOpacity(0.1)
+                        : AppColors.primary.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.local_hospital_rounded,
+                    color: isRead ? AppColors.secondary : AppColors.primary,
+                    size: 22,
+                  ),
                 ),
-                const Spacer(),
                 if (!isRead)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.error,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'UNREAD',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      width: 13,
+                      height: 13,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.background,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              text,
-              maxLines: isExpanded ? null : 2,
-              overflow: isExpanded
-                  ? TextOverflow.visible
-                  : TextOverflow.ellipsis,
-              style: AppTextStyles.bodySmall,
-            ),
-            if (timestamp != null) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  _service.timeAgo(timestamp),
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: Colors.grey,
-                    fontSize: 11,
+            const SizedBox(width: 14),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          doctorName,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight:
+                                isRead ? FontWeight.w500 : FontWeight.bold,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (timestamp != null)
+                        Text(
+                          _service.timeAgo(timestamp),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color:
+                                isRead ? Colors.grey : AppColors.primary,
+                            fontWeight: isRead
+                                ? FontWeight.normal
+                                : FontWeight.w500,
+                          ),
+                        ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    text,
+                    maxLines: isExpanded ? null : 2,
+                    overflow: isExpanded
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: isRead
+                          ? Colors.grey.shade600
+                          : AppColors.textDark.withOpacity(0.85),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDoctorEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Center(
+  // ── Empty states ───────────────────────────────────────────────────────────
+
+  Widget _buildEmptyState({bool isError = false}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 48),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.message_outlined, color: Colors.grey, size: 40),
-            const SizedBox(height: 12),
-            Text('No messages from your doctor yet',
-                style: AppTextStyles.label),
-            const SizedBox(height: 4),
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.07),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isError
+                    ? Icons.wifi_off_rounded
+                    : Icons.notifications_none_rounded,
+                size: 44,
+                color: AppColors.primary.withOpacity(0.45),
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(
-              'Messages from your doctor will appear here',
+              isError ? 'Could not load messages' : 'No notifications yet',
+              style: AppTextStyles.heading3,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isError
+                  ? 'Check your connection and try again.'
+                  : 'Messages from your doctor\nwill appear here.',
               style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
@@ -376,378 +322,37 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
     );
   }
 
-  // ── Summary card at the top ───────────────────────────────────────────────
-
-  Widget _buildSummaryCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.25),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.bar_chart_rounded,
-              color: AppColors.white, size: 28),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isGuest ? "Today's Summary" : 'Weekly Summary',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.white.withOpacity(0.7),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _summaryText,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.white,
-                    fontSize: 15,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Suggestion cards or empty state ──────────────────────────────────────
-
-  List<Widget> _buildSuggestionCards() {
-    if (_suggestions.isEmpty) {
-      return [_buildEmptyState()];
-    }
-    return _suggestions
-        .map((s) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _SuggestionCard(suggestion: s),
-            ))
-        .toList();
-  }
-
-  Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
+  Widget _buildGuestState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 48),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.favorite_rounded,
-                color: AppColors.primary, size: 48),
-            const SizedBox(height: 12),
-            Text('All looks good!', style: AppTextStyles.heading3),
-            const SizedBox(height: 8),
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.07),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.notifications_none_rounded,
+                size: 44,
+                color: AppColors.primary.withOpacity(0.45),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text('Sign in to see notifications',
+                style: AppTextStyles.heading3,
+                textAlign: TextAlign.center),
+            const SizedBox(height: 10),
             Text(
-              'Keep logging your readings\nto get personalised insights',
-              style: AppTextStyles.bodySmall,
+              'Doctor messages and health alerts\nwill appear here once you sign in.',
+              style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ── Appointments section — live data from AppointmentService ─────────────
-
-  Widget _buildAppointmentsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Upcoming Appointments', style: AppTextStyles.heading3),
-            if (_upcomingAppointments.isNotEmpty)
-              TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const AppointmentsScreen()),
-                ),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'View All',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_upcomingAppointments.isEmpty)
-          _buildEmptyAppointments()
-        else
-          ..._upcomingAppointments
-              .take(3)
-              .map(_buildAppointmentItem),
-      ],
-    );
-  }
-
-  Widget _buildEmptyAppointments() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_rounded,
-                  color: AppColors.secondary, size: 24),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('No upcoming appointments',
-                      style: AppTextStyles.label),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap below to add an appointment',
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _openAddAppointment,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add Appointment'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAppointmentItem(AppointmentModel apt) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.calendar_month_rounded,
-              color: AppColors.secondary, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  apt.doctorName,
-                  style: AppTextStyles.label
-                      .copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_apptDate(apt.dateTime)}  •  ${_apptTime(apt.dateTime)}',
-                  style:
-                      AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openAddAppointment() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AddAppointmentScreen()),
-    );
-    if (result == true && mounted) {
-      _loadAppointments();
-    }
-  }
-
-  String _apptDate(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${dt.day} ${months[dt.month - 1]}';
-  }
-
-  String _apptTime(DateTime dt) {
-    final hour = dt.hour;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
-    return '$displayHour:$minute $period';
-  }
-}
-
-// ── Individual suggestion card ────────────────────────────────────────────────
-
-class _SuggestionCard extends StatelessWidget {
-  final LifestyleSuggestion suggestion;
-
-  const _SuggestionCard({required this.suggestion});
-
-  Color get _borderColor {
-    switch (suggestion.priority) {
-      case SuggestionPriority.high:
-        return AppColors.error;
-      case SuggestionPriority.medium:
-        return AppColors.warning;
-      case SuggestionPriority.low:
-        return AppColors.success;
-    }
-  }
-
-  IconData get _priorityIcon {
-    switch (suggestion.priority) {
-      case SuggestionPriority.high:
-        return Icons.warning_rounded;
-      case SuggestionPriority.medium:
-        return Icons.info_rounded;
-      case SuggestionPriority.low:
-        return Icons.check_circle_rounded;
-    }
-  }
-
-  String get _categoryLabel {
-    switch (suggestion.category) {
-      case SuggestionCategory.nutrition:
-        return 'Nutrition';
-      case SuggestionCategory.exercise:
-        return 'Exercise';
-      case SuggestionCategory.sleep:
-        return 'Sleep';
-      case SuggestionCategory.stress:
-        return 'Stress';
-      case SuggestionCategory.hydration:
-        return 'Hydration';
-      case SuggestionCategory.medication:
-        return 'Medication';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(
-          left: BorderSide(color: _borderColor, width: 4),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(_priorityIcon, color: _borderColor, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    suggestion.title,
-                    style: AppTextStyles.label.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(suggestion.description,
-                      style: AppTextStyles.bodySmall),
-                  const SizedBox(height: 10),
-                  _CategoryChip(
-                      label: _categoryLabel, color: _borderColor),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Small category chip ───────────────────────────────────────────────────────
-
-class _CategoryChip extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _CategoryChip({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

@@ -29,6 +29,15 @@ class MedicationService {
         .toList();
   }
 
+  static Future<MedicationModel?> getById(String id) async {
+    final meds = await loadAll();
+    try {
+      return meds.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _saveAll(List<MedicationModel> meds) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -52,6 +61,7 @@ class MedicationService {
       'pillsRemaining': med.pillsRemaining,
       'pillsPerDose': med.pillsPerDose,
       'lowSupplyNotified': med.lowSupplyNotified,
+      'reminderEnabled': med.reminderEnabled,
     };
   }
 
@@ -72,6 +82,7 @@ class MedicationService {
       pillsRemaining: data['pillsRemaining'] as int?,
       pillsPerDose: data['pillsPerDose'] as int? ?? 1,
       lowSupplyNotified: data['lowSupplyNotified'] as bool? ?? false,
+      reminderEnabled: data['reminderEnabled'] as bool? ?? false,
     );
   }
 

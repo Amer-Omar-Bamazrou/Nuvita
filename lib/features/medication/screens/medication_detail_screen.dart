@@ -105,6 +105,33 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     );
   }
 
+  // ── Reminder toggle ───────────────────────────────────────────────────────
+
+  Future<void> _onReminderToggle(bool value) async {
+    final updated = _med.copyWith(reminderEnabled: value);
+    setState(() => _med = updated);
+    await MedicationService.update(updated);
+
+    if (value) {
+      await NotificationService.scheduleDailyMedicationReminder(
+        updated.id, updated.name, updated.dosage, updated.times,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reminder set for ${updated.times.join("  ·  ")}')),
+        );
+      }
+    } else {
+      await NotificationService.cancelDailyMedicationReminders(
+          updated.id, updated.times);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reminder cancelled')),
+        );
+      }
+    }
+  }
+
   // ── Edit / Delete ─────────────────────────────────────────────────────────
 
   Future<void> _onEdit() async {
@@ -146,6 +173,10 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     await NotificationService.cancelLowSupplyAlert(_med.id);
     await NotificationService.cancelMedicationReminder(
         _med.id, _med.times.length);
+    if (_med.reminderEnabled) {
+      await NotificationService.cancelDailyMedicationReminders(
+          _med.id, _med.times);
+    }
     await MedicationService.delete(_med.id);
 
     if (mounted) Navigator.of(context).pop(true);
@@ -297,6 +328,45 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             _rowDivider(),
             _detailRow(Icons.notes_rounded, 'Notes', _med.notes),
           ],
+          if (_med.times.isNotEmpty) ...[
+            _rowDivider(),
+            _reminderToggleRow(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _reminderToggleRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_active_rounded,
+              size: 20, color: AppColors.secondary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Daily Reminders',
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Get notified at each dose time',
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _med.reminderEnabled,
+            onChanged: (val) => _onReminderToggle(val),
+            activeColor: AppColors.primary,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ],
       ),
     );

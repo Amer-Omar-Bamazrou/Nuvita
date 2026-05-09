@@ -119,6 +119,22 @@ None — all planned features complete.
 ## Firestore Structure (continued)
 /users/{uid}/suggestions/{suggestionId} — text, doctorName, timestamp, read (bool)
 
+- Daily Medication Reminders + Wellness Reminder (branch: feature/medication-daily-reminders):
+  - MedicationModel: added reminderEnabled (bool, default false) to constructor, copyWith, toMap, fromMap
+  - MedicationService: added getById(String id) — returns null if not found; updated _toFirestoreMap + _fromFirestoreDoc for reminderEnabled
+  - NotificationService: navigatorKey param added to initialize(); tap routing via _onNotificationTap → med: payload prefix; _handleMedicationTap shows "Did you take [name]?" dialog, calls takeMedication on confirm; scheduleDailyMedicationReminder (IDs 1,100,000–1,200,000, payload med:id, daily repeat); cancelDailyMedicationReminders; scheduleDailyWellnessReminder (fixed ID 1200001, 09:00 daily, wellness_reminders channel); cancelWellnessReminder
+  - medication_detail_screen.dart: _reminderToggleRow in details card (only shown when times non-empty); _onReminderToggle saves + schedules/cancels + snackbar; _onDelete now also cancels daily reminders if enabled
+  - medication_screen.dart: _delete cancels daily reminders if med.reminderEnabled
+  - main.dart: top-level navigatorKey passed to MaterialApp + NotificationService.initialize(); scheduleDailyWellnessReminder called on app start when user is logged in
+  - profile_screen.dart: cancelWellnessReminder called before signOut
+
+- Appointment Confirmation via Notification Tap (branch: feature/medication-daily-reminders):
+  - AppointmentModel: added isConfirmed (bool, default false) to constructor, copyWith, toMap, fromMap
+  - AppointmentService: added getAppointmentById(id), updateAppointment(model); scheduleReminder now passes payload 'appt:{id}' to scheduleNotification
+  - NotificationService: added _appointmentTapHandler callback slot + setAppointmentTapHandler(); _onNotificationTap routes 'appt:' prefix to the handler; scheduleNotification gains optional String? payload param — avoids circular import since appointment_service already imports notification_service
+  - appointment_detail_screen.dart: shows doctor name, speciality, date/time, location, reminder, notes; 'Confirmed' chip when isConfirmed=true; if showConfirmDialog=true auto-shows "Will you attend?" dialog via addPostFrameCallback; Yes → updateAppointment(isConfirmed:true) + snackbar; Reschedule → close dialog
+  - main.dart: imports appointment_service + appointment_detail_screen; sets appointment tap handler after NotificationService.initialize — loads appointment, pushes AppointmentDetailScreen(showConfirmDialog:true) via navigatorKey
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
