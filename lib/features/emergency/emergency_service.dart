@@ -39,6 +39,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
   String? _uid;
   String _patientName = 'Unknown';
   String _diseaseType = 'other';
+  String _patientId = '';
 
   @override
   void initState() {
@@ -61,8 +62,10 @@ class _CountdownDialogState extends State<_CountdownDialog> {
             .collection('users')
             .doc(_uid)
             .get();
-        final profile = doc.data()?['profile'] as Map<String, dynamic>?;
+        final data = doc.data() ?? {};
+        final profile = data['profile'] as Map<String, dynamic>?;
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+        _patientId = data['patientId'] as String? ?? '';
       } catch (_) {}
     }
   }
@@ -79,6 +82,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         'triggerType': widget.triggerType,
         'cancelled': cancelled,
         'patientName': _patientName,
+        'patientId': _patientId,
         'diseaseType': _diseaseType,
       });
     } catch (e) {
@@ -190,7 +194,7 @@ void _showAlertSentDialog(BuildContext context) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (_) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       backgroundColor: AppColors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
@@ -208,7 +212,7 @@ void _showAlertSentDialog(BuildContext context) {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.white,

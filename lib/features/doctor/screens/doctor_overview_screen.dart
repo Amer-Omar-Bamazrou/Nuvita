@@ -134,83 +134,80 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
   }
 
   Widget _buildStatCards() {
-    final stats = [
-      _StatCard(
-        label: 'Total Patients',
-        value: '$_totalPatients',
-        icon: Icons.people_rounded,
-        iconColor: const Color(0xFF004346),
-        iconBg: const Color(0xFFE0F0F0),
-        onTap: widget.onViewPatients,
-      ),
-      _StatCard(
-        label: 'Critical Today',
-        value: '$_criticalToday',
-        icon: Icons.warning_rounded,
-        iconColor: const Color(0xFFD32F2F),
-        iconBg: const Color(0xFFFFEBEE),
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CriticalAlertsScreen(
-                doctorName: widget.doctorName,
-              ),
-            ),
-          );
-          _loadData();
-        },
-      ),
-      _StatCard(
-        label: 'Low Medications',
-        value: '$_lowMedications',
-        icon: Icons.medication_rounded,
-        iconColor: const Color(0xFFFF6F00),
-        iconBg: const Color(0xFFFFF3E0),
-      ),
-      _StatCard(
-        label: 'Suggestions Sent',
-        value: '$_totalSuggestions',
-        icon: Icons.send_rounded,
-        iconColor: const Color(0xFF2E7D32),
-        iconBg: const Color(0xFFE8F5E9),
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DoctorSuggestionsHistoryScreen(
-                doctorName: widget.doctorName,
-              ),
-            ),
-          );
-          _loadData();
-        },
-      ),
-      _StatCard(
-        label: 'Deactivated',
-        value: '$_deactivated',
-        icon: Icons.person_off_rounded,
-        iconColor: const Color(0xFF757575),
-        iconBg: const Color(0xFFF5F5F5),
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DeletedPatientsScreen(
-                doctorName: widget.doctorName,
-              ),
-            ),
-          );
-          _loadData();
-        },
-      ),
-    ];
-
     return Wrap(
       spacing: 16,
       runSpacing: 16,
       children: [
-        ...stats.map(_buildStatCard),
+        _buildStatCard(_StatCard(
+          label: 'Total Patients',
+          value: '$_totalPatients',
+          icon: Icons.people_rounded,
+          iconColor: const Color(0xFF004346),
+          iconBg: const Color(0xFFE0F0F0),
+          onTap: widget.onViewPatients,
+        )),
+        // Real-time stream so the count updates the moment an SOS fires
+        StreamBuilder<int>(
+          stream: _service.streamCriticalAlertsCount(),
+          initialData: _criticalToday,
+          builder: (context, snap) => _buildStatCard(_StatCard(
+            label: 'Critical Today',
+            value: '${snap.data ?? 0}',
+            icon: Icons.warning_rounded,
+            iconColor: const Color(0xFFD32F2F),
+            iconBg: const Color(0xFFFFEBEE),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CriticalAlertsScreen(doctorName: widget.doctorName),
+                ),
+              );
+            },
+          )),
+        ),
+        _buildStatCard(_StatCard(
+          label: 'Low Medications',
+          value: '$_lowMedications',
+          icon: Icons.medication_rounded,
+          iconColor: const Color(0xFFFF6F00),
+          iconBg: const Color(0xFFFFF3E0),
+        )),
+        _buildStatCard(_StatCard(
+          label: 'Suggestions Sent',
+          value: '$_totalSuggestions',
+          icon: Icons.send_rounded,
+          iconColor: const Color(0xFF2E7D32),
+          iconBg: const Color(0xFFE8F5E9),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DoctorSuggestionsHistoryScreen(
+                    doctorName: widget.doctorName),
+              ),
+            );
+            _loadData();
+          },
+        )),
+        _buildStatCard(_StatCard(
+          label: 'Deactivated',
+          value: '$_deactivated',
+          icon: Icons.person_off_rounded,
+          iconColor: const Color(0xFF757575),
+          iconBg: const Color(0xFFF5F5F5),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    DeletedPatientsScreen(doctorName: widget.doctorName),
+              ),
+            );
+            _loadData();
+          },
+        )),
         _buildMessagesCard(),
       ],
     );

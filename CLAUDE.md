@@ -135,6 +135,22 @@ None — all planned features complete.
   - appointment_detail_screen.dart: shows doctor name, speciality, date/time, location, reminder, notes; 'Confirmed' chip when isConfirmed=true; if showConfirmDialog=true auto-shows "Will you attend?" dialog via addPostFrameCallback; Yes → updateAppointment(isConfirmed:true) + snackbar; Reschedule → close dialog
   - main.dart: imports appointment_service + appointment_detail_screen; sets appointment tap handler after NotificationService.initialize — loads appointment, pushes AppointmentDetailScreen(showConfirmDialog:true) via navigatorKey
 
+- Doctor Dashboard Improvements + Medicine Library (branch: feature/doctor-suggestions):
+  - emergency_service.dart: _logAlert() writes to /users/{uid}/alerts on SOS fire and on cancel — both _onCountdownComplete and _cancel call it; fields: timestamp, triggerType, cancelled, patientName, diseaseType
+  - Mod 1 — Session persistence: doctor_login_screen.dart sets Persistence.LOCAL before sign-in (web only); doctor_dashboard_screen.dart _buildSessionIndicator() green dot + "Session active" + Refresh inkwell (calls getIdToken(true))
+  - Mod 2 — Patient messaging: profile_screen.dart "Message Your Doctor" bottom sheet saves to /users/{uid}/messages; doctor_messages_screen.dart StreamBuilder on getPatientMessages(), mark-as-read on tap; real-time unread badge in doctor_overview_screen.dart via getUnreadMessagesCount() stream; firestore.rules updated for /messages subcollection + collectionGroup
+  - Mod 3 — Medicine library: lib/features/doctor/data/medicine_library.dart — Medicine class + 24 medicines across 8 categories; doctor_patient_detail_screen.dart "Assign" button → _AssignMedicationSheet (search, select, dosage/frequency/pills form, saves via addMedication()); DoctorService.addMedication() creates doc in /users/{uid}/medications
+  - Mod 4 — Critical alerts today: DoctorService.getEmergencyAlertsToday() uses collectionGroup('alerts'), filters cancelled==false + timestamp >= today midnight; critical_alerts_screen.dart shows patient avatar, name, ID badge, disease chip, trigger type chip, red/orange left border; doctor_overview_screen.dart "Critical Today" card taps to CriticalAlertsScreen
+  - Mod 5 — Soft-delete patients: DoctorService.deactivatePatient/restorePatient/getDeactivatedPatients(); doctor_patients_screen.dart person_remove icon → confirm dialog → deactivate; deleted_patients_screen.dart shows deactivated patients with restore button; doctor_overview_screen.dart "Deactivated" stat card; login_screen.dart + main.dart check active==false on sign-in/startup → sign out + error dialog; getAllPatients() filters active!=false in-memory
+
+- Profile Screen Redesign (branch: feature/profile-redesign):
+  - profile_screen.dart fully rewritten: guest view (sign in + create account); logged-in view with CircleAvatar, name, patient ID; 4 section cards (Account, Health, Notifications, About); _showPersonalInfoSheet (read-only: name, gender, DOB, patient ID + copy); _showMessageDoctorSheet (try/finally + .timeout(10s), saves to /users/{uid}/messages); _showBugReportSheet (saves to /bugReports); _recommendApp (share_plus SharePlus.instance.share); _showSignOutDialog confirmation before sign out
+  - firestore.rules: added /bugReports (anyone write, doctor read); /users/{userId}/messages (owner + doctor read/write); collectionGroup alerts + messages (doctor read/write)
+
+## Firestore Structure (continued)
+/users/{uid}/messages/{msgId} — text, timestamp, readByDoctor, patientName, patientId
+/bugReports/{reportId} — text, timestamp, patientId, patientName
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
@@ -158,7 +174,8 @@ lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wir
 lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service
 lib/features/report/ — report_service, report_screen
-lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen
+lib/features/doctor/data/ — medicine_library
+lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen, doctor_messages_screen, doctor_suggestions_history_screen, critical_alerts_screen, deleted_patients_screen
 lib/features/doctor/services/ — doctor_service, patient_suggestion_service
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
 

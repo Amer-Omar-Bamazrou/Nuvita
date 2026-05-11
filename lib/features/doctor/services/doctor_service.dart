@@ -148,7 +148,9 @@ class DoctorService {
     return history.length;
   }
 
-  // Emergency alerts fired today (cancelled == false) across all patients
+  // Emergency alerts fired today (cancelled == false) across all patients.
+  // Only filters by timestamp in Firestore to avoid requiring a composite index;
+  // cancelled is filtered client-side.
   Future<List<Map<String, dynamic>>> getEmergencyAlertsToday() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
@@ -156,17 +158,19 @@ class DoctorService {
     try {
       final snap = await _db
           .collectionGroup('alerts')
-          .where('cancelled', isEqualTo: false)
           .where(
             'timestamp',
             isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
           )
           .get();
 
-      final results = snap.docs.map((d) {
-        final uid = d.reference.parent.parent?.id ?? '';
-        return {'id': d.id, 'patientUid': uid, ...d.data()};
-      }).toList();
+      final results = snap.docs
+          .where((d) => d.data()['cancelled'] == false)
+          .map((d) {
+            final uid = d.reference.parent.parent?.id ?? '';
+            return {'id': d.id, 'patientUid': uid, ...d.data()};
+          })
+          .toList();
 
       results.sort((a, b) {
         final aTs = a['timestamp'];
@@ -181,6 +185,40 @@ class DoctorService {
       return [];
     }
   }
+
+  // Real-time stream of today's non-cancelled emergency alerts.
+  // Single-field timestamp filter only — no composite index needed.
+  Stream<List<Map<String, dynamic>>> streamEmergencyAlertsToday() {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    return _db
+        .collectionGroup('alerts')
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .snapshots()
+        .map((snap) {
+          final results = snap.docs
+              .where((d) => d.data()['cancelled'] == false)
+              .map((d) {
+                final uid = d.reference.parent.parent?.id ?? '';
+                return {'id': d.id, 'patientUid': uid, ...d.data()};
+              })
+              .toList();
+          results.sort((a, b) {
+            final aTs = a['timestamp'];
+            final bTs = b['timestamp'];
+            if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+            return 0;
+          });
+          return results;
+        });
+  }
+
+  // Stream of today's critical alert count for the overview stat card.
+  Stream<int> streamCriticalAlertsCount() =>
+      streamEmergencyAlertsToday().map((list) => list.length);
 
   // Count of medications with pillsRemaining <= 7 across all patients
   Future<int> getLowMedicationsCount() async {
