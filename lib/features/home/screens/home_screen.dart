@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../shared/widgets/health_metric_card.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
@@ -12,7 +12,38 @@ import '../../notifications/screens/suggestions_panel_screen.dart';
 import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/screens/add_medication_screen.dart';
+import '../../health/models/health_reading.dart';
+import '../../health/services/health_reading_service.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
+
+// ─── Task model ──────────────────────────────────────────────────────────────
+
+enum TaskType { medication, reading }
+
+class DailyTask {
+  final String id;
+  final TaskType type;
+  final String timeOfDay;
+  final String displayName;
+  final String? subtitle;
+  final String? medicationId;
+  final String? metricType;
+  bool isCompleted;
+
+  DailyTask({
+    required this.id,
+    required this.type,
+    required this.timeOfDay,
+    required this.displayName,
+    this.subtitle,
+    this.medicationId,
+    this.metricType,
+    this.isCompleted = false,
+  });
+}
+
+// ─── Screen entry point ───────────────────────────────────────────────────────
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -41,9 +72,14 @@ class _HomeBodyState extends State<_HomeBody> {
   String _userName = '';
   String _diseaseType = 'other';
   int _medScheduleCount = 0;
+  List<DailyTask> _tasks = [];
+  bool _isLoadingTasks = false;
+  bool _showMedTasks = true;
+  bool _showReadingTasks = true;
+  // One controller per reading task, keyed by task id
+  final Map<String, TextEditingController> _readingControllers = {};
   final _suggestionService = PatientSuggestionService();
 
-  // Maps disease IDs to display labels
   static const _diseaseLabels = {
     'diabetes': 'Diabetes',
     'blood_pressure': 'Blood Pressure',
@@ -51,7 +87,7 @@ class _HomeBodyState extends State<_HomeBody> {
     'other': 'General Monitoring',
   };
 
-  // Static metadata for every possible metric
+  // Metric config used for reading task validation and units
   static const _configs = <HealthMetric, _MetricConfig>{
     HealthMetric.bloodSugar: _MetricConfig(
       title: 'Blood Sugar',
@@ -104,17 +140,25 @@ class _HomeBodyState extends State<_HomeBody> {
     _loadMedSummary();
   }
 
+  @override
+  void dispose() {
+    for (final c in _readingControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _loadUserProfile() async {
-    // Always try SharedPreferences first — works for both guest and auth users
     final savedFirstName = await PreferencesService.getFirstName();
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      // Guest user — use the name from onboarding prefs
       setState(() {
         _userName = savedFirstName ?? '';
         _isLoading = false;
       });
+      // Still build guest task prompt
+      _loadTasks();
       return;
     }
 
@@ -126,19 +170,15 @@ class _HomeBodyState extends State<_HomeBody> {
 
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
       setState(() {
-        // Prefer Firestore name, fall back to SharedPreferences name
         final firestoreName = profile?['name'] as String? ?? '';
-        _userName = firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
+        _userName =
+            firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _isLoading = false;
       });
       if (mounted) {
-        // Restore latest card values from Firestore so the home screen
-        // shows the previous session's readings on app restart
         context.read<HealthProvider>().loadReadingsFromFirebase(uid);
-        // Populate the history list
         context.read<HealthHistoryProvider>().loadReadings(uid);
-        // Check weekly BP trend — shows snackbar at most once per day
         TrendWarningService.checkBPTrend(context, uid);
       }
     } catch (_) {
@@ -147,10 +187,11 @@ class _HomeBodyState extends State<_HomeBody> {
         _isLoading = false;
       });
     }
+
+    // Load tasks after disease type is known
+    _loadTasks();
   }
 
-  // Counts total doses scheduled for today across all active medications.
-  // Mirrors the schedule logic in MedicationScreen without touching that file.
   Future<void> _loadMedSummary() async {
     final meds = await MedicationService.loadAll();
     final today = DateTime.now();
@@ -159,24 +200,142 @@ class _HomeBodyState extends State<_HomeBody> {
     for (final med in meds) {
       if (!med.isActive) continue;
       final start = med.startDate;
-      if (DateTime(start.year, start.month, start.day).isAfter(todayDate)) continue;
+      if (DateTime(start.year, start.month, start.day).isAfter(todayDate)) {
+        continue;
+      }
       count += med.times.length;
     }
     if (mounted) setState(() => _medScheduleCount = count);
   }
 
-  // Which metrics to show depends on the user's condition
-  List<HealthMetric> get _activeMetrics {
-    switch (_diseaseType) {
-      case 'diabetes':
-        return [HealthMetric.bloodSugar, HealthMetric.weight, HealthMetric.steps];
-      case 'blood_pressure':
-        return [HealthMetric.systolic, HealthMetric.diastolic, HealthMetric.steps];
-      case 'heart':
-      case 'other':
-      default:
-        return [HealthMetric.heartRate, HealthMetric.weight, HealthMetric.steps];
+  Future<void> _loadTasks() async {
+    if (!mounted) return;
+    setState(() => _isLoadingTasks = true);
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final tasks = <DailyTask>[];
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    // Manual ISO date string — no intl dependency needed
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+    // Resolve which task categories the user opted into during onboarding.
+    // Default to both if prefs are missing (guest or old install).
+    final services = await PreferencesService.getSelectedServices();
+    final showMeds =
+        services.isEmpty || services.contains('medications');
+    final showReadings =
+        services.isEmpty || services.contains('measurements');
+
+    if (mounted) {
+      setState(() {
+        _showMedTasks = showMeds;
+        _showReadingTasks = showReadings;
+      });
     }
+
+    // Step 1 — Medication tasks
+    if (uid != null && showMeds) {
+      final meds = await MedicationService.loadAll();
+      final prefs = await SharedPreferences.getInstance();
+      for (final med in meds) {
+        if (!med.isActive) continue;
+        final start = med.startDate;
+        if (DateTime(start.year, start.month, start.day).isAfter(todayStart)) {
+          continue;
+        }
+        for (final time in med.times) {
+          final prefKey = 'taken_${med.id}_${time}_$todayStr';
+          final taken = prefs.getString(prefKey) == 'true';
+          tasks.add(DailyTask(
+            id: '${med.id}_$time',
+            type: TaskType.medication,
+            timeOfDay: time,
+            displayName: med.name,
+            subtitle: med.dosage,
+            medicationId: med.id,
+            isCompleted: taken,
+          ));
+        }
+      }
+    }
+
+    // Step 2 — Reading tasks, mapped to the user's disease
+    // Only added when the user opted into Measurements during onboarding.
+    const metricsByDisease = <String, List<String>>{
+      'diabetes': ['bloodSugar', 'weight'],
+      'blood_pressure': ['systolic', 'diastolic'],
+      'heart': ['heartRate', 'weight'],
+    };
+    const defaultTimes = <String, String>{
+      'bloodSugar': '08:00',
+      'systolic': '09:00',
+      'diastolic': '09:30',
+      'heartRate': '10:00',
+      'weight': '07:00',
+    };
+    const displayNames = <String, String>{
+      'bloodSugar': 'Log Blood Sugar',
+      'systolic': 'Log Blood Pressure',
+      'diastolic': 'Log Diastolic BP',
+      'heartRate': 'Log Heart Rate',
+      'weight': 'Log Weight',
+    };
+
+    final metrics = showReadings
+        ? (metricsByDisease[_diseaseType] ?? ['heartRate', 'weight'])
+        : <String>[];
+
+    for (final metric in metrics) {
+      bool loggedToday = false;
+      if (uid != null) {
+        try {
+          // Query by metricType only to avoid needing a composite index;
+          // filter by today's timestamp client-side.
+          final snap = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('readings')
+              .where('metricType', isEqualTo: metric)
+              .get();
+          loggedToday = snap.docs.any((d) {
+            final ts = d.data()['timestamp'];
+            if (ts is Timestamp) return ts.toDate().isAfter(todayStart);
+            return false;
+          });
+        } catch (_) {}
+      }
+
+      tasks.add(DailyTask(
+        id: 'reading_$metric',
+        type: TaskType.reading,
+        timeOfDay: defaultTimes[metric] ?? '09:00',
+        displayName: displayNames[metric] ?? 'Log $metric',
+        metricType: metric,
+        isCompleted: loggedToday,
+      ));
+    }
+
+    // Step 3 — Incomplete tasks sorted by time first, completed at bottom
+    tasks.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      return a.timeOfDay.compareTo(b.timeOfDay);
+    });
+
+    if (mounted) {
+      setState(() {
+        _tasks = tasks;
+        _isLoadingTasks = false;
+      });
+    }
+  }
+
+  void _sortTasks() {
+    _tasks.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      return a.timeOfDay.compareTo(b.timeOfDay);
+    });
   }
 
   String get _greeting {
@@ -193,7 +352,8 @@ class _HomeBodyState extends State<_HomeBody> {
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
     const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+      'Sunday',
     ];
     return '${weekdays[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
@@ -214,28 +374,35 @@ class _HomeBodyState extends State<_HomeBody> {
         return Scaffold(
           backgroundColor: AppColors.background,
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(provider),
-                  const SizedBox(height: 16),
-                  _buildDailySummaryCard(historyProvider),
-                  const SizedBox(height: 16),
-                  _buildSummaryBanner(),
-                  const SizedBox(height: 6),
-                  _buildSimulateButton(context),
-                  const SizedBox(height: 16),
-                  Text("Today's Readings", style: AppTextStyles.heading3),
-                  const SizedBox(height: 12),
-                  _buildMetricsGrid(provider),
-                ],
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await _loadMedSummary();
+                await _loadTasks();
+              },
+              child: SingleChildScrollView(
+                // Ensures RefreshIndicator works even when content is short
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(provider),
+                    const SizedBox(height: 16),
+                    _buildDailySummaryCard(historyProvider),
+                    const SizedBox(height: 16),
+                    _buildSummaryBanner(),
+                    const SizedBox(height: 6),
+                    _buildSimulateButton(context),
+                    const SizedBox(height: 20),
+                    _buildTaskList(),
+                  ],
+                ),
               ),
             ),
           ),
           floatingActionButton: _buildFAB(context),
-          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          floatingActionButtonLocation:
+              FloatingActionButtonLocation.centerFloat,
         );
       },
     );
@@ -270,7 +437,6 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
         const SizedBox(width: 12),
-        // Notification icon — taps open the Health Insights panel
         GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -279,12 +445,11 @@ class _HomeBodyState extends State<_HomeBody> {
                 diseaseType: _diseaseType,
                 currentReadings: {
                   for (final m in HealthMetric.values)
-                    m.name: provider.getValue(m),
+                    m.name: context.read<HealthProvider>().getValue(m),
                 },
               ),
             ),
           ),
-          // Badge combines unread doctor messages + warning/critical readings
           child: uid == null
               ? _buildBellIcon(hasWarning)
               : StreamBuilder<int>(
@@ -434,17 +599,14 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   String _formatLastReadingTime(DateTime? time) {
-    if (time == null) return 'No readings yet';
+    if (time == null) return 'No reading';
     final diff = DateTime.now().difference(time);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    }
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
   }
 
-  // Returns true if any currently tracked metric is outside the safe range
   bool _hasConcerningReadings(HealthProvider provider) {
     for (final m in HealthMetric.values) {
       final value = provider.getValue(m);
@@ -457,73 +619,6 @@ class _HomeBodyState extends State<_HomeBody> {
       }
     }
     return false;
-  }
-
-  // ── Trend and advice helpers ──────────────────────────────────────────────
-
-  // Computes the trend arrow for a metric card. Returns null when there's
-  // nothing to compare (no new entry this session, or metric has no direction).
-  TrendIndicator? _computeTrend(
-      HealthMetric metric, double? current, double? previous) {
-    if (current == null || previous == null || current == previous) return null;
-    final isIncrease = current > previous;
-
-    switch (metric) {
-      case HealthMetric.bloodSugar:
-      case HealthMetric.systolic:
-      case HealthMetric.diastolic:
-        // Higher values are worse for these metrics
-        return TrendIndicator(
-          icon: isIncrease
-              ? Icons.arrow_upward_rounded
-              : Icons.arrow_downward_rounded,
-          color: isIncrease ? AppColors.error : AppColors.success,
-        );
-
-      case HealthMetric.heartRate:
-        // Good direction is toward resting heart rate of 75 BPM
-        return TrendIndicator(
-          icon: isIncrease
-              ? Icons.arrow_upward_rounded
-              : Icons.arrow_downward_rounded,
-          color: (current - 75).abs() < (previous - 75).abs()
-              ? AppColors.success
-              : AppColors.error,
-        );
-
-      case HealthMetric.weight:
-      case HealthMetric.steps:
-        return null;
-    }
-  }
-
-  // Returns a short actionable prompt for warning/critical readings.
-  // Only called when value is non-null.
-  String? _computeWarningAdvice(
-      HealthMetric metric, double value, MetricStatus? status) {
-    if (status == null || status == MetricStatus.normal) return null;
-
-    switch (metric) {
-      case HealthMetric.bloodSugar:
-        if (status == MetricStatus.criticalLow) return 'Eat something now';
-        if (status == MetricStatus.warning) return 'Consider reducing sugar intake';
-        if (status == MetricStatus.criticalHigh) return 'Seek medical attention immediately';
-        return null;
-
-      case HealthMetric.systolic:
-        if (status == MetricStatus.warning) return 'Rest and avoid caffeine';
-        if (status == MetricStatus.criticalHigh) return 'Stop activity — seek help now';
-        return null;
-
-      case HealthMetric.heartRate:
-        if (status == MetricStatus.criticalLow) return 'Sit down — seek medical attention';
-        if (status == MetricStatus.warning) return 'Rest and breathe slowly';
-        if (status == MetricStatus.criticalHigh) return 'Rest immediately — seek help';
-        return null;
-
-      default:
-        return null;
-    }
   }
 
   // ── Summary banner: "Managing: Blood Pressure" ───────────────────────────
@@ -568,7 +663,8 @@ class _HomeBodyState extends State<_HomeBody> {
                 const SizedBox(height: 2),
                 Text(
                   label,
-                  style: AppTextStyles.heading3.copyWith(color: AppColors.white),
+                  style:
+                      AppTextStyles.heading3.copyWith(color: AppColors.white),
                 ),
               ],
             ),
@@ -608,76 +704,637 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // ── Metrics grid ─────────────────────────────────────────────────────────
+  // ── Task list ─────────────────────────────────────────────────────────────
 
-  Widget _buildMetricsGrid(HealthProvider provider) {
-    final metrics = _activeMetrics;
+  Widget _buildTaskList() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 0.88,
-      children: metrics.map((metric) {
-        final config = _configs[metric]!;
-        final value = provider.getValue(metric);
-        final previous = provider.getPreviousValue(metric);
-        final status =
-            value != null ? provider.getStatus(metric, value) : null;
+    // Guest user — no tasks to show
+    if (uid == null) return _buildGuestTaskPrompt();
 
-        return HealthMetricCard(
-          title: config.title,
-          icon: config.icon,
-          unit: config.unit,
-          value: value,
-          status: status,
-          minValue: config.min,
-          maxValue: config.max,
-          suggestion: value != null
-              ? provider.getSuggestionForMetric(metric.name, value)
-              : null,
-          trendIndicator: _computeTrend(metric, value, previous),
-          warningAdvice: value != null
-              ? _computeWarningAdvice(metric, value, status)
-              : null,
-          onSubmit: (v) {
-            provider.updateValue(metric, v);
-            final newStatus = provider.getStatus(metric, v);
-            final uid = FirebaseAuth.instance.currentUser?.uid;
-            if (uid != null) {
-              provider.saveReadingToFirebase(uid, metric, v, newStatus, config.unit);
-            }
-            context.read<HealthHistoryProvider>().addReading(metric, v);
-          },
-        );
-      }).toList(),
+    if (_isLoadingTasks) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    final remaining = _tasks.where((t) => !t.isCompleted).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text("Today's Tasks", style: AppTextStyles.heading3),
+            const Spacer(),
+            Text(
+              '$remaining task${remaining == 1 ? '' : 's'} remaining',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.secondary, fontSize: 12),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (remaining == 0)
+          _buildAllDoneState()
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _tasks.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => _buildTaskCard(_tasks[i]),
+          ),
+      ],
     );
+  }
+
+  Widget _buildTaskCard(DailyTask task) {
+    if (task.isCompleted) return _buildCompletedCard(task);
+    if (task.type == TaskType.medication) return _buildPendingMedCard(task);
+    return _buildPendingReadingCard(task);
+  }
+
+  Widget _buildPendingMedCard(DailyTask task) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                task.timeOfDay,
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.medication_rounded,
+                  color: AppColors.primary, size: 20),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(task.displayName, style: AppTextStyles.heading3),
+          if (task.subtitle != null && task.subtitle!.isNotEmpty)
+            Text(task.subtitle!,
+                style: AppTextStyles.bodySmall.copyWith(fontSize: 13)),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _markMedTaken(task),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF388E3C),
+                foregroundColor: AppColors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Mark as Taken',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingReadingCard(DailyTask task) {
+    final metric = _metricEnumFor(task.metricType ?? '');
+    final config = metric != null ? _configs[metric] : null;
+    final controller = _readingControllers.putIfAbsent(
+        task.id, () => TextEditingController());
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                task.timeOfDay,
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              Icon(config?.icon ?? Icons.monitor_heart_rounded,
+                  color: AppColors.primary, size: 20),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(task.displayName, style: AppTextStyles.heading3),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              hintText: 'Enter value',
+              suffixText: config?.unit ?? '',
+              suffixStyle: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.secondary),
+              filled: true,
+              fillColor: AppColors.background,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _logReading(task, controller),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Log',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompletedCard(DailyTask task) {
+    final isMed = task.type == TaskType.medication;
+    return Opacity(
+      opacity: 0.6,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE0E0E0),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                color: Color(0xFF388E3C), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.displayName,
+                    style: AppTextStyles.label.copyWith(
+                        color: Colors.grey.shade700, fontSize: 14),
+                  ),
+                  Text(
+                    isMed ? 'Taken' : 'Logged',
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Text(task.timeOfDay, style: AppTextStyles.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAllDoneState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              size: 64,
+              color: Color(0xFF388E3C),
+            ),
+            const SizedBox(height: 16),
+            Text('All caught up!', style: AppTextStyles.heading3),
+            const SizedBox(height: 8),
+            Text(
+              'No outstanding tasks for today',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuestTaskPrompt() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.task_alt_outlined,
+                color: AppColors.primary, size: 56),
+            const SizedBox(height: 16),
+            Text(
+              'Sign in to see your daily tasks',
+              style: AppTextStyles.heading3,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your medications and readings\nwill appear here',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Task actions ──────────────────────────────────────────────────────────
+
+  Future<void> _markMedTaken(DailyTask task) async {
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final prefKey = 'taken_${task.medicationId}_${task.timeOfDay}_$todayStr';
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(prefKey, 'true');
+
+    if (task.medicationId != null) {
+      await MedicationService.takeMedication(task.medicationId!);
+    }
+
+    if (mounted) {
+      setState(() {
+        task.isCompleted = true;
+        _sortTasks();
+      });
+    }
+  }
+
+  Future<void> _logReading(
+      DailyTask task, TextEditingController controller) async {
+    final text = controller.text.trim();
+    if (text.isEmpty) return;
+
+    final value = double.tryParse(text);
+    if (value == null) return;
+
+    final metric = _metricEnumFor(task.metricType ?? '');
+    if (metric == null) return;
+
+    final config = _configs[metric];
+
+    // Validate realistic range
+    if (config != null && (value < config.min || value > config.max)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Value must be between ${config.min.toInt()} and ${config.max.toInt()} ${config.unit}'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+      }
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final provider = context.read<HealthProvider>();
+    final historyProvider = context.read<HealthHistoryProvider>();
+
+    provider.updateValue(metric, value);
+    final status = provider.getStatus(metric, value);
+
+    // Save to Firestore via HealthReadingService (same path as provider.saveReadingToFirebase)
+    final reading = HealthReading(
+      id: '',
+      metricType: metric.name,
+      value: value,
+      unit: config?.unit ?? '',
+      status: _statusToString(status),
+      timestamp: DateTime.now(),
+    );
+    await HealthReadingService.saveReading(uid, reading);
+
+    // Keep history provider in sync for the daily summary card
+    historyProvider.addReading(metric, value);
+
+    controller.clear();
+    if (mounted) {
+      setState(() {
+        task.isCompleted = true;
+        _sortTasks();
+      });
+    }
+  }
+
+  HealthMetric? _metricEnumFor(String name) {
+    for (final m in HealthMetric.values) {
+      if (m.name == name) return m;
+    }
+    return null;
+  }
+
+  String _statusToString(MetricStatus? status) {
+    switch (status) {
+      case MetricStatus.normal:
+        return 'Normal';
+      case MetricStatus.warning:
+        return 'Warning';
+      case MetricStatus.criticalLow:
+        return 'Low';
+      case MetricStatus.criticalHigh:
+        return 'High';
+      case null:
+        return 'Logged';
+    }
   }
 
   // ── FAB ───────────────────────────────────────────────────────────────────
 
-  Widget _buildFAB(BuildContext context) {
+  Widget _buildFAB(BuildContext _) {
     return FloatingActionButton.extended(
-      onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Tap any card above to add your reading'),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      },
+      heroTag: 'fab_home',
+      onPressed: _showAddSheet,
       backgroundColor: AppColors.primary,
       elevation: 4,
       icon: const Icon(Icons.add_rounded, color: AppColors.white),
       label: Text("Add Today's Reading", style: AppTextStyles.buttonText),
     );
+  }
+
+  // Sheet methods use the State's own context directly — it outlives any sheet
+  // or Consumer2 builder context, preventing _dependents.isEmpty assertion errors.
+  void _showAddSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  "Add Today's Entry",
+                  style: AppTextStyles.heading3,
+                ),
+              ),
+              if (_showMedTasks)
+                _buildSheetOption(
+                  icon: Icons.medication_rounded,
+                  label: 'Medications',
+                  subtitle: 'Add or log a medication',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AddMedicationScreen()),
+                    ).then((_) => _loadMedSummary());
+                  },
+                ),
+              if (_showReadingTasks)
+                _buildSheetOption(
+                  icon: Icons.monitor_heart_rounded,
+                  label: 'Measurement',
+                  subtitle: 'Record a health reading',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _showMeasurementSheet();
+                    });
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSheetOption({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: AppColors.primary, size: 22),
+      ),
+      title: Text(label,
+          style: AppTextStyles.label.copyWith(fontSize: 15)),
+      subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
+      trailing: const Icon(Icons.chevron_right_rounded,
+          color: Colors.grey, size: 20),
+      onTap: onTap,
+    );
+  }
+
+  void _showMeasurementSheet() {
+    const metricsByDisease = <String, List<String>>{
+      'diabetes': ['bloodSugar', 'weight'],
+      'blood_pressure': ['systolic', 'diastolic'],
+      'heart': ['heartRate', 'weight'],
+    };
+    const displayNames = <String, String>{
+      'bloodSugar': 'Blood Sugar',
+      'systolic': 'Systolic Blood Pressure',
+      'diastolic': 'Diastolic Blood Pressure',
+      'heartRate': 'Heart Rate',
+      'weight': 'Weight',
+    };
+
+    final metrics =
+        metricsByDisease[_diseaseType] ?? ['heartRate', 'weight'];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child:
+                    Text('Select Measurement', style: AppTextStyles.heading3),
+              ),
+              ...metrics.map((metric) {
+                final metricEnum = _metricEnumFor(metric);
+                final config =
+                    metricEnum != null ? _configs[metricEnum] : null;
+                return _buildSheetOption(
+                  icon: config?.icon ?? Icons.monitor_heart_rounded,
+                  label: displayNames[metric] ?? metric,
+                  subtitle: config != null ? 'Unit: ${config.unit}' : '',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _showMetricInputSheet(metric);
+                    });
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMetricInputSheet(String metricName) {
+    final metric = _metricEnumFor(metricName);
+    if (metric == null) return;
+    final config = _configs[metric]!;
+
+    const displayNames = <String, String>{
+      'bloodSugar': 'Blood Sugar',
+      'systolic': 'Systolic BP',
+      'diastolic': 'Diastolic BP',
+      'heartRate': 'Heart Rate',
+      'weight': 'Weight',
+    };
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      // Prevent the route itself from being dismissed by a drag — the
+      // _MetricInputSheet's PopScope handles dismissal after unfocusing.
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _MetricInputSheet(
+        config: config,
+        displayName: displayNames[metricName] ?? config.title,
+        onSave: (value) => _saveReading(metricName, value),
+        onError: (msg) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
+        },
+      ),
+    );
+  }
+
+  // Saves a reading submitted via the FAB measurement sheet.
+  // Also marks the matching task card as completed if one exists.
+  Future<void> _saveReading(String metricName, double value) async {
+    final metric = _metricEnumFor(metricName);
+    if (metric == null) return;
+    final config = _configs[metric];
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final provider = context.read<HealthProvider>();
+    final historyProvider = context.read<HealthHistoryProvider>();
+
+    provider.updateValue(metric, value);
+    final status = provider.getStatus(metric, value);
+
+    final reading = HealthReading(
+      id: '',
+      metricType: metric.name,
+      value: value,
+      unit: config?.unit ?? '',
+      status: _statusToString(status),
+      timestamp: DateTime.now(),
+    );
+    await HealthReadingService.saveReading(uid, reading);
+    historyProvider.addReading(metric, value);
+
+    // Mark the matching task card as done so the list stays in sync
+    if (mounted) {
+      setState(() {
+        final idx = _tasks.indexWhere(
+            (t) => t.type == TaskType.reading && t.metricType == metricName);
+        if (idx != -1) {
+          _tasks[idx].isCompleted = true;
+          _sortTasks();
+        }
+      });
+    }
   }
 }
 
@@ -697,4 +1354,195 @@ class _MetricConfig {
     required this.min,
     required this.max,
   });
+}
+
+// ── Metric input bottom sheet ─────────────────────────────────────────────────
+// Extracted as a StatefulWidget so its own context owns the MediaQuery
+// dependency, preventing the _dependents.isEmpty assertion that fires when
+// the keyboard dismisses at the same time the sheet route deactivates.
+
+class _MetricInputSheet extends StatefulWidget {
+  final _MetricConfig config;
+  final String displayName;
+  final Future<void> Function(double) onSave;
+  final void Function(String) onError;
+
+  const _MetricInputSheet({
+    required this.config,
+    required this.displayName,
+    required this.onSave,
+    required this.onError,
+  });
+
+  @override
+  State<_MetricInputSheet> createState() => _MetricInputSheetState();
+}
+
+class _MetricInputSheetState extends State<_MetricInputSheet> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  // Unfocus keyboard first, then wait for the keyboard dismiss animation to
+  // complete (~300 ms on Android) before popping. Popping mid-animation causes
+  // MediaQuery.viewInsets to keep firing into an already-deactivating route,
+  // which triggers the _dependents.isEmpty InheritedElement assertion.
+  void _dismiss() async {
+    if (_focusNode.hasFocus) {
+      _focusNode.unfocus();
+      await Future.delayed(const Duration(milliseconds: 350));
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _submit() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      widget.onError('Please enter a value');
+      return;
+    }
+    final value = double.tryParse(text);
+    if (value == null) {
+      widget.onError('Please enter a valid number');
+      return;
+    }
+    final cfg = widget.config;
+    if (value < cfg.min || value > cfg.max) {
+      widget.onError(
+          'Value must be between ${cfg.min.toInt()} and ${cfg.max.toInt()} ${cfg.unit}');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(value);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    _dismiss();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Safe: this widget owns the context, so MediaQuery reads won't race with
+    // deactivation of a parent sheet route.
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
+    return PopScope(
+      // Prevent the route from popping directly; always route through _dismiss
+      // so the keyboard is unfocused first.
+      canPop: false,
+      onPopInvokedWithResult: (_, __) => _dismiss(),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset + bottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter ${widget.displayName}',
+                    style: AppTextStyles.heading3,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Range: ${widget.config.min.toInt()}–${widget.config.max.toInt()} ${widget.config.unit}',
+                    style: AppTextStyles.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: 'Enter value',
+                      suffixText: widget.config.unit,
+                      suffixStyle: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.secondary),
+                      filled: true,
+                      fillColor: AppColors.background,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onSubmitted: (_) => _submit(),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.white,
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Save',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: _dismiss,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.secondary,
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
+                      child: const Text('Cancel',
+                          style: TextStyle(fontSize: 15)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

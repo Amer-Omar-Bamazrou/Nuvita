@@ -65,17 +65,31 @@ class MedicationService {
     };
   }
 
+  // Public so the medication screen can parse stream snapshots directly
+  // without a second .get() round-trip.
+  static MedicationModel fromFirestoreDoc(Map<String, dynamic> data) =>
+      _fromFirestoreDoc(data);
+
+  static Future<void> saveAll(List<MedicationModel> meds) => _saveAll(meds);
+
   static MedicationModel _fromFirestoreDoc(Map<String, dynamic> data) {
-    // Firestore stores startDate as Timestamp; handle ISO string fallback
-    final startDate = data['startDate'] is Timestamp
-        ? (data['startDate'] as Timestamp).toDate()
-        : DateTime.parse(data['startDate'] as String);
+    DateTime startDate;
+    if (data['startDate'] is Timestamp) {
+      startDate = (data['startDate'] as Timestamp).toDate();
+    } else if (data['startDate'] is String) {
+      startDate = DateTime.tryParse(data['startDate'] as String) ?? DateTime.now();
+    } else {
+      startDate = DateTime.now();
+    }
+
     return MedicationModel(
-      id: data['id'] as String,
-      name: data['name'] as String,
-      dosage: data['dosage'] as String,
-      frequency: data['frequency'] as String,
-      times: List<String>.from(data['times'] as List),
+      id: data['id'] as String? ?? '',
+      name: data['name'] as String? ?? 'Unknown',
+      dosage: data['dosage'] as String? ?? '',
+      frequency: data['frequency'] as String? ?? 'Once daily',
+      times: data['times'] != null
+          ? List<String>.from(data['times'] as List)
+          : [],
       startDate: startDate,
       isActive: data['isActive'] as bool? ?? true,
       notes: data['notes'] as String? ?? '',

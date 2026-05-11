@@ -1,3 +1,74 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# Run mobile app (Android)
+flutter run
+
+# Run doctor web portal in Chrome
+flutter run -d chrome
+
+# Build release APK
+flutter build apk --release
+
+# Build web
+flutter build web --release
+
+# Analyse (lint)
+flutter analyze
+
+# Get / update dependencies
+flutter pub get
+flutter pub upgrade
+```
+
+No test suite exists — `flutter test` will find nothing.
+
+## Architecture
+
+### Two apps in one codebase
+
+`main.dart` uses `kIsWeb` to split at startup:
+- **Web** → always lands on `DoctorLoginScreen` (doctor portal)
+- **Mobile** → patient app; routing depends on onboarding flag + Firebase Auth state + Firestore `active` field
+
+### State management
+
+Two providers, intentionally scoped differently:
+
+| Provider | Scope | Purpose |
+|---|---|---|
+| `HealthHistoryProvider` | App root (`main.dart`) | Full readings list, loaded once per session from Firestore; shared across History, Charts, PDF report |
+| `HealthProvider` | Scoped to `HomeScreen` only | Current-session metric values, inline tip logic, Firestore save/load — **not accessible from sibling screens** |
+
+### Navigation (mobile)
+
+`MainShell` uses `IndexedStack` with 4 tabs (Home, Medications, History, Profile). Push-routes (charts, appointments, report, suggestions panel) sit on top of the stack via `Navigator.push`.
+
+Notification taps are routed via a global `navigatorKey` wired in `main.dart`. The appointment tap handler is set there (not in `NotificationService`) to avoid a circular import.
+
+### Firestore conventions
+
+- Patient data lives under `/users/{uid}/` with sub-collections: `readings`, `medications`, `alerts`, `suggestions`, `messages`
+- Doctors are identified by a document existing at `/doctors/{uid}`
+- `collectionGroup` queries are used by the doctor portal for cross-patient reads (`readings`, `alerts`, `messages`, `suggestions`)
+- Compound Firestore queries on `collectionGroup` require composite indexes — prefer single-field filtering in Firestore and filter additional conditions client-side to avoid index errors
+
+### Local persistence
+
+`SharedPreferences` (via `PreferencesService`) stores onboarding state, user profile fields (name, gender, DOB), and per-day medication taken flags (`taken_{medId}_{time}_{yyyy-MM-dd}`). Firestore is the source of truth for everything else.
+
+### Doctor portal specifics
+
+- `DoctorService` is the sole data layer for the web portal — all patient reads go through it
+- The `active` field on `/users/{uid}` is how doctors soft-delete patients; login and startup both check this and sign out if `false`
+- `patientId` is a 6-char alphanumeric generated at registration, stored in the Firestore root user doc, and used as an alternative login credential
+
+---
+
 # Nuvita — Project Memory
 
 ## Project Overview

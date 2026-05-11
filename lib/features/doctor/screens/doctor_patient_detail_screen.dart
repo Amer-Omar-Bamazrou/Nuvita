@@ -28,9 +28,28 @@ class _DoctorPatientDetailScreenState
   List<Map<String, dynamic>> _medications = [];
   List<Map<String, dynamic>> _suggestions = [];
 
-  // Which medication row is being edited (by med id)
-  String? _editingMedId;
-  final Map<String, TextEditingController> _editCtrls = {};
+  static const _frequencies = [
+    'Once daily',
+    'Twice daily',
+    'Three times daily',
+    'As needed',
+    'Weekly',
+  ];
+
+  static List<String> _timesForFrequency(String freq) {
+    switch (freq) {
+      case 'Twice daily':
+        return ['08:00', '20:00'];
+      case 'Three times daily':
+        return ['08:00', '14:00', '20:00'];
+      case 'Weekly':
+        return ['08:00'];
+      case 'As needed':
+        return [];
+      default:
+        return ['08:00'];
+    }
+  }
 
   final _suggestionCtrl = TextEditingController();
   bool _sendingSuggestion = false;
@@ -63,9 +82,6 @@ class _DoctorPatientDetailScreenState
   @override
   void dispose() {
     _suggestionCtrl.dispose();
-    for (final c in _editCtrls.values) {
-      c.dispose();
-    }
     super.dispose();
   }
 
@@ -116,36 +132,151 @@ class _DoctorPatientDetailScreenState
     } catch (_) {}
   }
 
-  void _startEdit(Map<String, dynamic> med) {
-    final id = med['id'] as String;
-    _editCtrls['name'] =
+  // Opens a dialog to edit a medication. Using a dialog instead of an inline
+  // form avoids DropdownButtonFormField overlay conflicts on Flutter Web.
+  void _showEditMedDialog(Map<String, dynamic> med) {
+    final medId = med['id'] as String;
+    final nameCtrl =
         TextEditingController(text: med['name'] as String? ?? '');
-    _editCtrls['dosage'] =
+    final dosageCtrl =
         TextEditingController(text: med['dosage'] as String? ?? '');
-    _editCtrls['frequency'] =
-        TextEditingController(text: med['frequency'] as String? ?? '');
-    _editCtrls['pills'] = TextEditingController(
-        text: med['pillsRemaining']?.toString() ?? '');
-    setState(() => _editingMedId = id);
-  }
+    final pillsCtrl =
+        TextEditingController(text: med['pillsRemaining']?.toString() ?? '');
 
-  Future<void> _saveEdit(String medId) async {
-    await _service.updateMedication(_uid, medId, {
-      'name': _editCtrls['name']!.text.trim(),
-      'dosage': _editCtrls['dosage']!.text.trim(),
-      'frequency': _editCtrls['frequency']!.text.trim(),
-      'pillsRemaining': int.tryParse(_editCtrls['pills']!.text),
+    final current = med['frequency'] as String? ?? 'Once daily';
+    String selectedFreq =
+        _frequencies.contains(current) ? current : 'Once daily';
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text(
+            'Edit Medication',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF172A3A)),
+          ),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: _dialogField(nameCtrl, 'Medication name')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _dialogField(dosageCtrl, 'Dosage')),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedFreq,
+                  items: _frequencies
+                      .map((f) => DropdownMenuItem(
+                            value: f,
+                            child: Text(f,
+                                style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => selectedFreq = v);
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Frequency',
+                    labelStyle: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF9F9F9),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF172A3A)),
+                ),
+                const SizedBox(height: 12),
+                _dialogField(pillsCtrl, 'Pills remaining (optional)',
+                    numeric: true),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogCtx).pop();
+                await _service.updateMedication(_uid, medId, {
+                  'name': nameCtrl.text.trim(),
+                  'dosage': dosageCtrl.text.trim(),
+                  'frequency': selectedFreq,
+                  'times': _timesForFrequency(selectedFreq),
+                  'pillsRemaining': int.tryParse(pillsCtrl.text),
+                });
+                _loadMedications();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              child: const Text('Save',
+                  style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      dosageCtrl.dispose();
+      pillsCtrl.dispose();
     });
-    _cancelEdit();
-    _loadMedications();
   }
 
-  void _cancelEdit() {
-    for (final c in _editCtrls.values) {
-      c.dispose();
-    }
-    _editCtrls.clear();
-    setState(() => _editingMedId = null);
+  Widget _dialogField(
+    TextEditingController ctrl,
+    String hint, {
+    bool numeric = false,
+  }) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF9F9F9),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      style: const TextStyle(fontSize: 13),
+    );
   }
 
   Future<void> _sendSuggestion() async {
@@ -162,7 +293,20 @@ class _DoctorPatientDetailScreenState
       );
       _suggestionCtrl.clear();
       await _loadSuggestions();
-    } catch (_) {}
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Suggestion sent'),
+          backgroundColor: Color(0xFF2E7D32),
+        ),
+      );
+    } catch (e) {
+      debugPrint('sendSuggestion error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send: $e')),
+      );
+    }
     if (!mounted) return;
     setState(() => _sendingSuggestion = false);
   }
@@ -438,73 +582,8 @@ class _DoctorPatientDetailScreenState
   }
 
   Widget _buildMedRow(Map<String, dynamic> med) {
-    final id = med['id'] as String;
-    final isEditing = _editingMedId == id;
     final pills = med['pillsRemaining'] as int?;
     final isLow = pills != null && pills <= 7;
-
-    if (isEditing) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0F8F8),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF004346).withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                    child: _editField(_editCtrls['name']!, 'Medication name')),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: _editField(_editCtrls['dosage']!, 'Dosage')),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                    child:
-                        _editField(_editCtrls['frequency']!, 'Frequency')),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: _editField(
-                        _editCtrls['pills']!, 'Pills remaining',
-                        numeric: true)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _cancelEdit,
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () => _saveEdit(id),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6)),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 8),
-                  ),
-                  child:
-                      const Text('Save', style: TextStyle(fontSize: 13)),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -559,7 +638,7 @@ class _DoctorPatientDetailScreenState
             ),
           ),
           IconButton(
-            onPressed: () => _startEdit(med),
+            onPressed: () => _showEditMedDialog(med),
             icon: const Icon(Icons.edit_outlined, size: 16),
             color: Colors.grey.shade500,
             tooltip: 'Edit',
@@ -568,37 +647,6 @@ class _DoctorPatientDetailScreenState
           ),
         ],
       ),
-    );
-  }
-
-  Widget _editField(
-    TextEditingController ctrl,
-    String hint, {
-    bool numeric = false,
-  }) {
-    return TextField(
-      controller: ctrl,
-      keyboardType:
-          numeric ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle:
-            TextStyle(fontSize: 12, color: Colors.grey.shade400),
-        isDense: true,
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-      ),
-      style: const TextStyle(fontSize: 13),
     );
   }
 

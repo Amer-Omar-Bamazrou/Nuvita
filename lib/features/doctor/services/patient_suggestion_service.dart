@@ -3,16 +3,29 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class PatientSuggestionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Realtime stream of all suggestions for the patient, newest first
+  // Realtime stream of all suggestions for the patient, newest first.
+  // Sorting is done client-side so that documents with a pending server
+  // timestamp (FieldValue.serverTimestamp that hasn't resolved yet) are
+  // still included rather than being excluded by an orderBy query.
   Stream<List<Map<String, dynamic>>> listenToAllSuggestions(String uid) {
     return _db
         .collection('users')
         .doc(uid)
         .collection('suggestions')
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+        .map((snap) {
+          final docs =
+              snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+          docs.sort((a, b) {
+            final aTs = a['timestamp'];
+            final bTs = b['timestamp'];
+            if (aTs is Timestamp && bTs is Timestamp) {
+              return bTs.compareTo(aTs);
+            }
+            return 0;
+          });
+          return docs;
+        });
   }
 
   // Count of unread suggestions — drives the bell badge on the home screen

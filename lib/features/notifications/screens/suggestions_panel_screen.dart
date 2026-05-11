@@ -25,11 +25,17 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
   bool _isGuest = false;
   final PatientSuggestionService _service = PatientSuggestionService();
   final Set<String> _expandedIds = {};
+  // Cached once so StreamBuilder doesn't resubscribe on every setState rebuild
+  Stream<List<Map<String, dynamic>>>? _stream;
 
   @override
   void initState() {
     super.initState();
     _isGuest = FirebaseAuth.instance.currentUser == null;
+    if (!_isGuest) {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      _stream = _service.listenToAllSuggestions(uid);
+    }
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -57,7 +63,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
   Widget _buildStream() {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _service.listenToAllSuggestions(uid),
+      stream: _stream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -69,6 +75,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
           return _buildEmptyState(isError: true);
         }
         final messages = snap.data ?? [];
+        debugPrint('Notifications: ${messages.length} message(s) loaded');
         if (messages.isEmpty) return _buildEmptyState();
         return _buildList(uid, messages);
       },

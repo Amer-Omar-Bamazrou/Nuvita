@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
@@ -42,30 +44,87 @@ class _MedicationScreenState extends State<MedicationScreen> {
   // Session-only taken state — resets each app restart (acceptable for daily use)
   final Set<String> _takenToday = {};
   bool _isLoading = true;
+  // Prevents _load() from overwriting _medications after the Firestore stream
+  // has already delivered fresher data.
+  bool _streamLoaded = false;
+  StreamSubscription<QuerySnapshot>? _firestoreSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _listenForRemoteChanges();
+  }
+
+  // Listens to the patient's medications collection so that doctor-assigned
+  // or doctor-edited medications appear immediately without requiring an app
+  // restart. Parses the snapshot directly — no second .get() — to avoid the
+  // race condition where _load() overwrites a stale syncFromFirebase result.
+  void _listenForRemoteChanges() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _firestoreSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('medications')
+        .snapshots()
+        .listen((snapshot) async {
+          if (!mounted) return;
+          try {
+            final remoteMeds = snapshot.docs
+                .map((d) => MedicationService.fromFirestoreDoc(d.data()))
+                .toList();
+            final localMeds = await MedicationService.loadAll();
+            final remoteIds = remoteMeds.map((m) => m.id).toSet();
+            final localOnly =
+                localMeds.where((m) => !remoteIds.contains(m.id)).toList();
+            final merged = [...remoteMeds, ...localOnly];
+            await MedicationService.saveAll(merged);
+            final lowSupply =
+                merged.where(MedicationService.checkLowSupply).toList();
+            _streamLoaded = true;
+            if (mounted) {
+              setState(() {
+                _medications = merged;
+                _lowSupplyMeds = lowSupply;
+                _isLoading = false;
+              });
+            }
+          } catch (e) {
+            debugPrint('MedicationScreen stream: $e');
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _firestoreSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
-    await NotificationService.initialize();
-
-    // Sync from Firestore first so local cache is up-to-date on app start
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await MedicationService.syncFromFirebase(user.uid);
-    }
+    // Don't await notifications init — it can take several seconds and would
+    // cause _load() to finish AFTER the stream, triggering the race condition
+    // where this setState overwrites fresher Firestore data from the stream.
+    unawaited(NotificationService.initialize());
 
     final meds = await MedicationService.loadAll();
     final lowSupply = await MedicationService.getLowSupplyMedications();
 
-    if (mounted) {
+    if (!mounted) return;
+
+    if (_streamLoaded) {
+      // Stream already delivered fresh Firestore data — only clear the spinner,
+      // do not overwrite _medications with potentially stale SharedPrefs data.
+      setState(() {
+        _bannerDismissed = false;
+        _isLoading = false;
+      });
+    } else {
       setState(() {
         _medications = meds;
         _lowSupplyMeds = lowSupply;
-        _bannerDismissed = false; // re-evaluate on each load
+        _bannerDismissed = false;
         _isLoading = false;
       });
     }
@@ -186,6 +245,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
         title: Text('My Medications', style: AppTextStyles.heading2),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_medications',
         onPressed: _openAddScreen,
         backgroundColor: AppColors.primary,
         tooltip: 'Add medication',
