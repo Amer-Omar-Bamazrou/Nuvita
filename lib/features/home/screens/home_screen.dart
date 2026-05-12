@@ -14,7 +14,9 @@ import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
+import '../../health/models/metric_config.dart';
 import '../../health/services/health_reading_service.dart';
+import '../../health/screens/add_reading_list_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
@@ -88,48 +90,69 @@ class _HomeBodyState extends State<_HomeBody> {
   };
 
   // Metric config used for reading task validation and units
-  static const _configs = <HealthMetric, _MetricConfig>{
-    HealthMetric.bloodSugar: _MetricConfig(
+  static const _configs = <HealthMetric, MetricConfig>{
+    HealthMetric.bloodSugar: MetricConfig(
       title: 'Blood Sugar',
       icon: Icons.water_drop,
       unit: 'mg/dL',
       min: 20,
       max: 600,
     ),
-    HealthMetric.systolic: _MetricConfig(
+    HealthMetric.bloodSugarBefore: MetricConfig(
+      title: 'Blood Sugar (Before Meal)',
+      icon: Icons.water_drop,
+      unit: 'mg/dL',
+      min: 20,
+      max: 600,
+    ),
+    HealthMetric.bloodSugarAfter: MetricConfig(
+      title: 'Blood Sugar (After Meal)',
+      icon: Icons.water_drop_outlined,
+      unit: 'mg/dL',
+      min: 20,
+      max: 600,
+    ),
+    HealthMetric.systolic: MetricConfig(
       title: 'Systolic BP',
       icon: Icons.favorite,
       unit: 'mmHg',
       min: 50,
       max: 250,
     ),
-    HealthMetric.diastolic: _MetricConfig(
+    HealthMetric.diastolic: MetricConfig(
       title: 'Diastolic BP',
       icon: Icons.favorite_border,
       unit: 'mmHg',
       min: 30,
       max: 150,
     ),
-    HealthMetric.heartRate: _MetricConfig(
+    HealthMetric.heartRate: MetricConfig(
       title: 'Heart Rate',
       icon: Icons.monitor_heart,
       unit: 'BPM',
       min: 20,
       max: 250,
     ),
-    HealthMetric.weight: _MetricConfig(
+    HealthMetric.weight: MetricConfig(
       title: 'Weight',
       icon: Icons.scale,
       unit: 'kg',
       min: 20,
       max: 300,
     ),
-    HealthMetric.steps: _MetricConfig(
+    HealthMetric.steps: MetricConfig(
       title: 'Daily Steps',
       icon: Icons.directions_walk,
       unit: 'steps',
       min: 0,
       max: 100000,
+    ),
+    HealthMetric.temperature: MetricConfig(
+      title: 'Temperature',
+      icon: Icons.thermostat,
+      unit: '°C',
+      min: 30,
+      max: 45,
     ),
   };
 
@@ -1191,117 +1214,33 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  void _showMeasurementSheet() {
-    const metricsByDisease = <String, List<String>>{
-      'diabetes': ['bloodSugar', 'weight'],
-      'blood_pressure': ['systolic', 'diastolic'],
-      'heart': ['heartRate', 'weight'],
-    };
-    const displayNames = <String, String>{
-      'bloodSugar': 'Blood Sugar',
-      'systolic': 'Systolic Blood Pressure',
-      'diastolic': 'Diastolic Blood Pressure',
-      'heartRate': 'Heart Rate',
-      'weight': 'Weight',
-    };
-
-    final metrics =
-        metricsByDisease[_diseaseType] ?? ['heartRate', 'weight'];
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child:
-                    Text('Select Measurement', style: AppTextStyles.heading3),
-              ),
-              ...metrics.map((metric) {
-                final metricEnum = _metricEnumFor(metric);
-                final config =
-                    metricEnum != null ? _configs[metricEnum] : null;
-                return _buildSheetOption(
-                  icon: config?.icon ?? Icons.monitor_heart_rounded,
-                  label: displayNames[metric] ?? metric,
-                  subtitle: config != null ? 'Unit: ${config.unit}' : '',
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _showMetricInputSheet(metric);
-                    });
-                  },
-                );
-              }),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showMetricInputSheet(String metricName) {
-    final metric = _metricEnumFor(metricName);
-    if (metric == null) return;
-    final config = _configs[metric]!;
-
-    const displayNames = <String, String>{
-      'bloodSugar': 'Blood Sugar',
-      'systolic': 'Systolic BP',
-      'diastolic': 'Diastolic BP',
-      'heartRate': 'Heart Rate',
-      'weight': 'Weight',
-    };
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      // Prevent the route itself from being dismissed by a drag — the
-      // _MetricInputSheet's PopScope handles dismissal after unfocusing.
-      isDismissible: false,
-      enableDrag: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _MetricInputSheet(
-        config: config,
-        displayName: displayNames[metricName] ?? config.title,
-        onSave: (value) => _saveReading(metricName, value),
-        onError: (msg) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(msg),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ));
-        },
+  Future<void> _showMeasurementSheet() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddReadingListScreen(
+          diseaseType: _diseaseType,
+          onSave: (metric, value, when) => _saveReading(metric, value, when),
+        ),
       ),
     );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Reading saved successfully'),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
-  // Saves a reading submitted via the FAB measurement sheet.
+  // Saves a reading submitted via the new full-screen reading flow.
   // Also marks the matching task card as completed if one exists.
-  Future<void> _saveReading(String metricName, double value) async {
-    final metric = _metricEnumFor(metricName);
-    if (metric == null) return;
+  Future<void> _saveReading(HealthMetric metric, double value, DateTime when) async {
     final config = _configs[metric];
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -1319,16 +1258,23 @@ class _HomeBodyState extends State<_HomeBody> {
       value: value,
       unit: config?.unit ?? '',
       status: _statusToString(status),
-      timestamp: DateTime.now(),
+      timestamp: when,
     );
     await HealthReadingService.saveReading(uid, reading);
     historyProvider.addReading(metric, value);
 
-    // Mark the matching task card as done so the list stays in sync
+    // Mark the matching task card as done so the list stays in sync.
+    // bloodSugarBefore/After also satisfy a generic 'bloodSugar' task.
+    final matchNames = {
+      metric.name,
+      if (metric == HealthMetric.bloodSugarBefore ||
+          metric == HealthMetric.bloodSugarAfter)
+        'bloodSugar',
+    };
     if (mounted) {
       setState(() {
-        final idx = _tasks.indexWhere(
-            (t) => t.type == TaskType.reading && t.metricType == metricName);
+        final idx = _tasks.indexWhere((t) =>
+            t.type == TaskType.reading && matchNames.contains(t.metricType));
         if (idx != -1) {
           _tasks[idx].isCompleted = true;
           _sortTasks();
@@ -1338,211 +1284,3 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 }
 
-// ── Metric config data class ──────────────────────────────────────────────────
-
-class _MetricConfig {
-  final String title;
-  final IconData icon;
-  final String unit;
-  final double min;
-  final double max;
-
-  const _MetricConfig({
-    required this.title,
-    required this.icon,
-    required this.unit,
-    required this.min,
-    required this.max,
-  });
-}
-
-// ── Metric input bottom sheet ─────────────────────────────────────────────────
-// Extracted as a StatefulWidget so its own context owns the MediaQuery
-// dependency, preventing the _dependents.isEmpty assertion that fires when
-// the keyboard dismisses at the same time the sheet route deactivates.
-
-class _MetricInputSheet extends StatefulWidget {
-  final _MetricConfig config;
-  final String displayName;
-  final Future<void> Function(double) onSave;
-  final void Function(String) onError;
-
-  const _MetricInputSheet({
-    required this.config,
-    required this.displayName,
-    required this.onSave,
-    required this.onError,
-  });
-
-  @override
-  State<_MetricInputSheet> createState() => _MetricInputSheetState();
-}
-
-class _MetricInputSheetState extends State<_MetricInputSheet> {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  // Unfocus keyboard first, then wait for the keyboard dismiss animation to
-  // complete (~300 ms on Android) before popping. Popping mid-animation causes
-  // MediaQuery.viewInsets to keep firing into an already-deactivating route,
-  // which triggers the _dependents.isEmpty InheritedElement assertion.
-  void _dismiss() async {
-    if (_focusNode.hasFocus) {
-      _focusNode.unfocus();
-      await Future.delayed(const Duration(milliseconds: 350));
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  Future<void> _submit() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) {
-      widget.onError('Please enter a value');
-      return;
-    }
-    final value = double.tryParse(text);
-    if (value == null) {
-      widget.onError('Please enter a valid number');
-      return;
-    }
-    final cfg = widget.config;
-    if (value < cfg.min || value > cfg.max) {
-      widget.onError(
-          'Value must be between ${cfg.min.toInt()} and ${cfg.max.toInt()} ${cfg.unit}');
-      return;
-    }
-
-    setState(() => _saving = true);
-    try {
-      await widget.onSave(value);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-    _dismiss();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Safe: this widget owns the context, so MediaQuery reads won't race with
-    // deactivation of a parent sheet route.
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final bottomPadding = MediaQuery.paddingOf(context).bottom;
-
-    return PopScope(
-      // Prevent the route from popping directly; always route through _dismiss
-      // so the keyboard is unfocused first.
-      canPop: false,
-      onPopInvokedWithResult: (_, __) => _dismiss(),
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottomInset + bottomPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Enter ${widget.displayName}',
-                    style: AppTextStyles.heading3,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Range: ${widget.config.min.toInt()}–${widget.config.max.toInt()} ${widget.config.unit}',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    autofocus: true,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      hintText: 'Enter value',
-                      suffixText: widget.config.unit,
-                      suffixStyle: AppTextStyles.bodySmall
-                          .copyWith(color: AppColors.secondary),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.white,
-                        minimumSize: const Size(double.infinity, 52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text(
-                              'Save',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: _dismiss,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.secondary,
-                        minimumSize: const Size(double.infinity, 44),
-                      ),
-                      child: const Text('Cancel',
-                          style: TextStyle(fontSize: 15)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

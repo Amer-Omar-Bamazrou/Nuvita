@@ -420,93 +420,101 @@ class _DoctorPatientDetailScreenState
       );
     }
 
-    final profile =
-        widget.patient['profile'] as Map<String, dynamic>? ?? {};
-    final diseaseType = profile['diseaseType'] as String? ?? 'other';
-
-    // Find latest value for each metric
-    Map<String, Map<String, dynamic>> latest = {};
+    // Build a map of the latest reading per metric type (readings already sorted newest-first)
+    final Map<String, Map<String, dynamic>> latest = {};
     for (final r in _readings) {
       final metric = r['metricType'] as String? ?? '';
-      if (!latest.containsKey(metric)) latest[metric] = r;
+      if (metric.isNotEmpty && !latest.containsKey(metric)) latest[metric] = r;
     }
 
-    List<_MetricDef> metrics;
-    switch (diseaseType) {
-      case 'blood_pressure':
-        metrics = [
-          _MetricDef('bloodPressureSystolic', 'Systolic BP', 'mmHg'),
-          _MetricDef('bloodPressureDiastolic', 'Diastolic BP', 'mmHg'),
-        ];
-        break;
-      case 'diabetes':
-        metrics = [
-          _MetricDef('bloodSugar', 'Blood Sugar', 'mg/dL'),
-          _MetricDef('weight', 'Weight', 'kg'),
-        ];
-        break;
-      case 'heart':
-        metrics = [
-          _MetricDef('heartRate', 'Heart Rate', 'bpm'),
-          _MetricDef('weight', 'Weight', 'kg'),
-        ];
-        break;
-      default:
-        metrics = [
-          _MetricDef('bloodSugar', 'Blood Sugar', 'mg/dL'),
-          _MetricDef('heartRate', 'Heart Rate', 'bpm'),
-        ];
-    }
+    // Single-value metrics shown in clinical order
+    const singleMetrics = [
+      _MetricDef('bloodSugarBefore', 'Blood Sugar (Before Meal)', 'mg/dL'),
+      _MetricDef('bloodSugarAfter', 'Blood Sugar (After Meal)', 'mg/dL'),
+      _MetricDef('weight', 'Weight', 'kg'),
+      _MetricDef('temperature', 'Temperature', '°C'),
+    ];
+
+    String _val(String key) => latest[key]?['value']?.toString() ?? '—';
+    String _status(String key) => latest[key]?['status'] as String? ?? '—';
 
     return Column(
-      children: metrics.map((m) {
-        final data = latest[m.metricType];
-        final value = data?['value']?.toString() ?? '—';
-        final status = data?['status'] as String? ?? '—';
-        return Padding(
+      children: [
+        // ── Blood Pressure combined card ──────────────────────────────────
+        Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _Card(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(m.label,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600)),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            value,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF172A3A),
-                            ),
-                          ),
-                          if (value != '—') ...[
-                            const SizedBox(width: 4),
-                            Text(m.unit,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade500)),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
+                Text('Blood Pressure',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _BPSubValue(label: 'Sys', value: _val('systolic'), unit: 'mmHg',
+                        status: _status('systolic')),
+                    _BPDivider(),
+                    _BPSubValue(label: 'Dia', value: _val('diastolic'), unit: 'mmHg',
+                        status: _status('diastolic')),
+                    _BPDivider(),
+                    _BPSubValue(label: 'Pulse', value: _val('heartRate'), unit: 'bpm',
+                        status: _status('heartRate')),
+                  ],
                 ),
-                if (status != '—') _StatusBadge(status: status),
               ],
             ),
           ),
-        );
-      }).toList(),
+        ),
+
+        // ── Remaining single-value cards ──────────────────────────────────
+        ...singleMetrics.map((m) {
+          final value = _val(m.metricType);
+          final status = _status(m.metricType);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _Card(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(m.label,
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600)),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              value,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF172A3A),
+                              ),
+                            ),
+                            if (value != '—') ...[
+                              const SizedBox(width: 4),
+                              Text(m.unit,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500)),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (status != '—') _StatusBadge(status: status),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -997,6 +1005,64 @@ class _MetricDef {
   final String label;
   final String unit;
   const _MetricDef(this.metricType, this.label, this.unit);
+}
+
+// One sub-column inside the combined Blood Pressure card (Sys / Dia / Pulse)
+class _BPSubValue extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+  final String status;
+
+  const _BPSubValue({
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF172A3A),
+            ),
+          ),
+          if (value != '—') ...[
+            const SizedBox(height: 2),
+            Text(unit,
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+          ],
+          if (status != '—') ...[
+            const SizedBox(height: 4),
+            _StatusBadge(status: status),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BPDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 48,
+      color: Colors.grey.shade200,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
 }
 
 // ── Assign Medication bottom sheet ────────────────────────────────────────────

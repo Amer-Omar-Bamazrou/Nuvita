@@ -133,6 +133,8 @@ class HealthHistoryProvider extends ChangeNotifier {
   String _unitForMetric(HealthMetric metric) {
     switch (metric) {
       case HealthMetric.bloodSugar:
+      case HealthMetric.bloodSugarBefore:
+      case HealthMetric.bloodSugarAfter:
         return 'mg/dL';
       case HealthMetric.systolic:
       case HealthMetric.diastolic:
@@ -143,6 +145,8 @@ class HealthHistoryProvider extends ChangeNotifier {
         return 'kg';
       case HealthMetric.steps:
         return 'steps';
+      case HealthMetric.temperature:
+        return '°C';
     }
   }
 }

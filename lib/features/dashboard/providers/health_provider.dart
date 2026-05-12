@@ -3,7 +3,17 @@ import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 
 // All tracked health metrics across disease types
-enum HealthMetric { bloodSugar, systolic, diastolic, heartRate, weight, steps }
+enum HealthMetric {
+  bloodSugar,
+  bloodSugarBefore,
+  bloodSugarAfter,
+  systolic,
+  diastolic,
+  heartRate,
+  weight,
+  steps,
+  temperature,
+}
 
 // Reading status bands — weight and steps have no threshold so they return null
 enum MetricStatus { normal, warning, criticalLow, criticalHigh }
@@ -34,9 +44,17 @@ class HealthProvider extends ChangeNotifier {
   String? getSuggestionForMetric(String metricKey, double value) {
     switch (metricKey) {
       case 'bloodSugar':
-        // 180 mg/dL = 10 mmol/L (high threshold), 72 mg/dL = 4 mmol/L (low threshold)
         if (value > 180) return 'Blood sugar is high — reduce sugary drinks and rest';
         if (value < 72) return 'Blood sugar is low — eat something small now';
+        return null;
+      case 'bloodSugarBefore':
+        if (value > 125) return 'Fasting glucose is high — avoid late-night snacks';
+        if (value < 70) return 'Fasting glucose is low — eat something small now';
+        return null;
+      case 'bloodSugarAfter':
+        if (value > 199) return 'Post-meal glucose is very high — limit carbs next meal';
+        if (value > 140) return 'Post-meal glucose is elevated — consider a short walk';
+        if (value < 70) return 'Post-meal glucose is low — drink juice or eat a snack';
         return null;
       case 'systolic':
         if (value > 140) return 'BP is elevated — avoid caffeine and rest quietly';
@@ -50,6 +68,11 @@ class HealthProvider extends ChangeNotifier {
         return null;
       case 'weight':
         return 'Stay hydrated — drink water regularly';
+      case 'temperature':
+        if (value > 38.5) return 'Fever detected — rest, stay hydrated, seek care if it persists';
+        if (value > 37.5) return 'Slightly elevated temperature — monitor closely';
+        if (value < 35.5) return 'Temperature is low — warm up and monitor';
+        return null;
       default:
         return null;
     }
@@ -63,6 +86,18 @@ class HealthProvider extends ChangeNotifier {
         if (value < 70) return MetricStatus.criticalLow;
         if (value <= 180) return MetricStatus.normal;
         if (value <= 300) return MetricStatus.warning;
+        return MetricStatus.criticalHigh;
+
+      case HealthMetric.bloodSugarBefore:
+        if (value < 70) return MetricStatus.criticalLow;
+        if (value <= 99) return MetricStatus.normal;
+        if (value <= 125) return MetricStatus.warning;
+        return MetricStatus.criticalHigh;
+
+      case HealthMetric.bloodSugarAfter:
+        if (value < 70) return MetricStatus.criticalLow;
+        if (value <= 140) return MetricStatus.normal;
+        if (value <= 199) return MetricStatus.warning;
         return MetricStatus.criticalHigh;
 
       case HealthMetric.systolic:
@@ -81,6 +116,12 @@ class HealthProvider extends ChangeNotifier {
         if (value < 50) return MetricStatus.criticalLow;
         if (value <= 100) return MetricStatus.normal;
         if (value <= 120) return MetricStatus.warning;
+        return MetricStatus.criticalHigh;
+
+      case HealthMetric.temperature:
+        if (value < 35.5) return MetricStatus.criticalLow;
+        if (value <= 37.5) return MetricStatus.normal;
+        if (value <= 38.5) return MetricStatus.warning;
         return MetricStatus.criticalHigh;
 
       // No evaluation needed for these

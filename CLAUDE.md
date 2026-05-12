@@ -222,6 +222,22 @@ None — all planned features complete.
 /users/{uid}/messages/{msgId} — text, timestamp, readByDoctor, patientName, patientId
 /bugReports/{reportId} — text, timestamp, patientId, patientName
 
+- Add Today's Reading Redesign (branch: feature/profile-redesign):
+  - Replaced the old 3-stacked-bottom-sheet flow (add sheet → measurement sheet → TextField input sheet) with two full-screen Navigator.push pages
+  - lib/features/health/models/metric_config.dart: shared MetricConfig data class (title, icon, unit, min, max) — extracted from home_screen so new screens can import it
+  - lib/features/health/widgets/ruler_picker.dart: custom horizontal ruler picker — tick marks with major/minor intervals, center indicator line, edge fade gradients, HapticFeedback.selectionClick() on each tick change; no new packages
+  - lib/features/health/screens/add_reading_list_screen.dart: full-screen measurement list; search bar; "Popular for you" section (disease-aware — diabetes → bloodSugarBefore/After/weight, blood_pressure/heart → BP/weight, other → BP/weight/temperature); "All measurements" section with 5 items; routes single metrics to AddReadingInputScreen, Blood Pressure to BloodPressureInputScreen; pops itself with true after a successful save so home screen receives the result
+  - lib/features/health/screens/add_reading_input_screen.dart: full-screen input for single-metric readings; large value display (64sp); RulerPicker; editable Date row (blocks future dates) + Time row (defaults to now); "Track now" NuvitaButton; pops with true on success
+  - lib/features/health/screens/blood_pressure_input_screen.dart: combined BP input; Sys/Dia/Pulse segment tabs; shared ruler updates per active tab; summary chips show all three values simultaneously (tap to jump to that field); "Track now" saves all 3 readings in parallel via Future.wait (systolic, diastolic, heartRate) with the same timestamp; pops with true on success
+  - health_provider.dart: added bloodSugarBefore, bloodSugarAfter, temperature to HealthMetric enum; added clinical thresholds to getStatus() and tips to getSuggestionForMetric() for all three
+  - health_history_provider.dart: extended _unitForMetric() switch to cover new metric types (was non-exhaustive)
+  - home_screen.dart: _configs map updated to MetricConfig type + new entries for bloodSugarBefore/After/temperature; _showMeasurementSheet now async — awaits Navigator.push to AddReadingListScreen and shows green snackbar on return; _saveReading signature changed to (HealthMetric, double, DateTime) — custom timestamp stored in Firestore; bloodSugarBefore/After also satisfy a generic 'bloodSugar' task card; old _MetricInputSheet widget deleted
+
+- Doctor Patient Detail — Metrics Fix (branch: feature/profile-redesign):
+  - Fixed wrong Firestore keys: was looking for bloodPressureSystolic/Diastolic, corrected to systolic/diastolic
+  - All 7 metric cards now always shown (Systolic BP, Diastolic BP, Heart Rate, Blood Sugar Before/After Meal, Weight, Temperature) — "—" displayed for unrecorded metrics so doctors see the full picture without needing the patient to have logged every type
+  - Blood Pressure merged into one card: single _Card with three columns (Sys / Dia / Pulse) separated by vertical dividers; each column shows value, unit, and _StatusBadge independently — implemented via _BPSubValue and _BPDivider private widgets
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
@@ -236,8 +252,10 @@ lib/features/medication/ — medication_screen, add_medication, model, service
 lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider
-lib/features/health/models/ — health_reading
+lib/features/health/models/ — health_reading, metric_config
+lib/features/health/screens/ — add_reading_list_screen, add_reading_input_screen, blood_pressure_input_screen
 lib/features/health/services/ — health_reading_service, health_log_service (legacy)
+lib/features/health/widgets/ — ruler_picker
 lib/features/lifestyle/models/ — lifestyle_suggestion
 lib/features/lifestyle/services/ — lifestyle_engine
 lib/features/lifestyle/widgets/ — suggestion_card
