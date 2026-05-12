@@ -21,26 +21,20 @@ import '../../doctor/services/patient_suggestion_service.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
 
-enum TaskType { medication, reading }
-
 class DailyTask {
   final String id;
-  final TaskType type;
   final String timeOfDay;
   final String displayName;
   final String? subtitle;
   final String? medicationId;
-  final String? metricType;
   bool isCompleted;
 
   DailyTask({
     required this.id,
-    required this.type,
     required this.timeOfDay,
     required this.displayName,
     this.subtitle,
     this.medicationId,
-    this.metricType,
     this.isCompleted = false,
   });
 }
@@ -78,8 +72,6 @@ class _HomeBodyState extends State<_HomeBody> {
   bool _isLoadingTasks = false;
   bool _showMedTasks = true;
   bool _showReadingTasks = true;
-  // One controller per reading task, keyed by task id
-  final Map<String, TextEditingController> _readingControllers = {};
   final _suggestionService = PatientSuggestionService();
 
   static const _diseaseLabels = {
@@ -165,9 +157,6 @@ class _HomeBodyState extends State<_HomeBody> {
 
   @override
   void dispose() {
-    for (final c in _readingControllers.values) {
-      c.dispose();
-    }
     super.dispose();
   }
 
@@ -239,12 +228,9 @@ class _HomeBodyState extends State<_HomeBody> {
     final tasks = <DailyTask>[];
     final today = DateTime.now();
     final todayStart = DateTime(today.year, today.month, today.day);
-    // Manual ISO date string — no intl dependency needed
     final todayStr =
         '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
-    // Resolve which task categories the user opted into during onboarding.
-    // Default to both if prefs are missing (guest or old install).
     final services = await PreferencesService.getSelectedServices();
     final showMeds =
         services.isEmpty || services.contains('medications');
@@ -258,7 +244,7 @@ class _HomeBodyState extends State<_HomeBody> {
       });
     }
 
-    // Step 1 — Medication tasks
+    // Medication tasks only
     if (uid != null && showMeds) {
       final meds = await MedicationService.loadAll();
       final prefs = await SharedPreferences.getInstance();
@@ -273,7 +259,6 @@ class _HomeBodyState extends State<_HomeBody> {
           final taken = prefs.getString(prefKey) == 'true';
           tasks.add(DailyTask(
             id: '${med.id}_$time',
-            type: TaskType.medication,
             timeOfDay: time,
             displayName: med.name,
             subtitle: med.dosage,
@@ -284,63 +269,6 @@ class _HomeBodyState extends State<_HomeBody> {
       }
     }
 
-    // Step 2 — Reading tasks, mapped to the user's disease
-    // Only added when the user opted into Measurements during onboarding.
-    const metricsByDisease = <String, List<String>>{
-      'diabetes': ['bloodSugar', 'weight'],
-      'blood_pressure': ['systolic', 'diastolic'],
-      'heart': ['heartRate', 'weight'],
-    };
-    const defaultTimes = <String, String>{
-      'bloodSugar': '08:00',
-      'systolic': '09:00',
-      'diastolic': '09:30',
-      'heartRate': '10:00',
-      'weight': '07:00',
-    };
-    const displayNames = <String, String>{
-      'bloodSugar': 'Log Blood Sugar',
-      'systolic': 'Log Blood Pressure',
-      'diastolic': 'Log Diastolic BP',
-      'heartRate': 'Log Heart Rate',
-      'weight': 'Log Weight',
-    };
-
-    final metrics = showReadings
-        ? (metricsByDisease[_diseaseType] ?? ['heartRate', 'weight'])
-        : <String>[];
-
-    for (final metric in metrics) {
-      bool loggedToday = false;
-      if (uid != null) {
-        try {
-          // Query by metricType only to avoid needing a composite index;
-          // filter by today's timestamp client-side.
-          final snap = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('readings')
-              .where('metricType', isEqualTo: metric)
-              .get();
-          loggedToday = snap.docs.any((d) {
-            final ts = d.data()['timestamp'];
-            if (ts is Timestamp) return ts.toDate().isAfter(todayStart);
-            return false;
-          });
-        } catch (_) {}
-      }
-
-      tasks.add(DailyTask(
-        id: 'reading_$metric',
-        type: TaskType.reading,
-        timeOfDay: defaultTimes[metric] ?? '09:00',
-        displayName: displayNames[metric] ?? 'Log $metric',
-        metricType: metric,
-        isCompleted: loggedToday,
-      ));
-    }
-
-    // Step 3 — Incomplete tasks sorted by time first, completed at bottom
     tasks.sort((a, b) {
       if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
       return a.timeOfDay.compareTo(b.timeOfDay);
@@ -775,8 +703,7 @@ class _HomeBodyState extends State<_HomeBody> {
 
   Widget _buildTaskCard(DailyTask task) {
     if (task.isCompleted) return _buildCompletedCard(task);
-    if (task.type == TaskType.medication) return _buildPendingMedCard(task);
-    return _buildPendingReadingCard(task);
+    return _buildPendingMedCard(task);
   }
 
   Widget _buildPendingMedCard(DailyTask task) {
@@ -836,87 +763,7 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  Widget _buildPendingReadingCard(DailyTask task) {
-    final metric = _metricEnumFor(task.metricType ?? '');
-    final config = metric != null ? _configs[metric] : null;
-    final controller = _readingControllers.putIfAbsent(
-        task.id, () => TextEditingController());
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                task.timeOfDay,
-                style: AppTextStyles.label.copyWith(
-                  color: AppColors.primary,
-                  fontSize: 13,
-                ),
-              ),
-              const Spacer(),
-              Icon(config?.icon ?? Icons.monitor_heart_rounded,
-                  color: AppColors.primary, size: 20),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(task.displayName, style: AppTextStyles.heading3),
-          const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              hintText: 'Enter value',
-              suffixText: config?.unit ?? '',
-              suffixStyle: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.secondary),
-              filled: true,
-              fillColor: AppColors.background,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => _logReading(task, controller),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.white,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Log',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCompletedCard(DailyTask task) {
-    final isMed = task.type == TaskType.medication;
     return Opacity(
       opacity: 0.6,
       child: Container(
@@ -939,10 +786,7 @@ class _HomeBodyState extends State<_HomeBody> {
                     style: AppTextStyles.label.copyWith(
                         color: Colors.grey.shade700, fontSize: 14),
                   ),
-                  Text(
-                    isMed ? 'Taken' : 'Logged',
-                    style: AppTextStyles.bodySmall,
-                  ),
+                  const Text('Taken', style: AppTextStyles.bodySmall),
                 ],
               ),
             ),
@@ -968,7 +812,7 @@ class _HomeBodyState extends State<_HomeBody> {
             Text('All caught up!', style: AppTextStyles.heading3),
             const SizedBox(height: 8),
             Text(
-              'No outstanding tasks for today',
+              'No medications scheduled for today.\nUse the + button to log a reading.',
               style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -1025,74 +869,6 @@ class _HomeBodyState extends State<_HomeBody> {
         _sortTasks();
       });
     }
-  }
-
-  Future<void> _logReading(
-      DailyTask task, TextEditingController controller) async {
-    final text = controller.text.trim();
-    if (text.isEmpty) return;
-
-    final value = double.tryParse(text);
-    if (value == null) return;
-
-    final metric = _metricEnumFor(task.metricType ?? '');
-    if (metric == null) return;
-
-    final config = _configs[metric];
-
-    // Validate realistic range
-    if (config != null && (value < config.min || value > config.max)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              'Value must be between ${config.min.toInt()} and ${config.max.toInt()} ${config.unit}'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ));
-      }
-      return;
-    }
-
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final provider = context.read<HealthProvider>();
-    final historyProvider = context.read<HealthHistoryProvider>();
-
-    provider.updateValue(metric, value);
-    final status = provider.getStatus(metric, value);
-
-    // Save to Firestore via HealthReadingService (same path as provider.saveReadingToFirebase)
-    final reading = HealthReading(
-      id: '',
-      metricType: metric.name,
-      value: value,
-      unit: config?.unit ?? '',
-      status: _statusToString(status),
-      timestamp: DateTime.now(),
-    );
-    await HealthReadingService.saveReading(uid, reading);
-
-    // Keep history provider in sync for the daily summary card
-    historyProvider.addReading(metric, value);
-
-    controller.clear();
-    if (mounted) {
-      setState(() {
-        task.isCompleted = true;
-        _sortTasks();
-      });
-    }
-  }
-
-  HealthMetric? _metricEnumFor(String name) {
-    for (final m in HealthMetric.values) {
-      if (m.name == name) return m;
-    }
-    return null;
   }
 
   String _statusToString(MetricStatus? status) {
@@ -1262,25 +1038,6 @@ class _HomeBodyState extends State<_HomeBody> {
     );
     await HealthReadingService.saveReading(uid, reading);
     historyProvider.addReading(metric, value);
-
-    // Mark the matching task card as done so the list stays in sync.
-    // bloodSugarBefore/After also satisfy a generic 'bloodSugar' task.
-    final matchNames = {
-      metric.name,
-      if (metric == HealthMetric.bloodSugarBefore ||
-          metric == HealthMetric.bloodSugarAfter)
-        'bloodSugar',
-    };
-    if (mounted) {
-      setState(() {
-        final idx = _tasks.indexWhere((t) =>
-            t.type == TaskType.reading && matchNames.contains(t.metricType));
-        if (idx != -1) {
-          _tasks[idx].isCompleted = true;
-          _sortTasks();
-        }
-      });
-    }
   }
 }
 

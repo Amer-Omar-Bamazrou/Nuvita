@@ -181,6 +181,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  Future<void> _skipToLogin() async {
+    await PreferencesService.setOnboardingComplete();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
   Future<void> _skipToGuest() async {
     await PreferencesService.setOnboardingComplete();
     if (!mounted) return;
@@ -536,8 +544,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
           child: NuvitaButton(label: 'Next', onPressed: _goNext),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+          child: GestureDetector(
+            onTap: _skipToLogin,
+            child: const Text(
+              'Already have an account? Sign in',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.secondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ),
       ],
     );

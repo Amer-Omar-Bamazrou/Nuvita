@@ -64,7 +64,11 @@ void main() async {
 
   await NotificationService.initialize(navigatorKey: navigatorKey);
   if (scheduleWellness) {
-    await NotificationService.scheduleDailyWellnessReminder();
+    try {
+      await NotificationService.scheduleDailyWellnessReminder();
+    } catch (_) {
+      // Exact alarms may not be permitted on Android 12+; non-critical
+    }
   }
 
   // Handles appointment notification taps — wired here to avoid circular

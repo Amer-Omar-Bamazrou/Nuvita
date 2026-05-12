@@ -8,8 +8,6 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
-import '../../report/screens/report_screen.dart';
-import '../../appointments/screens/appointments_screen.dart';
 import '../../../core/services/notification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -657,35 +655,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 12),
 
-              // ── Card 2 — Requests ───────────────────────────────────────────
-              _sectionCard(
-                icon: Icons.request_page_outlined,
-                title: 'Requests',
-                children: [
-                  _tile(
-                    leading: Icons.picture_as_pdf_rounded,
-                    title: 'Health Report',
-                    subtitle: 'Generate and share your health report',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ReportScreen()),
-                    ),
-                  ),
-                  _divider(),
-                  _tile(
-                    leading: Icons.calendar_today_rounded,
-                    title: 'Appointments',
-                    subtitle: 'Manage your doctor appointments',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const AppointmentsScreen()),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // ── Card 3 — Account & Backup ───────────────────────────────────
+              // ── Card 2 — Account & Backup ───────────────────────────────────
               _sectionCard(
                 icon: Icons.backup_outlined,
                 title: 'Account & Backup',
@@ -748,7 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 12),
 
-              // ── Card 4 — Support ────────────────────────────────────────────
+              // ── Card 3 — Support ────────────────────────────────────────────
               _sectionCard(
                 icon: Icons.support_agent_outlined,
                 title: 'Support',

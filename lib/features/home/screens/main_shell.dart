@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import 'home_screen.dart';
-import '../../medication/screens/medication_screen.dart';
+import '../../tracking/screens/tracking_screen.dart';
 import '../../history/screens/history_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
@@ -18,7 +18,7 @@ class _MainShellState extends State<MainShell> {
   // IndexedStack keeps all screens alive — state survives tab switches
   static const _screens = [
     HomeScreen(),
-    MedicationScreen(),
+    TrackingScreen(),
     HistoryScreen(),
     ProfileScreen(),
   ];
@@ -59,8 +59,8 @@ class _MainShellState extends State<MainShell> {
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.medication_rounded),
-              label: 'Medications',
+              icon: Icon(Icons.track_changes_rounded),
+              label: 'Tracking',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.bar_chart_rounded),
