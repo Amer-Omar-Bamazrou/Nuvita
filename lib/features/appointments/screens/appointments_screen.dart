@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../models/appointment_model.dart';
@@ -34,6 +35,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await AppointmentService.syncFromFirebase(uid);
+    }
+
     final upcoming = await AppointmentService.getUpcomingAppointments();
     final past = await AppointmentService.getPastAppointments();
     if (!mounted) return;
@@ -47,6 +54,17 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
   Future<void> _openAddScreen() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AddAppointmentScreen()),
+    );
+    if (result == true && mounted) {
+      _loadData();
+    }
+  }
+
+  Future<void> _openEditScreen(AppointmentModel apt) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddAppointmentScreen(existing: apt),
+      ),
     );
     if (result == true && mounted) {
       _loadData();
@@ -279,29 +297,49 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
               ],
             ],
           ),
-          // "Mark as Done" only for pending upcoming cards
           if (!isPast && !isCompleted) ...[
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => _markDone(apt.id),
-                icon: const Icon(Icons.check_circle_outline_rounded,
-                    size: 16, color: AppColors.success),
-                label: Text(
-                  'Mark as Done',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _openEditScreen(apt),
+                  icon: const Icon(Icons.edit_outlined,
+                      size: 16, color: AppColors.primary),
+                  label: Text(
+                    'Edit',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => _markDone(apt.id),
+                  icon: const Icon(Icons.check_circle_outline_rounded,
+                      size: 16, color: AppColors.success),
+                  label: Text(
+                    'Mark as Done',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ],

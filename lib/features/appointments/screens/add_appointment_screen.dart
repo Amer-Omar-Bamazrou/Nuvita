@@ -7,7 +7,8 @@ import '../models/appointment_model.dart';
 import '../services/appointment_service.dart';
 
 class AddAppointmentScreen extends StatefulWidget {
-  const AddAppointmentScreen({super.key});
+  final AppointmentModel? existing;
+  const AddAppointmentScreen({super.key, this.existing});
 
   @override
   State<AddAppointmentScreen> createState() => _AddAppointmentScreenState();
@@ -20,11 +21,12 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
 
-  // Default to tomorrow so the date picker opens in a sensible state
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
   int _reminderMinutes = 60;
   bool _isSaving = false;
+
+  bool get _isEditMode => widget.existing != null;
 
   static const _reminderOptions = [
     {'label': '15 minutes before', 'value': 15},
@@ -33,6 +35,21 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
     {'label': '1 day before', 'value': 1440},
     {'label': '2 days before', 'value': 2880},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final apt = widget.existing;
+    if (apt != null) {
+      _doctorController.text = apt.doctorName;
+      _specialityController.text = apt.speciality;
+      _locationController.text = apt.location;
+      _notesController.text = apt.notes;
+      _selectedDate = DateTime(apt.dateTime.year, apt.dateTime.month, apt.dateTime.day);
+      _selectedTime = TimeOfDay(hour: apt.dateTime.hour, minute: apt.dateTime.minute);
+      _reminderMinutes = apt.reminderMinutes;
+    }
+  }
 
   @override
   void dispose() {
@@ -97,6 +114,25 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
       _selectedTime.minute,
     );
 
+    if (_isEditMode) {
+      final updated = widget.existing!.copyWith(
+        doctorName: _doctorController.text.trim(),
+        speciality: _specialityController.text.trim(),
+        location: _locationController.text.trim(),
+        dateTime: appointmentDateTime,
+        notes: _notesController.text.trim(),
+        reminderMinutes: _reminderMinutes,
+      );
+
+      await AppointmentService.cancelReminder(updated.id);
+      await AppointmentService.updateAppointment(updated);
+      await AppointmentService.scheduleReminder(updated);
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      return;
+    }
+
     final appointment = AppointmentModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       doctorName: _doctorController.text.trim(),
@@ -142,7 +178,10 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
               color: AppColors.primary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Add Appointment', style: AppTextStyles.heading3),
+        title: Text(
+          _isEditMode ? 'Edit Appointment' : 'Add Appointment',
+          style: AppTextStyles.heading3,
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -210,7 +249,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
               ),
               const SizedBox(height: 32),
               NuvitaButton(
-                label: 'Save Appointment',
+                label: _isEditMode ? 'Update Appointment' : 'Save Appointment',
                 onPressed: _onSave,
                 isLoading: _isSaving,
                 icon: Icons.check_rounded,

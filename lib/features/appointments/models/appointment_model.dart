@@ -22,15 +22,24 @@ class AppointmentModel {
     this.isConfirmed = false,
   });
 
-  AppointmentModel copyWith({bool? isCompleted, bool? isConfirmed}) {
+  AppointmentModel copyWith({
+    String? doctorName,
+    String? speciality,
+    String? location,
+    DateTime? dateTime,
+    String? notes,
+    int? reminderMinutes,
+    bool? isCompleted,
+    bool? isConfirmed,
+  }) {
     return AppointmentModel(
       id: id,
-      doctorName: doctorName,
-      speciality: speciality,
-      location: location,
-      dateTime: dateTime,
-      notes: notes,
-      reminderMinutes: reminderMinutes,
+      doctorName: doctorName ?? this.doctorName,
+      speciality: speciality ?? this.speciality,
+      location: location ?? this.location,
+      dateTime: dateTime ?? this.dateTime,
+      notes: notes ?? this.notes,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       isCompleted: isCompleted ?? this.isCompleted,
       isConfirmed: isConfirmed ?? this.isConfirmed,
     );
