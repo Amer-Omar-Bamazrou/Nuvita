@@ -19,7 +19,8 @@ enum _TimeRange { days7, days30, months3 }
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 class ChartsScreen extends StatefulWidget {
-  const ChartsScreen({super.key});
+  final String? preselectedMetric;
+  const ChartsScreen({super.key, this.preselectedMetric});
 
   @override
   State<ChartsScreen> createState() => _ChartsScreenState();
@@ -43,7 +44,24 @@ class _ChartsScreenState extends State<ChartsScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.preselectedMetric != null) {
+      final m = _chartMetricFromString(widget.preselectedMetric!);
+      if (m != null) _metric = m;
+    }
     _loadDisease();
+  }
+
+  static _ChartMetric? _chartMetricFromString(String s) {
+    switch (s) {
+      case 'systolic':
+        return _ChartMetric.systolic;
+      case 'heartRate':
+        return _ChartMetric.heartRate;
+      case 'bloodSugar':
+        return _ChartMetric.bloodSugar;
+      default:
+        return null;
+    }
   }
 
   // ── Disease type ──────────────────────────────────────────────────────────
@@ -65,7 +83,9 @@ class _ChartsScreenState extends State<ChartsScreen> {
 
       setState(() {
         _diseaseType = disease;
-        _metric = _defaultMetric(disease);
+        if (widget.preselectedMetric == null) {
+          _metric = _defaultMetric(disease);
+        }
         _loadingDisease = false;
       });
     } catch (_) {

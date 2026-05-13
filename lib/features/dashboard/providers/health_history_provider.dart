@@ -7,10 +7,13 @@ class HealthHistoryProvider extends ChangeNotifier {
   final List<HealthReading> _readings = []; // maintained newest-first
   final HealthProvider _evaluator = HealthProvider();
   bool _loaded = false;
+  bool _hasMore = true;
 
   List<HealthReading> get allReadings => List.unmodifiable(_readings);
 
   bool get isLoaded => _loaded;
+
+  bool get hasMore => _hasMore;
 
   int get todayCount {
     final now = DateTime.now();
@@ -25,16 +28,35 @@ class HealthHistoryProvider extends ChangeNotifier {
   DateTime? get lastReadingTime =>
       _readings.isEmpty ? null : _readings.first.timestamp;
 
-  // Loads the last 90 days of readings from Firestore once per session.
-  // No-ops on repeat calls to avoid redundant Firestore fetches.
   Future<void> loadReadings(String uid) async {
     if (_loaded) return;
     try {
-      final list = await HealthReadingService.getReadingsLastDays(uid, 90);
+      final list = await HealthReadingService.getReadingsPaginated(uid, limit: 30);
       _readings
         ..clear()
-        ..addAll(list); // already newest-first from service
+        ..addAll(list);
+      _hasMore = list.length >= 30;
       _loaded = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> forceReload(String uid) async {
+    _loaded = false;
+    _hasMore = true;
+    _readings.clear();
+    notifyListeners();
+    await loadReadings(uid);
+  }
+
+  Future<void> loadMore(String uid) async {
+    if (!_hasMore || _readings.isEmpty) return;
+    try {
+      final lastTimestamp = _readings.last.timestamp;
+      final list = await HealthReadingService.getReadingsPaginated(
+          uid, limit: 30, startAfter: lastTimestamp);
+      _readings.addAll(list);
+      _hasMore = list.length >= 30;
       notifyListeners();
     } catch (_) {}
   }
@@ -82,8 +104,8 @@ class HealthHistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Updates a reading's value and status in the in-memory list.
-  void patchReading(HealthReading original, double newValue, String newStatus) {
+  void patchReading(HealthReading original, double newValue, String newStatus,
+      {DateTime? newTimestamp}) {
     int i;
     if (original.id.isNotEmpty) {
       i = _readings.indexWhere((r) => r.id == original.id);
@@ -95,15 +117,29 @@ class HealthHistoryProvider extends ChangeNotifier {
     }
     if (i == -1) return;
     final old = _readings[i];
-    _readings[i] = HealthReading(
+    final updated = HealthReading(
       id: old.id,
       metricType: old.metricType,
       value: newValue,
       unit: old.unit,
       status: newStatus,
-      timestamp: old.timestamp,
+      timestamp: newTimestamp ?? old.timestamp,
       note: old.note,
     );
+
+    if (newTimestamp != null) {
+      _readings.removeAt(i);
+      final insertIdx = _readings.indexWhere(
+        (r) => r.timestamp.isBefore(updated.timestamp),
+      );
+      if (insertIdx == -1) {
+        _readings.add(updated);
+      } else {
+        _readings.insert(insertIdx, updated);
+      }
+    } else {
+      _readings[i] = updated;
+    }
     notifyListeners();
   }
 

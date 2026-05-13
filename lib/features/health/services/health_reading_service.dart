@@ -63,10 +63,29 @@ class HealthReadingService {
   }
 
   static Future<void> updateReading(
-      String uid, String readingId, double newValue, String newStatus) async {
-    await _col(uid).doc(readingId).update({
+      String uid, String readingId, double newValue, String newStatus,
+      {DateTime? timestamp}) async {
+    final data = <String, dynamic>{
       'value': newValue,
       'status': newStatus,
-    });
+    };
+    if (timestamp != null) {
+      data['timestamp'] = Timestamp.fromDate(timestamp);
+    }
+    await _col(uid).doc(readingId).update(data);
+  }
+
+  static Future<List<HealthReading>> getReadingsPaginated(
+      String uid, {int limit = 30, DateTime? startAfter}) async {
+    Query<Map<String, dynamic>> query = _col(uid)
+        .orderBy('timestamp', descending: true)
+        .limit(limit);
+    if (startAfter != null) {
+      query = query.startAfter([Timestamp.fromDate(startAfter)]);
+    }
+    final snap = await query.get();
+    return snap.docs
+        .map((d) => HealthReading.fromMap(d.id, d.data()))
+        .toList();
   }
 }

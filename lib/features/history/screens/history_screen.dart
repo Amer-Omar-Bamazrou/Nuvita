@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../charts/screens/charts_screen.dart';
@@ -10,15 +11,13 @@ import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../home/screens/main_shell.dart';
 
-// Filter chip definition — null metrics means "All"
 class _FilterOption {
   final String label;
   final Set<HealthMetric>? metrics;
   const _FilterOption(this.label, this.metrics);
 }
 
-const _filters = [
-  _FilterOption('All', null),
+const _filterOptions = [
   _FilterOption('Blood Sugar', {HealthMetric.bloodSugar}),
   _FilterOption('Blood Pressure', {HealthMetric.systolic, HealthMetric.diastolic}),
   _FilterOption('Heart Rate', {HealthMetric.heartRate}),
@@ -34,12 +33,13 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  int _activeFilter = 0;
+  final Set<int> _activeFilters = {};
+  bool _showHint = false;
+  bool _loadingMore = false;
 
   @override
   void initState() {
     super.initState();
-    // Trigger a load in case HomeScreen hasn't done it yet (e.g. deep-link)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -47,9 +47,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
         context.read<HealthHistoryProvider>().loadReadings(uid);
       }
     });
+    _checkHint();
   }
 
-  // ── Display helpers (now take String since HealthReading uses metricType) ──
+  Future<void> _checkHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('history_hint_shown') != true) {
+      if (mounted) setState(() => _showHint = true);
+      await prefs.setBool('history_hint_shown', true);
+    }
+  }
+
+  // Build the combined metric set from active filters
+  Set<HealthMetric>? get _combinedMetrics {
+    if (_activeFilters.isEmpty) return null;
+    final combined = <HealthMetric>{};
+    for (final i in _activeFilters) {
+      combined.addAll(_filterOptions[i].metrics!);
+    }
+    return combined;
+  }
+
+  // ── Display helpers ──
 
   String _metricLabel(String metricType) {
     switch (metricType) {
@@ -124,7 +143,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Status strings are already display-ready ('Normal', 'Warning', 'Low', 'High', 'Logged')
   Color _statusColor(String status) {
     switch (status) {
       case 'Normal':
@@ -146,17 +164,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '$hour:$minute $period';
   }
 
-  // Groups a newest-first list of readings into Today / Yesterday / date strings.
-  // No reversal needed — the provider already keeps the list newest-first.
-  Map<String, List<HealthReading>> _groupByDate(
-      List<HealthReading> readings) {
+  Map<String, List<HealthReading>> _groupByDate(List<HealthReading> readings) {
     final map = <String, List<HealthReading>>{};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
     for (final r in readings) {
-      final day = DateTime(r.timestamp.year, r.timestamp.month, r.timestamp.day);
+      final day =
+          DateTime(r.timestamp.year, r.timestamp.month, r.timestamp.day);
       String key;
       if (day == today) {
         key = 'Today';
@@ -178,7 +194,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return months[m];
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────────
+  // ── Delete ──
 
   void _deleteReading(HealthReading reading) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -210,13 +226,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
-  // ── Edit ──────────────────────────────────────────────────────────────────────
+  // ── Edit ──
 
-  // Opens the edit sheet and waits for the user's new value.
-  // Controller lifecycle is managed inside _EditReadingSheet — not here —
-  // to avoid disposing it while the exit animation is still running.
   Future<void> _showEditSheet(HealthReading reading) async {
-    final newValue = await showModalBottomSheet<double>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -231,29 +244,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
 
-    if (newValue != null && mounted) {
-      _saveEdit(reading, newValue);
+    if (result != null && mounted) {
+      _saveEdit(
+        reading,
+        result['value'] as double,
+        result['timestamp'] as DateTime,
+      );
     }
   }
 
-  Future<void> _saveEdit(HealthReading reading, double newValue) async {
+  Future<void> _saveEdit(
+      HealthReading reading, double newValue, DateTime newTimestamp) async {
     final newStatus = _statusForValue(reading.metricType, newValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final provider = context.read<HealthHistoryProvider>();
 
-    provider.patchReading(reading, newValue, newStatus);
+    final timestampChanged = reading.timestamp != newTimestamp;
+    provider.patchReading(reading, newValue, newStatus,
+        newTimestamp: timestampChanged ? newTimestamp : null);
 
     if (uid != null && reading.id.isNotEmpty) {
       try {
         await HealthReadingService.updateReading(
-            uid, reading.id, newValue, newStatus);
+          uid,
+          reading.id,
+          newValue,
+          newStatus,
+          timestamp: timestampChanged ? newTimestamp : null,
+        );
       } catch (e) {
         debugPrint('HistoryScreen._saveEdit: $e');
       }
     }
   }
 
-  // Mirrors HealthProvider.getStatus thresholds to recalculate status on edit
   String _statusForValue(String metricType, double value) {
     switch (metricType) {
       case 'bloodSugar':
@@ -283,15 +307,67 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   List<double> _validRange(String metricType) {
     switch (metricType) {
-      case 'bloodSugar': return [1, 600];
-      case 'systolic':   return [60, 250];
-      case 'diastolic':  return [40, 180];
-      case 'heartRate':  return [30, 250];
-      case 'weight':     return [10, 300];
-      case 'steps':      return [0, 100000];
-      default:           return [0, 99999];
+      case 'bloodSugar':
+        return [1, 600];
+      case 'systolic':
+        return [60, 250];
+      case 'diastolic':
+        return [40, 180];
+      case 'heartRate':
+        return [30, 250];
+      case 'weight':
+        return [10, 300];
+      case 'steps':
+        return [0, 100000];
+      default:
+        return [0, 99999];
     }
   }
+
+  // ── Pull to refresh ──
+
+  Future<void> _onRefresh() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await context.read<HealthHistoryProvider>().forceReload(uid);
+  }
+
+  // ── Load more ──
+
+  Future<void> _onLoadMore() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    setState(() => _loadingMore = true);
+    await context.read<HealthHistoryProvider>().loadMore(uid);
+    if (mounted) setState(() => _loadingMore = false);
+  }
+
+  // ── Chart filter pass ──
+
+  void _openCharts() {
+    String? preselected;
+    if (_activeFilters.length == 1) {
+      final label = _filterOptions[_activeFilters.first].label;
+      switch (label) {
+        case 'Blood Sugar':
+          preselected = 'bloodSugar';
+          break;
+        case 'Blood Pressure':
+          preselected = 'systolic';
+          break;
+        case 'Heart Rate':
+          preselected = 'heartRate';
+          break;
+      }
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => ChartsScreen(preselectedMetric: preselected)),
+    );
+  }
+
+  // ── Build ──
 
   @override
   Widget build(BuildContext context) {
@@ -313,19 +389,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           IconButton(
             icon: const Icon(Icons.show_chart_rounded, color: AppColors.white),
             tooltip: 'View Trends',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ChartsScreen()),
-              );
-            },
+            onPressed: _openCharts,
           ),
         ],
       ),
       body: Consumer<HealthHistoryProvider>(
         builder: (context, provider, _) {
-          final filtered =
-              provider.filteredReadings(_filters[_activeFilter].metrics);
+          final filtered = provider.filteredReadings(_combinedMetrics);
           final uid = FirebaseAuth.instance.currentUser?.uid;
           final isLoading = uid != null && !provider.isLoaded;
 
@@ -333,7 +403,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildFilterChips(),
-              if (provider.allReadings.isNotEmpty) _buildSummaryCard(provider),
+              if (provider.allReadings.isNotEmpty)
+                _buildSummaryCard(filtered),
               Expanded(
                 child: isLoading
                     ? const Center(
@@ -341,10 +412,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           color: AppColors.primary,
                         ),
                       )
-                    : filtered.isEmpty
-                        ? _buildEmptyState()
-                        : _buildReadingsList(filtered),
+                    : RefreshIndicator(
+                        color: AppColors.primary,
+                        onRefresh: _onRefresh,
+                        child: filtered.isEmpty
+                            ? _buildEmptyState()
+                            : _buildReadingsList(filtered, provider),
+                      ),
               ),
+              if (_showHint)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Center(
+                    child: Text(
+                      '\u{1F4A1} Tip: Swipe left to delete, long press to edit',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -353,30 +442,69 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildFilterChips() {
+    final hasActive = _activeFilters.isNotEmpty;
+
     return SizedBox(
       height: 52,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: _filters.length,
+        itemCount: _filterOptions.length + (hasActive ? 1 : 0),
         separatorBuilder: (_, i) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final selected = i == _activeFilter;
+          // "Clear" chip at end
+          if (hasActive && i == _filterOptions.length) {
+            return GestureDetector(
+              onTap: () => setState(() => _activeFilters.clear()),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.primary),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.close_rounded,
+                        size: 14, color: AppColors.primary),
+                    SizedBox(width: 4),
+                    Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final selected = _activeFilters.contains(i);
           return GestureDetector(
-            onTap: () => setState(() => _activeFilter = i),
+            onTap: () {
+              setState(() {
+                if (selected) {
+                  _activeFilters.remove(i);
+                } else {
+                  _activeFilters.add(i);
+                }
+              });
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
-                color: selected ? AppColors.primary : AppColors.white,
+                color: selected ? AppColors.primary : const Color(0xFFE0E0E0),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: selected ? AppColors.primary : AppColors.divider,
-                ),
               ),
               child: Text(
-                _filters[i].label,
+                _filterOptions[i].label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -390,9 +518,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildSummaryCard(HealthHistoryProvider provider) {
-    final lastTime = provider.lastReadingTime;
+  Widget _buildSummaryCard(List<HealthReading> filtered) {
+    final now = DateTime.now();
+    final todayCount = filtered
+        .where((r) =>
+            r.timestamp.year == now.year &&
+            r.timestamp.month == now.month &&
+            r.timestamp.day == now.day)
+        .length;
+    final lastTime =
+        filtered.isNotEmpty ? filtered.first.timestamp : null;
     final timeStr = lastTime != null ? _formatTime(lastTime) : '--';
+
+    final title = _activeFilters.isEmpty
+        ? 'Today\'s Readings'
+        : _activeFilters.length == 1
+            ? '${_filterOptions[_activeFilters.first].label} Today'
+            : 'Filtered Readings Today';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -403,14 +545,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.bar_chart_rounded, color: AppColors.white, size: 32),
+          const Icon(Icons.bar_chart_rounded,
+              color: AppColors.white, size: 32),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Today\'s Readings',
+                  title,
                   style: TextStyle(
                     color: AppColors.white.withOpacity(0.75),
                     fontSize: 13,
@@ -418,7 +561,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${provider.todayCount} ${provider.todayCount == 1 ? 'reading' : 'readings'} logged',
+                  '$todayCount ${todayCount == 1 ? 'reading' : 'readings'} logged',
                   style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 16,
@@ -455,76 +598,110 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.divider, width: 2),
-              ),
-              child: const Icon(
-                Icons.bar_chart_rounded,
-                size: 44,
-                color: AppColors.divider,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'No readings yet',
-              style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Log your first health reading\nfrom the home screen.',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const MainShell()),
-                    (route) => false,
-                  );
-                },
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text('Log First Reading'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.history_rounded,
+                    size: 64,
+                    color: AppColors.primary,
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 20),
+                  Text(
+                    'No readings yet',
+                    style:
+                        AppTextStyles.heading3.copyWith(color: AppColors.primary),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your health readings will appear here\nonce you start logging them from\nthe home screen',
+                    style: AppTextStyles.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const MainShell()),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text(
+                      'Go to Home',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildReadingsList(List<HealthReading> readings) {
+  Widget _buildReadingsList(
+      List<HealthReading> readings, HealthHistoryProvider provider) {
     final grouped = _groupByDate(readings);
+    final itemCount =
+        _countItems(grouped) + (provider.hasMore ? 1 : 0);
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: _countItems(grouped),
+      itemCount: itemCount,
       itemBuilder: (context, index) {
+        final dataCount = _countItems(grouped);
+
+        // "Load older readings" button
+        if (index == dataCount) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: _loadingMore
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : OutlinedButton(
+                      onPressed: _onLoadMore,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                      ),
+                      child: const Text(
+                        'Load older readings',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+            ),
+          );
+        }
+
         return _buildItemAtIndex(grouped, index);
       },
     );
@@ -588,13 +765,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
           color: AppColors.error,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Icon(Icons.delete_rounded, color: Colors.white, size: 26),
+        child:
+            const Icon(Icons.delete_rounded, color: Colors.white, size: 26),
       ),
       child: GestureDetector(
         onLongPress: () => _showEditSheet(reading),
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(14),
@@ -608,7 +787,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           child: Row(
             children: [
-              // Metric icon bubble
               Container(
                 width: 44,
                 height: 44,
@@ -620,7 +798,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: color, size: 22),
               ),
               const SizedBox(width: 12),
-              // Metric name + status badge
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,7 +830,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ),
-              // Value + time
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -698,9 +874,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-// ── Edit reading sheet ────────────────────────────────────────────────────────
-// Separate StatefulWidget so the TextEditingController is created in initState
-// and disposed in dispose — after the exit animation fully completes.
+// ── Edit reading sheet ──
 
 class _EditReadingSheet extends StatefulWidget {
   final HealthReading reading;
@@ -721,6 +895,8 @@ class _EditReadingSheet extends StatefulWidget {
 
 class _EditReadingSheetState extends State<_EditReadingSheet> {
   late final TextEditingController _controller;
+  late DateTime _selectedDate;
+  late TimeOfDay _selectedTime;
 
   @override
   void initState() {
@@ -729,12 +905,82 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
     _controller = TextEditingController(
       text: v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(1),
     );
+    _selectedDate = DateTime(
+      widget.reading.timestamp.year,
+      widget.reading.timestamp.month,
+      widget.reading.timestamp.day,
+    );
+    _selectedTime = TimeOfDay(
+      hour: widget.reading.timestamp.hour,
+      minute: widget.reading.timestamp.minute,
+    );
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: DateTime(now.year, now.month, now.day),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: AppColors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: AppColors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedTime = picked);
+    }
+  }
+
+  String _formatDateDisplay(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (dt == today) return 'Today';
+    if (dt == yesterday) return 'Yesterday';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  String _formatTimeDisplay(TimeOfDay t) {
+    final hour = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final minute = t.minute.toString().padLeft(2, '0');
+    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
   }
 
   @override
@@ -793,8 +1039,8 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
               labelText: 'New value',
               labelStyle: const TextStyle(color: AppColors.secondary),
               suffixText: widget.unit,
-              suffixStyle: const TextStyle(
-                  color: AppColors.secondary, fontSize: 14),
+              suffixStyle:
+                  const TextStyle(color: AppColors.secondary, fontSize: 14),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppColors.divider),
@@ -804,9 +1050,23 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
                 borderSide:
                     const BorderSide(color: AppColors.primary, width: 2),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
+          ),
+          const SizedBox(height: 16),
+          _buildDateTimeRow(
+            label: 'Date',
+            value: _formatDateDisplay(_selectedDate),
+            icon: Icons.calendar_today_rounded,
+            onTap: _pickDate,
+          ),
+          const SizedBox(height: 10),
+          _buildDateTimeRow(
+            label: 'Time',
+            value: _formatTimeDisplay(_selectedTime),
+            icon: Icons.access_time_rounded,
+            onTap: _pickTime,
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -833,6 +1093,50 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
     );
   }
 
+  Widget _buildDateTimeRow({
+    required String label,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.secondary),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.secondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded,
+                size: 20, color: AppColors.secondary),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _onSave() {
     final raw = double.tryParse(_controller.text.trim());
     final range = widget.validRange;
@@ -849,7 +1153,18 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
       );
       return;
     }
-    // Pop and return the new value to _showEditSheet in the parent screen
-    Navigator.pop(context, raw);
+
+    final combined = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+
+    Navigator.pop(context, {
+      'value': raw,
+      'timestamp': combined,
+    });
   }
 }

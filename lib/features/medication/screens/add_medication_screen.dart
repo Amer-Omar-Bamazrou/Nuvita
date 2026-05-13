@@ -131,19 +131,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Future<void> _pickTime(int index) async {
-    final picked = await showTimePicker(
+    final picked = await showModalBottomSheet<TimeOfDay>(
       context: context,
-      initialTime: _times[index],
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: AppColors.primary,
-            onPrimary: AppColors.white,
-            surface: AppColors.white,
-          ),
-        ),
-        child: child!,
-      ),
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TimeScrollPicker(initialTime: _times[index]),
     );
     if (picked != null && mounted) {
       setState(() => _times[index] = picked);
@@ -606,6 +597,162 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Scroll wheel time picker ──
+
+class _TimeScrollPicker extends StatefulWidget {
+  final TimeOfDay initialTime;
+  const _TimeScrollPicker({required this.initialTime});
+
+  @override
+  State<_TimeScrollPicker> createState() => _TimeScrollPickerState();
+}
+
+class _TimeScrollPickerState extends State<_TimeScrollPicker> {
+  static const _itemExtent = 52.0;
+
+  // 96 slots: 24 hours × 4 (15-min intervals)
+  static final _slots = List.generate(96, (i) {
+    final hour = i ~/ 4;
+    final minute = (i % 4) * 15;
+    return TimeOfDay(hour: hour, minute: minute);
+  });
+
+  late final FixedExtentScrollController _controller;
+  late int _selectedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = _closestIndex(widget.initialTime);
+    _controller = FixedExtentScrollController(initialItem: _selectedIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  int _closestIndex(TimeOfDay time) {
+    final totalMinutes = time.hour * 60 + time.minute;
+    int best = 0;
+    int bestDiff = 9999;
+    for (int i = 0; i < _slots.length; i++) {
+      final slotMin = _slots[i].hour * 60 + _slots[i].minute;
+      final diff = (slotMin - totalMinutes).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  String _formatSlot(TimeOfDay t) {
+    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final m = t.minute.toString().padLeft(2, '0');
+    final p = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '${h.toString().padLeft(2, '0')} : $m  $p';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3C3C3C),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          SizedBox(
+            height: _itemExtent * 5,
+            child: Stack(
+              children: [
+                // Selection highlight lines
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        color: Colors.white24,
+                      ),
+                      SizedBox(height: _itemExtent - 2),
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        color: Colors.white24,
+                      ),
+                    ],
+                  ),
+                ),
+                // Scroll wheel
+                ListWheelScrollView.useDelegate(
+                  controller: _controller,
+                  itemExtent: _itemExtent,
+                  physics: const FixedExtentScrollPhysics(),
+                  diameterRatio: 6,
+                  perspective: 0.003,
+                  onSelectedItemChanged: (i) {
+                    setState(() => _selectedIndex = i);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: _slots.length,
+                    builder: (context, i) {
+                      final isSelected = i == _selectedIndex;
+                      return Center(
+                        child: Text(
+                          _formatSlot(_slots[i]),
+                          style: TextStyle(
+                            fontSize: isSelected ? 26 : 18,
+                            fontWeight:
+                                isSelected ? FontWeight.bold : FontWeight.w400,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.white38,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+            child: SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () =>
+                    Navigator.pop(context, _slots[_selectedIndex]),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                child: const Text('OK'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
