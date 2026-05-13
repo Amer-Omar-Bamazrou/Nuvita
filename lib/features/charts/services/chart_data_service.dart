@@ -45,6 +45,42 @@ class ChartDataService {
     }).toList();
   }
 
+  /// Fetches both systolic and diastolic readings for the BP dual-line chart.
+  static Future<Map<String, List<ChartDataPoint>>> getBPChartData(
+    String uid,
+    int days,
+  ) async {
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    final snap = await _col(uid)
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    final systolic = <ChartDataPoint>[];
+    final diastolic = <ChartDataPoint>[];
+
+    for (final d in snap.docs) {
+      final data = d.data();
+      final metric = data['metricType'] as String? ?? '';
+      if (metric != 'systolic' && metric != 'diastolic') continue;
+
+      final ts = data['timestamp'];
+      final DateTime dt = ts is Timestamp ? ts.toDate() : DateTime.now();
+      if (!dt.isAfter(cutoff)) continue;
+
+      final double value = (data['value'] as num?)?.toDouble() ?? 0.0;
+      final String status = data['status'] as String? ?? 'Logged';
+      final point = ChartDataPoint(date: dt, value: value, status: status);
+
+      if (metric == 'systolic') {
+        systolic.add(point);
+      } else {
+        diastolic.add(point);
+      }
+    }
+
+    return {'systolic': systolic, 'diastolic': diastolic};
+  }
+
   /// Splits data in half and compares averages.
   /// For heart rate: closer to 75 = improving.
   /// For all others: lower second half = improving.

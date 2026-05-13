@@ -8,9 +8,12 @@ class HealthChartWidget extends StatelessWidget {
   final List<ChartDataPoint> dataPoints;
   final String metricType;
   final String unit;
-
-  // Highlighted with a gold dot — set from ChartDataService.getPersonalBest()
   final ChartDataPoint? personalBest;
+
+  // Dual line support
+  final List<ChartDataPoint>? secondaryData;
+  final String? secondaryLabel;
+  final Color? secondaryColor;
 
   const HealthChartWidget({
     super.key,
@@ -18,7 +21,12 @@ class HealthChartWidget extends StatelessWidget {
     required this.metricType,
     required this.unit,
     this.personalBest,
+    this.secondaryData,
+    this.secondaryLabel,
+    this.secondaryColor,
   });
+
+  bool get _isDualLine => secondaryData != null && secondaryData!.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +36,6 @@ class HealthChartWidget extends StatelessWidget {
       return FlSpot(e.key.toDouble(), e.value.value);
     }).toList();
 
-    // Find personal best index for the custom dot painter
     final pbIndex = personalBest == null
         ? -1
         : dataPoints.indexWhere(
@@ -36,13 +43,22 @@ class HealthChartWidget extends StatelessWidget {
           );
 
     final values = dataPoints.map((p) => p.value).toList();
-    final minVal = values.reduce((a, b) => a < b ? a : b);
-    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    var minVal = values.reduce((a, b) => a < b ? a : b);
+    var maxVal = values.reduce((a, b) => a > b ? a : b);
+
+    // Include secondary data in Y range
+    List<FlSpot>? secondarySpots;
+    if (_isDualLine) {
+      secondarySpots = _alignSecondarySpots();
+      for (final s in secondarySpots) {
+        if (s.y < minVal) minVal = s.y;
+        if (s.y > maxVal) maxVal = s.y;
+      }
+    }
 
     final (normalMin, normalMax) = MetricThresholds.getNormalRange(metricType);
     final (_, warningMax) = MetricThresholds.getWarningRange(metricType);
 
-    // Give extra breathing room above and below the data
     final chartMinY = (minVal - 15).clamp(0.0, double.infinity);
     final chartMaxY = maxVal + 20;
 
@@ -52,7 +68,6 @@ class HealthChartWidget extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(0, 8, 16, 0),
         child: LineChart(
           LineChartData(
-            // Coloured horizontal bands for normal / warning / critical zones
             rangeAnnotations: RangeAnnotations(
               horizontalRangeAnnotations: _buildZones(
                 normalMin, normalMax, warningMax, chartMinY, chartMaxY,
@@ -61,6 +76,7 @@ class HealthChartWidget extends StatelessWidget {
             lineTouchData: LineTouchData(
               touchTooltipData: LineTouchTooltipData(
                 getTooltipItems: (touchedSpots) {
+                  if (_isDualLine) return _dualTooltip(touchedSpots);
                   return touchedSpots.map((s) {
                     final idx = s.spotIndex;
                     if (idx < 0 || idx >= dataPoints.length) return null;
@@ -86,7 +102,6 @@ class HealthChartWidget extends StatelessWidget {
                 strokeWidth: 1,
               ),
             ),
-            // Show only left + bottom borders for a clean axis look
             borderData: FlBorderData(
               show: true,
               border: Border(
@@ -139,15 +154,15 @@ class HealthChartWidget extends StatelessWidget {
               ),
             ),
             lineBarsData: [
+              // Primary line
               LineChartBarData(
                 spots: spots,
                 isCurved: true,
                 curveSmoothness: 0.3,
                 color: AppColors.primary,
                 barWidth: 2.5,
-                // Gradient fill below the line
                 belowBarData: BarAreaData(
-                  show: true,
+                  show: !_isDualLine,
                   gradient: LinearGradient(
                     colors: [
                       AppColors.primary.withOpacity(0.22),
@@ -159,7 +174,6 @@ class HealthChartWidget extends StatelessWidget {
                 ),
                 dotData: FlDotData(
                   getDotPainter: (spot, percent, barData, index) {
-                    // Gold star-like dot for personal best, standard dot for others
                     if (index == pbIndex) {
                       return FlDotCirclePainter(
                         radius: 6,
@@ -177,6 +191,26 @@ class HealthChartWidget extends StatelessWidget {
                   },
                 ),
               ),
+              // Secondary line (diastolic)
+              if (_isDualLine && secondarySpots != null)
+                LineChartBarData(
+                  spots: secondarySpots,
+                  isCurved: true,
+                  curveSmoothness: 0.3,
+                  color: secondaryColor ?? AppColors.secondary,
+                  barWidth: 2,
+                  belowBarData: BarAreaData(show: false),
+                  dotData: FlDotData(
+                    getDotPainter: (spot, percent, barData, index) {
+                      return FlDotCirclePainter(
+                        radius: 3,
+                        color: Colors.white,
+                        strokeWidth: 2,
+                        strokeColor: secondaryColor ?? AppColors.secondary,
+                      );
+                    },
+                  ),
+                ),
             ],
             minX: 0,
             maxX: (dataPoints.length - 1).toDouble(),
@@ -188,9 +222,72 @@ class HealthChartWidget extends StatelessWidget {
     );
   }
 
-  /// Continuous coloured zone bands clamped to the chart's visible Y range.
-  /// Without clamping, fl_chart renders annotations that are entirely below
-  /// chartMinY, which causes overflow artifacts at the bottom of the chart.
+  // Align secondary data points to primary data's x-axis by matching dates
+  List<FlSpot> _alignSecondarySpots() {
+    final secondary = secondaryData!;
+    final result = <FlSpot>[];
+
+    for (int i = 0; i < dataPoints.length; i++) {
+      final pDate = dataPoints[i].date;
+      // Find secondary point on same day
+      final match = secondary.where((s) =>
+          s.date.year == pDate.year &&
+          s.date.month == pDate.month &&
+          s.date.day == pDate.day);
+      if (match.isNotEmpty) {
+        result.add(FlSpot(i.toDouble(), match.first.value));
+      }
+    }
+
+    // If no date matches, plot secondary on its own indices
+    if (result.isEmpty) {
+      for (int i = 0; i < secondary.length && i < dataPoints.length; i++) {
+        result.add(FlSpot(i.toDouble(), secondary[i].value));
+      }
+    }
+
+    return result;
+  }
+
+  // Combined tooltip showing both Sys and Dia values
+  List<LineTooltipItem?> _dualTooltip(List<LineBarSpot> touchedSpots) {
+    if (touchedSpots.isEmpty) return [];
+
+    final idx = touchedSpots.first.spotIndex;
+    final date = idx >= 0 && idx < dataPoints.length
+        ? _fmtDate(dataPoints[idx].date)
+        : '';
+
+    String sysVal = '';
+    String diaVal = '';
+
+    for (final spot in touchedSpots) {
+      if (spot.barIndex == 0) {
+        sysVal = spot.y.toStringAsFixed(0);
+      } else if (spot.barIndex == 1) {
+        diaVal = spot.y.toStringAsFixed(0);
+      }
+    }
+
+    final lines = <String>[date];
+    if (sysVal.isNotEmpty) lines.add('Sys: $sysVal $unit');
+    if (diaVal.isNotEmpty) lines.add('Dia: $diaVal $unit');
+
+    // Show tooltip on first touched spot only
+    return [
+      LineTooltipItem(
+        lines.join('\n'),
+        const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      // Return null for subsequent spots to avoid duplicate tooltips
+      for (int i = 1; i < touchedSpots.length; i++) null,
+    ];
+  }
+
   List<HorizontalRangeAnnotation> _buildZones(
     double normalMin,
     double normalMax,
@@ -206,10 +303,10 @@ class HealthChartWidget extends StatelessWidget {
       if (hi > lo) zones.add(HorizontalRangeAnnotation(y1: lo, y2: hi, color: color));
     }
 
-    addZone(chartMinY, normalMin, const Color(0x26F44336));  // critical low  — red
-    addZone(normalMin, normalMax, const Color(0x1A4CAF50));  // normal        — green
-    addZone(normalMax, warningMax, const Color(0x1AFF9800)); // warning       — orange
-    addZone(warningMax, chartMaxY, const Color(0x26F44336)); // critical high — red
+    addZone(chartMinY, normalMin, const Color(0x26F44336));
+    addZone(normalMin, normalMax, const Color(0x1A4CAF50));
+    addZone(normalMax, warningMax, const Color(0x1AFF9800));
+    addZone(warningMax, chartMaxY, const Color(0x26F44336));
 
     return zones;
   }

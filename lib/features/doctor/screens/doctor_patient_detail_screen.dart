@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
+import '../../charts/models/chart_data_point.dart';
+import '../../charts/services/chart_data_service.dart';
+import '../../charts/widgets/health_chart_widget.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -25,10 +28,15 @@ class _DoctorPatientDetailScreenState
   bool _loadingReadings = true;
   bool _loadingMeds = true;
   bool _loadingAdherence = true;
+  bool _loadingChart = true;
   List<Map<String, dynamic>> _readings = [];
   List<Map<String, dynamic>> _medications = [];
   List<Map<String, dynamic>> _suggestions = [];
   List<_AdherenceDay> _adherenceDays = [];
+  List<ChartDataPoint> _chartPoints = [];
+  List<ChartDataPoint> _chartDiaPoints = [];
+  TrendDirection _chartTrend = TrendDirection.stable;
+  String _chartMetric = 'systolic';
 
   static const _frequencies = [
     'Once daily',
@@ -80,6 +88,7 @@ class _DoctorPatientDetailScreenState
     _loadMedications();
     _loadSuggestions();
     _loadAdherence();
+    _loadChart();
   }
 
   @override
@@ -187,6 +196,54 @@ class _DoctorPatientDetailScreenState
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingAdherence = false);
+    }
+  }
+
+  String get _patientDiseaseType {
+    final profile =
+        widget.patient['profile'] as Map<String, dynamic>? ?? {};
+    return profile['diseaseType'] as String? ?? 'other';
+  }
+
+  Future<void> _loadChart() async {
+    setState(() => _loadingChart = true);
+    try {
+      String metric;
+      switch (_patientDiseaseType) {
+        case 'diabetes':
+          metric = 'bloodSugar';
+          break;
+        case 'heart':
+          metric = 'heartRate';
+          break;
+        default:
+          metric = 'systolic';
+      }
+
+      List<ChartDataPoint> points;
+      List<ChartDataPoint> diaPoints = [];
+
+      if (metric == 'systolic') {
+        final bpData = await ChartDataService.getBPChartData(_uid, 7);
+        points = bpData['systolic'] ?? [];
+        diaPoints = bpData['diastolic'] ?? [];
+      } else {
+        points = await ChartDataService.getChartData(_uid, metric, 7);
+      }
+
+      final trend = ChartDataService.getTrend(points, metric);
+
+      if (!mounted) return;
+      setState(() {
+        _chartPoints = points;
+        _chartDiaPoints = diaPoints;
+        _chartTrend = trend;
+        _chartMetric = metric;
+        _loadingChart = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingChart = false);
     }
   }
 
@@ -410,6 +467,8 @@ class _DoctorPatientDetailScreenState
               flex: 6,
               child: Column(
                 children: [
+                  _buildHealthTrendsSection(),
+                  const SizedBox(height: 16),
                   _buildMedicationsSection(),
                   const SizedBox(height: 16),
                   _buildAdherenceSection(),
@@ -579,6 +638,134 @@ class _DoctorPatientDetailScreenState
   }
 
   // ── Right column ──────────────────────────────────────────────────────────
+
+  Widget _buildHealthTrendsSection() {
+    final isBP = _chartMetric == 'systolic';
+    final metricLabels = {
+      'systolic': 'Blood Pressure',
+      'heartRate': 'Heart Rate',
+      'bloodSugar': 'Blood Sugar',
+    };
+    final metricUnits = {
+      'systolic': 'mmHg',
+      'heartRate': 'bpm',
+      'bloodSugar': 'mg/dL',
+    };
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Health Trends'),
+          const SizedBox(height: 10),
+          if (_loadingChart)
+            const Center(
+                child: CircularProgressIndicator(color: _primary))
+          else if (_chartPoints.isEmpty)
+            Text('No chart data available.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
+          else ...[
+            // Legend
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  if (isBP) ...[
+                    _chartLegendDot(_primary, 'Systolic'),
+                    const SizedBox(width: 12),
+                    _chartLegendDot(
+                        const Color(0xFF508991), 'Diastolic'),
+                  ] else
+                    _chartLegendDot(
+                        _primary,
+                        metricLabels[_chartMetric] ?? _chartMetric),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 200,
+              child: HealthChartWidget(
+                dataPoints: _chartPoints,
+                metricType: _chartMetric,
+                unit: metricUnits[_chartMetric] ?? '',
+                secondaryData:
+                    isBP && _chartDiaPoints.isNotEmpty ? _chartDiaPoints : null,
+                secondaryLabel: isBP ? 'Diastolic' : null,
+                secondaryColor: isBP ? const Color(0xFF508991) : null,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Last 7 days',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+                const Spacer(),
+                _buildChartTrendBadge(),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chartLegendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+      ],
+    );
+  }
+
+  Widget _buildChartTrendBadge() {
+    IconData icon;
+    Color color;
+    String label;
+
+    switch (_chartTrend) {
+      case TrendDirection.improving:
+        icon = Icons.trending_up_rounded;
+        color = const Color(0xFF388E3C);
+        label = 'Improving';
+        break;
+      case TrendDirection.worsening:
+        icon = Icons.trending_down_rounded;
+        color = const Color(0xFFD32F2F);
+        label = 'Worsening';
+        break;
+      case TrendDirection.stable:
+        icon = Icons.trending_flat_rounded;
+        color = Colors.grey;
+        label = 'Stable';
+        break;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildMedicationsSection() {
     return _Card(

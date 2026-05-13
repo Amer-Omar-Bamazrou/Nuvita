@@ -35,8 +35,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
   bool _loadingChart = false;
 
   List<ChartDataPoint> _dataPoints = [];
+  List<ChartDataPoint> _diastolicPoints = [];
   TrendDirection _trend = TrendDirection.stable;
   double _average = 0;
+  double _diastolicAverage = 0;
   ChartDataPoint? _personalBest;
   Map<String, dynamic>? _weeklySummary;
   String? _comparisonInsight;
@@ -130,6 +132,8 @@ class _ChartsScreenState extends State<ChartsScreen> {
     }
   }
 
+  bool get _isBP => _metric == _ChartMetric.systolic;
+
   Future<void> _loadChartData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -138,16 +142,27 @@ class _ChartsScreenState extends State<ChartsScreen> {
 
     try {
       final metricType = _metricTypeStr(_metric);
-      final points = await ChartDataService.getChartData(uid, metricType, _days);
+      List<ChartDataPoint> points;
+      List<ChartDataPoint> diaPoints = [];
+
+      if (_isBP) {
+        final bpData = await ChartDataService.getBPChartData(uid, _days);
+        points = bpData['systolic'] ?? [];
+        diaPoints = bpData['diastolic'] ?? [];
+      } else {
+        points = await ChartDataService.getChartData(uid, metricType, _days);
+      }
 
       final trend = ChartDataService.getTrend(points, metricType);
       final avg = points.isEmpty
           ? 0.0
           : points.map((p) => p.value).reduce((a, b) => a + b) / points.length;
+      final diaAvg = diaPoints.isEmpty
+          ? 0.0
+          : diaPoints.map((p) => p.value).reduce((a, b) => a + b) / diaPoints.length;
       final best = ChartDataService.getPersonalBest(metricType, points);
       final summary = ChartDataService.getWeeklySummary(points);
 
-      // Comparison: only for 30d / 3m view, computed from already-fetched data
       String? comparison;
       if (_range != _TimeRange.days7 && points.length >= 2) {
         comparison = _computeComparison(points, metricType);
@@ -156,8 +171,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
       if (!mounted) return;
       setState(() {
         _dataPoints = points;
+        _diastolicPoints = diaPoints;
         _trend = trend;
         _average = avg;
+        _diastolicAverage = diaAvg;
         _personalBest = best;
         _weeklySummary = summary;
         _comparisonInsight = comparison;
@@ -211,6 +228,28 @@ class _ChartsScreenState extends State<ChartsScreen> {
     return lastAvg < prevAvg
         ? 'This period your average $label was $pct% lower than the previous 7 days.'
         : 'This period your average $label was $pct% higher than the previous 7 days.';
+  }
+
+  String _getBPInsight() {
+    final sysNormal = _average >= 90 && _average <= 120;
+    final diaNormal = _diastolicAverage >= 60 && _diastolicAverage <= 80;
+
+    if (sysNormal && diaNormal) {
+      if (_trend == TrendDirection.improving) {
+        return 'Great progress! Both systolic and diastolic readings are in the normal range and improving.';
+      }
+      return 'Your blood pressure is within the normal range. Keep up your current routine.';
+    }
+    if (sysNormal && !diaNormal) {
+      return 'Your systolic is normal but diastolic is elevated. Monitor closely and consult your doctor.';
+    }
+    if (!sysNormal && diaNormal) {
+      return 'Your systolic pressure is elevated while diastolic is normal. Review your habits and speak to your doctor.';
+    }
+    if (_trend == TrendDirection.worsening) {
+      return 'Both systolic and diastolic readings are elevated and trending higher. Please consult your doctor.';
+    }
+    return 'Both systolic and diastolic readings are elevated. Consider lifestyle adjustments and speak to your doctor.';
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -540,6 +579,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
     final label = _metricLabel(_metric);
     final unit = _metricUnit(_metric);
     final latest = _dataPoints.isNotEmpty ? _dataPoints.last : null;
+    final latestDia = _diastolicPoints.isNotEmpty ? _diastolicPoints.last : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -569,7 +609,16 @@ class _ChartsScreenState extends State<ChartsScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                if (latest != null)
+                if (_isBP && latest != null && latestDia != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _bpValueRow('Systolic', latest.value, unit, AppColors.primary),
+                      const SizedBox(height: 2),
+                      _bpValueRow('Diastolic', latestDia.value, unit, AppColors.secondary),
+                    ],
+                  )
+                else if (latest != null)
                   RichText(
                     text: TextSpan(
                       children: [
@@ -592,19 +641,47 @@ class _ChartsScreenState extends State<ChartsScreen> {
                     ),
                   ),
                 const SizedBox(height: 4),
-                Text(
-                  'Avg ${_average.toStringAsFixed(1)} $unit · ${_rangeLabel(_range)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.secondary,
+                if (_isBP && _diastolicAverage > 0)
+                  Text(
+                    'Avg Sys ${_average.toStringAsFixed(0)} / Dia ${_diastolicAverage.toStringAsFixed(0)} $unit · ${_rangeLabel(_range)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                  )
+                else
+                  Text(
+                    'Avg ${_average.toStringAsFixed(1)} $unit · ${_rangeLabel(_range)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
                   ),
-                ),
               ],
             ),
           ),
           _buildTrendIndicator(),
         ],
       ),
+    );
+  }
+
+  Widget _bpValueRow(String label, double value, String unit, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+        ),
+        Text(
+          '${value.toStringAsFixed(0)} $unit',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textDark,
+          ),
+        ),
+      ],
     );
   }
 
@@ -678,12 +755,19 @@ class _ChartsScreenState extends State<ChartsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Legend row for personal best indicator
-          if (_personalBest != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Row(
-                children: [
+          // Legend row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                if (_isBP) ...[
+                  _legendDot(AppColors.primary, 'Systolic'),
+                  const SizedBox(width: 14),
+                  _legendDot(AppColors.secondary, 'Diastolic'),
+                  const Spacer(),
+                ],
+                if (_personalBest != null) ...[
+                  if (!_isBP) const Spacer(),
                   Container(
                     width: 12,
                     height: 12,
@@ -698,27 +782,51 @@ class _ChartsScreenState extends State<ChartsScreen> {
                     style: TextStyle(fontSize: 11, color: AppColors.secondary),
                   ),
                 ],
-              ),
+              ],
             ),
+          ),
           HealthChartWidget(
             dataPoints: _dataPoints,
             metricType: _metricTypeStr(_metric),
             unit: unit,
             personalBest: _personalBest,
+            secondaryData: _isBP ? _diastolicPoints : null,
+            secondaryLabel: _isBP ? 'Diastolic' : null,
+            secondaryColor: _isBP ? AppColors.secondary : null,
           ),
         ],
       ),
     );
   }
 
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.secondary)),
+      ],
+    );
+  }
+
   // ── Insight card ──────────────────────────────────────────────────────────
 
   Widget _buildInsightCard() {
-    final insight = ChartDataService.getInsight(
-      _metricTypeStr(_metric),
-      _trend,
-      _average,
-    );
+    String insight;
+    if (_isBP && _diastolicAverage > 0) {
+      insight = _getBPInsight();
+    } else {
+      insight = ChartDataService.getInsight(
+        _metricTypeStr(_metric),
+        _trend,
+        _average,
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
