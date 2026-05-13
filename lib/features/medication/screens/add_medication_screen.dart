@@ -4,6 +4,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/notification_service.dart';
+import '../../doctor/data/medicine_library.dart';
 import '../models/medication_model.dart';
 import '../services/medication_service.dart';
 
@@ -23,11 +24,14 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   final _dosageController = TextEditingController();
   final _notesController = TextEditingController();
   final _pillsController = TextEditingController();
+  final _searchController = TextEditingController();
 
   String _frequency = 'Once daily';
   List<TimeOfDay> _times = [const TimeOfDay(hour: 8, minute: 0)];
   DateTime _startDate = DateTime.now();
   bool _isSaving = false;
+  List<Medicine> _searchResults = [];
+  bool _showSearch = true;
 
   bool get _isEditMode => widget.existing != null;
 
@@ -57,6 +61,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     super.initState();
     final med = widget.existing;
     if (med != null) {
+      _showSearch = false;
       _nameController.text = med.name;
       _dosageController.text = med.dosage;
       _notesController.text = med.notes;
@@ -81,7 +86,37 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     _dosageController.dispose();
     _notesController.dispose();
     _pillsController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (query.trim().length < 2) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    final lower = query.toLowerCase();
+    setState(() {
+      _searchResults = medicineLibrary
+          .where((m) =>
+              m.name.toLowerCase().contains(lower) ||
+              m.category.toLowerCase().contains(lower))
+          .toList();
+    });
+  }
+
+  void _selectMedicine(Medicine medicine) {
+    _nameController.text = medicine.name;
+    _dosageController.text = medicine.defaultDosage;
+    final freq = medicine.defaultFrequency;
+    if (_frequencyTimeCounts.containsKey(freq)) {
+      _onFrequencyChanged(freq);
+    }
+    setState(() {
+      _searchResults = [];
+      _searchController.clear();
+      _showSearch = false;
+    });
   }
 
   void _onFrequencyChanged(String freq) {
@@ -227,6 +262,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_showSearch && !_isEditMode) ...[
+                _buildSearchSection(),
+                const SizedBox(height: 20),
+              ],
               NuvitaTextField(
                 label: 'Medication Name',
                 hint: 'e.g. Metformin',
@@ -300,6 +339,97 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Search medicine', style: AppTextStyles.heading3),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.divider, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.textDark.withOpacity(0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Search by name or category...',
+              hintStyle: AppTextStyles.bodySmall,
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: AppColors.secondary),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppColors.secondary, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+            ),
+          ),
+        ),
+        if (_searchResults.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textDark.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: _searchResults.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: AppColors.divider.withOpacity(0.6),
+              ),
+              itemBuilder: (_, i) {
+                final med = _searchResults[i];
+                return ListTile(
+                  dense: true,
+                  leading: Icon(Icons.medication_rounded,
+                      color: AppColors.primary, size: 22),
+                  title: Text(
+                    med.name,
+                    style: AppTextStyles.body
+                        .copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '${med.category}  ·  ${med.defaultDosage}  ·  ${med.type}',
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  ),
+                  onTap: () => _selectMedicine(med),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
     );
   }
 

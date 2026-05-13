@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/notification_service.dart';
@@ -20,14 +21,34 @@ class MedicationDetailScreen extends StatefulWidget {
 
 class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   late MedicationModel _med;
-  // Tracks how many Take Now taps happened this session for overdose warning
   int _takenTodayCount = 0;
   bool _isTaking = false;
+  bool _allDosesTaken = false;
 
   @override
   void initState() {
     super.initState();
     _med = widget.medication;
+    _checkTodayDoses();
+  }
+
+  Future<void> _checkTodayDoses() async {
+    if (_med.times.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    int takenCount = 0;
+    for (final time in _med.times) {
+      final key = 'taken_${_med.id}_${time}_$todayStr';
+      if (prefs.getString(key) == 'true') takenCount++;
+    }
+    if (mounted) {
+      setState(() {
+        _takenTodayCount = takenCount;
+        _allDosesTaken = takenCount >= _med.times.length;
+      });
+    }
   }
 
   // ── Take Now ──────────────────────────────────────────────────────────────
@@ -447,12 +468,26 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   Widget _buildTakeNowButton(bool outOfPills) {
     final tracking = _med.pillsRemaining != null;
     final canTake = !tracking || !outOfPills;
+    final disabled = !canTake || _isTaking || _allDosesTaken;
+
+    String label;
+    IconData icon;
+    if (_allDosesTaken) {
+      label = 'All Doses Taken';
+      icon = Icons.check_circle_rounded;
+    } else if (outOfPills) {
+      label = 'Out of Pills';
+      icon = Icons.block_rounded;
+    } else {
+      label = 'Take Now';
+      icon = Icons.check_circle_outline_rounded;
+    }
 
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton.icon(
-        onPressed: (canTake && !_isTaking) ? _onTakeNow : null,
+        onPressed: disabled ? null : _onTakeNow,
         icon: _isTaking
             ? const SizedBox(
                 width: 20,
@@ -460,20 +495,17 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2.5, color: AppColors.white),
               )
-            : Icon(
-                outOfPills
-                    ? Icons.block_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: AppColors.white,
-              ),
-        label: Text(
-          outOfPills ? 'Out of Pills' : 'Take Now',
-          style: AppTextStyles.buttonText,
-        ),
+            : Icon(icon, color: AppColors.white),
+        label: Text(label, style: AppTextStyles.buttonText),
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-              outOfPills ? AppColors.secondary.withOpacity(0.45) : AppColors.primary,
-          disabledBackgroundColor: AppColors.secondary.withOpacity(0.3),
+          backgroundColor: _allDosesTaken
+              ? AppColors.success
+              : outOfPills
+                  ? AppColors.secondary.withOpacity(0.45)
+                  : AppColors.primary,
+          disabledBackgroundColor: _allDosesTaken
+              ? AppColors.success.withOpacity(0.6)
+              : AppColors.secondary.withOpacity(0.3),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
         ),

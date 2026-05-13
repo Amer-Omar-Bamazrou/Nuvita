@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/notification_service.dart';
@@ -9,6 +10,7 @@ import '../models/medication_model.dart';
 import '../services/medication_service.dart';
 import 'add_medication_screen.dart';
 import 'medication_detail_screen.dart';
+import 'medication_history_screen.dart';
 
 const _orange = Color(0xFFFF6F00);
 
@@ -16,12 +18,14 @@ const _orange = Color(0xFFFF6F00);
 
 class _ScheduleEntry {
   final String key; // "${medicationId}_${time}"
+  final String medicationId;
   final String medicationName;
   final String dosage;
   final String time;
 
   const _ScheduleEntry({
     required this.key,
+    required this.medicationId,
     required this.medicationName,
     required this.dosage,
     required this.time,
@@ -41,11 +45,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
   List<MedicationModel> _medications = [];
   List<MedicationModel> _lowSupplyMeds = [];
   bool _bannerDismissed = false;
-  // Session-only taken state — resets each app restart (acceptable for daily use)
   final Set<String> _takenToday = {};
   bool _isLoading = true;
-  // Prevents _load() from overwriting _medications after the Firestore stream
-  // has already delivered fresher data.
   bool _streamLoaded = false;
   StreamSubscription<QuerySnapshot>? _firestoreSub;
 
@@ -103,19 +104,16 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Future<void> _load() async {
-    // Don't await notifications init — it can take several seconds and would
-    // cause _load() to finish AFTER the stream, triggering the race condition
-    // where this setState overwrites fresher Firestore data from the stream.
     unawaited(NotificationService.initialize());
 
     final meds = await MedicationService.loadAll();
     final lowSupply = await MedicationService.getLowSupplyMedications();
 
+    await _restoreTakenState(meds);
+
     if (!mounted) return;
 
     if (_streamLoaded) {
-      // Stream already delivered fresh Firestore data — only clear the spinner,
-      // do not overwrite _medications with potentially stale SharedPrefs data.
       setState(() {
         _bannerDismissed = false;
         _isLoading = false;
@@ -127,6 +125,23 @@ class _MedicationScreenState extends State<MedicationScreen> {
         _bannerDismissed = false;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _restoreTakenState(List<MedicationModel> meds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    _takenToday.clear();
+    for (final med in meds) {
+      if (!med.isActive) continue;
+      for (final time in med.times) {
+        final prefKey = 'taken_${med.id}_${time}_$todayStr';
+        if (prefs.getString(prefKey) == 'true') {
+          _takenToday.add('${med.id}_$time');
+        }
+      }
     }
   }
 
@@ -195,6 +210,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
       for (final time in med.times) {
         entries.add(_ScheduleEntry(
           key: '${med.id}_$time',
+          medicationId: med.id,
           medicationName: med.name,
           dosage: med.dosage,
           time: time,
@@ -243,6 +259,17 @@ class _MedicationScreenState extends State<MedicationScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         title: Text('My Medications', style: AppTextStyles.heading2),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month_rounded,
+                color: AppColors.primary),
+            tooltip: 'Adherence history',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                  builder: (_) => const MedicationHistoryScreen()),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'fab_medications',
@@ -550,85 +577,191 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
+  bool _isMissed(_ScheduleEntry entry) {
+    final now = DateTime.now();
+    final parts = entry.time.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    return now.hour > hour || (now.hour == hour && now.minute > minute);
+  }
+
+  Future<void> _toggleTaken(_ScheduleEntry entry) async {
+    final isTaken = _takenToday.contains(entry.key);
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final prefKey = 'taken_${entry.medicationId}_${entry.time}_$todayStr';
+    final prefs = await SharedPreferences.getInstance();
+
+    if (isTaken) {
+      await prefs.remove(prefKey);
+      if (mounted) setState(() => _takenToday.remove(entry.key));
+    } else {
+      await prefs.setString(prefKey, 'true');
+      await MedicationService.takeMedication(entry.medicationId);
+      if (mounted) {
+        setState(() => _takenToday.add(entry.key));
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${entry.medicationName} ${entry.dosage} at ${entry.time} marked as taken.',
+            ),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: AppColors.white,
+              onPressed: () async {
+                await prefs.remove(prefKey);
+                final med = await MedicationService.getById(entry.medicationId);
+                if (med != null && med.pillsRemaining != null) {
+                  final restored = med.pillsRemaining! + med.pillsPerDose;
+                  final updated = med.copyWith(
+                    pillsRemaining: restored,
+                    lowSupplyNotified: restored > 7 ? false : med.lowSupplyNotified,
+                  );
+                  await MedicationService.update(updated);
+                  if (restored > 7) {
+                    await NotificationService.cancelLowSupplyAlert(med.id);
+                  }
+                }
+                if (mounted) {
+                  setState(() => _takenToday.remove(entry.key));
+                  _load();
+                }
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildScheduleRow(_ScheduleEntry entry) {
     final isTaken = _takenToday.contains(entry.key);
+    final missed = !isTaken && _isMissed(entry);
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 300),
-      opacity: isTaken ? 0.5 : 1.0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 54,
-              child: Text(
-                entry.time,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: isTaken ? AppColors.success : AppColors.primary,
-                ),
-              ),
-            ),
-            Container(width: 1, height: 36, color: AppColors.divider),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.medicationName,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                      decoration:
-                          isTaken ? TextDecoration.lineThrough : null,
-                      decorationColor: AppColors.secondary,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    entry.dosage,
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () => setState(() {
-                if (isTaken) {
-                  _takenToday.remove(entry.key);
-                } else {
-                  _takenToday.add(entry.key);
-                }
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color:
-                      isTaken ? AppColors.success : Colors.transparent,
-                  shape: BoxShape.circle,
-                  border: Border.all(
+    return Container(
+      decoration: missed
+          ? const BoxDecoration(
+              border: Border(left: BorderSide(color: AppColors.error, width: 3)),
+            )
+          : null,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: isTaken ? 0.5 : 1.0,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 54,
+                child: Text(
+                  entry.time,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
                     color: isTaken
                         ? AppColors.success
-                        : AppColors.divider,
-                    width: 2,
+                        : missed
+                            ? AppColors.error
+                            : AppColors.primary,
                   ),
                 ),
-                child: Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color:
-                      isTaken ? AppColors.white : AppColors.divider,
+              ),
+              Container(width: 1, height: 36, color: AppColors.divider),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            entry.medicationName,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                              decoration:
+                                  isTaken ? TextDecoration.lineThrough : null,
+                              decorationColor: AppColors.secondary,
+                            ),
+                          ),
+                        ),
+                        if (missed) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Missed',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (isTaken) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Taken',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      entry.dosage,
+                      style: AppTextStyles.bodySmall.copyWith(fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => _toggleTaken(entry),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isTaken ? AppColors.success : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isTaken ? AppColors.success : AppColors.divider,
+                      width: 2,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: isTaken ? AppColors.white : AppColors.divider,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

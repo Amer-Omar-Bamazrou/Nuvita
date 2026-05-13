@@ -46,7 +46,7 @@ Two providers, intentionally scoped differently:
 
 ### Navigation (mobile)
 
-`MainShell` uses `IndexedStack` with 4 tabs (Home, Medications, History, Profile). Push-routes (charts, appointments, report, suggestions panel) sit on top of the stack via `Navigator.push`.
+`MainShell` uses `IndexedStack` with 4 tabs (Home, Tracking, History, Profile). Push-routes (charts, appointments, report, suggestions panel) sit on top of the stack via `Navigator.push`.
 
 Notification taps are routed via a global `navigatorKey` wired in `main.dart`. The appointment tap handler is set there (not in `NotificationService`) to avoid a circular import.
 
@@ -238,6 +238,21 @@ None — all planned features complete.
   - All 7 metric cards now always shown (Systolic BP, Diastolic BP, Heart Rate, Blood Sugar Before/After Meal, Weight, Temperature) — "—" displayed for unrecorded metrics so doctors see the full picture without needing the patient to have logged every type
   - Blood Pressure merged into one card: single _Card with three columns (Sys / Dia / Pulse) separated by vertical dividers; each column shows value, unit, and _StatusBadge independently — implemented via _BPSubValue and _BPDivider private widgets
 
+- Tracking Page (branch: feature/tracking-page):
+  - Replaced Medications tab (index 1) with Tracking tab in MainShell; icon: track_changes_rounded
+  - lib/features/tracking/screens/tracking_screen.dart: 3 cards (Medications, Appointments, Health Report) with progress indicators and guest mode handling; Medications card shows today's dose completion from SharedPreferences; Appointments card shows upcoming count; Health Report card shows readings in last 30 days
+  - profile_screen.dart: removed Health Report + Appointments tiles (moved to Tracking)
+  - Onboarding skip: "Already have an account? Sign in" link on name step → marks onboarding complete → LoginScreen
+  - Home screen task list: cleaned up to show medication tasks only (removed reading tasks); simplified DailyTask class; removed TaskType enum
+
+- Medication Enhancements (branch: feature/medication-enhancements-v2):
+  - Enhancement 1 — Visual Completion: medication_screen.dart taken state now persisted to SharedPreferences using key pattern `taken_${medId}_${time}_${yyyy-MM-dd}`; _restoreTakenState() loads on screen init; _toggleTaken() writes to prefs + calls MedicationService.takeMedication(); green "Taken" badge shown on completed doses; medication_detail_screen.dart _checkTodayDoses() reads prefs on init, "Take Now" button shows "All Doses Taken" (green, disabled) when all scheduled doses completed
+  - Enhancement 2 — Missed Dose Badges: _isMissed() compares current time vs scheduled time; untaken past doses show red "Missed" badge + red left border on the row; time text turns red for missed entries
+  - Enhancement 3 — Medicine Search: add_medication_screen.dart search field at top (add mode only); searches medicineLibrary by name or category; dropdown results with name, category, dosage, type; selecting auto-fills name, dosage, frequency fields; search section hides after selection
+  - Enhancement 4 — Adherence History: medication_history_screen.dart shows last 7 days of dose adherence; each day card with date, day name, coloured progress bar (green 100% / orange 50%+ / red below), "X/Y doses (Z%)" text; empty state when no data; calendar_month_rounded icon button added to medication_screen.dart AppBar
+  - Enhancement 5 — Undo Snackbar: _toggleTaken() shows 5-second snackbar after marking dose taken; "Undo" action removes SharedPreferences key, restores pillsRemaining by pillsPerDose, resets lowSupplyNotified if count > 7, cancels low supply notification, refreshes UI via _load()
+  - Bug Fix — Undo Pill Count: undo callback now fetches medication via getById(), increments pillsRemaining by pillsPerDose, updates via MedicationService.update() to persist to SharedPreferences + Firestore
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
@@ -248,7 +263,8 @@ lib/features/auth/ — login_screen, register_screen, change_password_screen, fo
 lib/features/onboarding/ — onboarding_screen, welcome_splash (dormant)
 lib/features/disease/ — disease_selection (dormant)
 lib/features/home/ — home_screen, main_shell
-lib/features/medication/ — medication_screen, add_medication, model, service
+lib/features/medication/ — medication_screen, add_medication, medication_detail_screen, medication_history_screen, model, service
+lib/features/tracking/ — tracking_screen
 lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider
