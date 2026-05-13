@@ -248,6 +248,29 @@ class DoctorService {
     }).toList();
   }
 
+  // ── Patient Adherence ──────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPatientAdherence(
+      String uid, int days) async {
+    final now = DateTime.now();
+    final startDate =
+        DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1));
+    final startStr =
+        '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('adherence')
+          .where('date', isGreaterThanOrEqualTo: startStr)
+          .get();
+      return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    } catch (e) {
+      debugPrint('getPatientAdherence: $e');
+      return [];
+    }
+  }
+
   // ── Patient Messages (Mod 2) ───────────────────────────────────────────────
 
   // Stream of all patient messages, newest first

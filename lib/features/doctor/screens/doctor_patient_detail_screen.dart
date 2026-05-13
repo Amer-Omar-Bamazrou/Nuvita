@@ -24,9 +24,11 @@ class _DoctorPatientDetailScreenState
 
   bool _loadingReadings = true;
   bool _loadingMeds = true;
+  bool _loadingAdherence = true;
   List<Map<String, dynamic>> _readings = [];
   List<Map<String, dynamic>> _medications = [];
   List<Map<String, dynamic>> _suggestions = [];
+  List<_AdherenceDay> _adherenceDays = [];
 
   static const _frequencies = [
     'Once daily',
@@ -77,6 +79,7 @@ class _DoctorPatientDetailScreenState
     _loadReadings();
     _loadMedications();
     _loadSuggestions();
+    _loadAdherence();
   }
 
   @override
@@ -130,6 +133,61 @@ class _DoctorPatientDetailScreenState
             snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
       });
     } catch (_) {}
+  }
+
+  Future<void> _loadAdherence() async {
+    setState(() => _loadingAdherence = true);
+    try {
+      final doses = await _service.getPatientAdherence(_uid, 7);
+      final meds = await _service.getPatientMedications(_uid);
+      final activeMeds = meds.where((m) => m['isActive'] != false).toList();
+      final now = DateTime.now();
+      final days = <_AdherenceDay>[];
+
+      for (int i = 0; i < 7; i++) {
+        final date = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: i));
+        final dateStr =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+        int total = 0;
+        int taken = 0;
+
+        for (final med in activeMeds) {
+          DateTime? startDate;
+          final sd = med['startDate'];
+          if (sd is Timestamp) {
+            startDate = sd.toDate();
+          } else if (sd is String) {
+            startDate = DateTime.tryParse(sd);
+          }
+          if (startDate != null) {
+            final start = DateTime(startDate.year, startDate.month, startDate.day);
+            if (start.isAfter(date)) continue;
+          }
+
+          final times = med['times'] as List<dynamic>? ?? [];
+          for (final time in times) {
+            total++;
+            final docId = '${dateStr}_${med['id']}_$time';
+            if (doses.any((d) => d['id'] == docId && d['taken'] == true)) {
+              taken++;
+            }
+          }
+        }
+
+        days.add(_AdherenceDay(date: date, taken: taken, total: total));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _adherenceDays = days;
+        _loadingAdherence = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingAdherence = false);
+    }
   }
 
   // Opens a dialog to edit a medication. Using a dialog instead of an inline
@@ -353,6 +411,8 @@ class _DoctorPatientDetailScreenState
               child: Column(
                 children: [
                   _buildMedicationsSection(),
+                  const SizedBox(height: 16),
+                  _buildAdherenceSection(),
                   const SizedBox(height: 16),
                   _buildReadingsSection(),
                   const SizedBox(height: 16),
@@ -652,6 +712,92 @@ class _DoctorPatientDetailScreenState
             tooltip: 'Edit',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdherenceSection() {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Medication Adherence'),
+          const SizedBox(height: 10),
+          if (_loadingAdherence)
+            const Center(
+                child: CircularProgressIndicator(color: _primary))
+          else if (_adherenceDays.every((d) => d.total == 0))
+            Text('No medication schedule found.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
+          else
+            ..._adherenceDays.map(_buildAdherenceRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdherenceRow(_AdherenceDay day) {
+    final pct = day.total > 0 ? (day.taken / day.total * 100).round() : 0;
+    final ratio = day.total > 0 ? day.taken / day.total : 0.0;
+
+    Color barColor;
+    if (pct == 100) {
+      barColor = const Color(0xFF388E3C);
+    } else if (pct >= 50) {
+      barColor = const Color(0xFFFF6F00);
+    } else {
+      barColor = const Color(0xFFD32F2F);
+    }
+
+    final now = DateTime.now();
+    final isToday = day.date.year == now.year &&
+        day.date.month == now.month &&
+        day.date.day == now.day;
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final label = isToday ? 'Today' : dayNames[day.date.weekday - 1];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 50,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isToday ? _primary : const Color(0xFF172A3A),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 10,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 72,
+            child: Text(
+              '${day.taken}/${day.total} ($pct%)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: barColor,
+              ),
+              textAlign: TextAlign.right,
+            ),
           ),
         ],
       ),
@@ -1458,4 +1604,13 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
       style: const TextStyle(fontSize: 13),
     );
   }
+}
+
+class _AdherenceDay {
+  final DateTime date;
+  final int taken;
+  final int total;
+
+  const _AdherenceDay(
+      {required this.date, required this.taken, required this.total});
 }

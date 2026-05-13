@@ -210,6 +210,77 @@ class MedicationService {
     return meds.where(checkLowSupply).toList();
   }
 
+  // ── Adherence tracking ─────────────────────────────────────────────────────
+
+  static CollectionReference<Map<String, dynamic>> _adherenceRef(String uid) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('adherence');
+  }
+
+  static Future<void> saveDoseToFirebase({
+    required String medicationId,
+    required String medicationName,
+    required String dosage,
+    required String timeSlot,
+    required String date,
+  }) async {
+    final uid = _uid;
+    if (uid == null) return;
+    final docId = '${date}_${medicationId}_$timeSlot';
+    try {
+      await _adherenceRef(uid).doc(docId).set({
+        'medicationId': medicationId,
+        'medicationName': medicationName,
+        'dosage': dosage,
+        'timeSlot': timeSlot,
+        'date': date,
+        'taken': true,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('MedicationService.saveDoseToFirebase: $e');
+    }
+  }
+
+  static Future<void> removeDoseFromFirebase({
+    required String medicationId,
+    required String timeSlot,
+    required String date,
+  }) async {
+    final uid = _uid;
+    if (uid == null) return;
+    final docId = '${date}_${medicationId}_$timeSlot';
+    try {
+      await _adherenceRef(uid).doc(docId).delete();
+    } catch (e) {
+      debugPrint('MedicationService.removeDoseFromFirebase: $e');
+    }
+  }
+
+  static Future<Map<String, bool>> getAdherenceHistory(
+      String uid, int days) async {
+    final now = DateTime.now();
+    final startDate = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: days - 1));
+    try {
+      final snap = await _adherenceRef(uid)
+          .where('date',
+              isGreaterThanOrEqualTo:
+                  '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}')
+          .get();
+      final result = <String, bool>{};
+      for (final doc in snap.docs) {
+        result[doc.id] = (doc.data()['taken'] as bool?) ?? false;
+      }
+      return result;
+    } catch (e) {
+      debugPrint('MedicationService.getAdherenceHistory: $e');
+      return {};
+    }
+  }
+
   // Update pill count directly (e.g. after a refill from the edit screen).
   // Resets lowSupplyNotified when count goes above the threshold.
   static Future<void> updatePillsRemaining(String id, int newCount) async {

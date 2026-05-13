@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
@@ -27,10 +28,19 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     final activeMeds = meds.where((m) => m.isActive).toList();
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
+
+    // Fetch Firestore adherence data if logged in
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    Map<String, bool> firebaseAdherence = {};
+    if (uid != null) {
+      firebaseAdherence = await MedicationService.getAdherenceHistory(uid, 7);
+    }
+
     final days = <_DayRecord>[];
 
     for (int i = 0; i < 7; i++) {
-      final date = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final date = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: i));
       final dateStr =
           '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
@@ -38,12 +48,17 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       int taken = 0;
 
       for (final med in activeMeds) {
-        final start = DateTime(med.startDate.year, med.startDate.month, med.startDate.day);
+        final start = DateTime(
+            med.startDate.year, med.startDate.month, med.startDate.day);
         if (start.isAfter(date)) continue;
         for (final time in med.times) {
           total++;
-          final key = 'taken_${med.id}_${time}_$dateStr';
-          if (prefs.getString(key) == 'true') taken++;
+          final prefKey = 'taken_${med.id}_${time}_$dateStr';
+          final firebaseKey = '${dateStr}_${med.id}_$time';
+          if (prefs.getString(prefKey) == 'true' ||
+              firebaseAdherence[firebaseKey] == true) {
+            taken++;
+          }
         }
       }
 
@@ -218,5 +233,6 @@ class _DayRecord {
   final int taken;
   final int total;
 
-  const _DayRecord({required this.date, required this.taken, required this.total});
+  const _DayRecord(
+      {required this.date, required this.taken, required this.total});
 }

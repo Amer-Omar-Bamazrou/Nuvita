@@ -595,10 +595,22 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
     if (isTaken) {
       await prefs.remove(prefKey);
+      MedicationService.removeDoseFromFirebase(
+        medicationId: entry.medicationId,
+        timeSlot: entry.time,
+        date: todayStr,
+      );
       if (mounted) setState(() => _takenToday.remove(entry.key));
     } else {
       await prefs.setString(prefKey, 'true');
       await MedicationService.takeMedication(entry.medicationId);
+      MedicationService.saveDoseToFirebase(
+        medicationId: entry.medicationId,
+        medicationName: entry.medicationName,
+        dosage: entry.dosage,
+        timeSlot: entry.time,
+        date: todayStr,
+      );
       if (mounted) {
         setState(() => _takenToday.add(entry.key));
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -613,6 +625,11 @@ class _MedicationScreenState extends State<MedicationScreen> {
               textColor: AppColors.white,
               onPressed: () async {
                 await prefs.remove(prefKey);
+                MedicationService.removeDoseFromFirebase(
+                  medicationId: entry.medicationId,
+                  timeSlot: entry.time,
+                  date: todayStr,
+                );
                 final med = await MedicationService.getById(entry.medicationId);
                 if (med != null && med.pillsRemaining != null) {
                   final restored = med.pillsRemaining! + med.pillsPerDose;
