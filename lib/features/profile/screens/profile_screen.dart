@@ -9,6 +9,7 @@ import '../../../shared/widgets/nuvita_button.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../../core/services/notification_service.dart';
+import '../../emergency/screens/emergency_contacts_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -718,7 +719,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 12),
 
-              // ── Card 3 — Support ────────────────────────────────────────────
+              // ── Card 3 — Emergency ─────────────────────────────────────────
+              _sectionCard(
+                icon: Icons.emergency_rounded,
+                iconColor: AppColors.error,
+                title: 'Emergency',
+                children: [
+                  _tile(
+                    leading: Icons.contact_phone_outlined,
+                    title: 'Emergency Contacts',
+                    subtitle: 'Add contacts for emergencies',
+                    leadingColor: AppColors.error,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const EmergencyContactsScreen(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── Card 4 — Support ────────────────────────────────────────────
               _sectionCard(
                 icon: Icons.support_agent_outlined,
                 title: 'Support',
@@ -800,6 +824,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required IconData icon,
     required String title,
     required List<Widget> children,
+    Color? iconColor,
   }) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -813,7 +838,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(
               children: [
-                Icon(icon, color: AppColors.primary, size: 18),
+                Icon(icon, color: iconColor ?? AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   title,
