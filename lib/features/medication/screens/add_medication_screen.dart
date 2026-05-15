@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -346,7 +346,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             border: Border.all(color: AppColors.divider, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: AppColors.textDark.withOpacity(0.05),
+                color: AppColors.textDark.withValues(alpha: 0.05),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -385,7 +385,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.textDark.withOpacity(0.08),
+                  color: AppColors.textDark.withValues(alpha: 0.08),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
@@ -395,9 +395,9 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               shrinkWrap: true,
               padding: EdgeInsets.zero,
               itemCount: _searchResults.length,
-              separatorBuilder: (_, __) => Divider(
+              separatorBuilder: (_, _) => Divider(
                 height: 1,
-                color: AppColors.divider.withOpacity(0.6),
+                color: AppColors.divider.withValues(alpha: 0.6),
               ),
               itemBuilder: (_, i) {
                 final med = _searchResults[i];
@@ -436,7 +436,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
               color: isSelected
-                  ? AppColors.primary.withOpacity(0.07)
+                  ? AppColors.primary.withValues(alpha: 0.07)
                   : AppColors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
@@ -445,7 +445,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.textDark.withOpacity(0.05),
+                  color: AppColors.textDark.withValues(alpha: 0.05),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -502,7 +502,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           border: Border.all(color: AppColors.divider, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.05),
+              color: AppColors.textDark.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -514,7 +514,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -557,7 +557,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           border: Border.all(color: AppColors.divider, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.05),
+              color: AppColors.textDark.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -569,7 +569,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(

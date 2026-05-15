@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 
@@ -155,7 +155,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
     }
 
     return Container(
-      color: isRead ? Colors.transparent : _primary.withOpacity(0.03),
+      color: isRead ? Colors.transparent : _primary.withValues(alpha: 0.03),
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +169,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
                 decoration: BoxDecoration(
                   color: isRead
                       ? const Color(0xFFE0F0F0)
-                      : _primary.withOpacity(0.12),
+                      : _primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
@@ -315,7 +315,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF004346).withOpacity(0.07),
+              color: const Color(0xFF004346).withValues(alpha: 0.07),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -323,7 +323,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
                   ? Icons.wifi_off_rounded
                   : Icons.message_outlined,
               size: 40,
-              color: const Color(0xFF004346).withOpacity(0.4),
+              color: const Color(0xFF004346).withValues(alpha: 0.4),
             ),
           ),
           const SizedBox(height: 20),

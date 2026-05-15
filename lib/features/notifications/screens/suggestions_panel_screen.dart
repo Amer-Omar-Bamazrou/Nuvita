@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_colors.dart';
@@ -97,7 +97,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
               height: 1,
               indent: 82,
               endIndent: 20,
-              color: AppColors.divider.withOpacity(0.5),
+              color: AppColors.divider.withValues(alpha: 0.5),
             ),
       itemBuilder: (context, i) {
         if (i == 0) return _buildHeader(unreadCount);
@@ -182,7 +182,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
         }
       },
       child: Container(
-        color: isRead ? Colors.transparent : AppColors.primary.withOpacity(0.03),
+        color: isRead ? Colors.transparent : AppColors.primary.withValues(alpha: 0.03),
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,8 +196,8 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
                   height: 46,
                   decoration: BoxDecoration(
                     color: isRead
-                        ? AppColors.secondary.withOpacity(0.1)
-                        : AppColors.primary.withOpacity(0.12),
+                        ? AppColors.secondary.withValues(alpha: 0.1)
+                        : AppColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -273,7 +273,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
                       height: 1.4,
                       color: isRead
                           ? Colors.grey.shade600
-                          : AppColors.textDark.withOpacity(0.85),
+                          : AppColors.textDark.withValues(alpha: 0.85),
                     ),
                   ),
                 ],
@@ -298,7 +298,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.07),
+                color: AppColors.primary.withValues(alpha: 0.07),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -306,7 +306,7 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
                     ? Icons.wifi_off_rounded
                     : Icons.notifications_none_rounded,
                 size: 44,
-                color: AppColors.primary.withOpacity(0.45),
+                color: AppColors.primary.withValues(alpha: 0.45),
               ),
             ),
             const SizedBox(height: 24),
@@ -340,13 +340,13 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.07),
+                color: AppColors.primary.withValues(alpha: 0.07),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.notifications_none_rounded,
                 size: 44,
-                color: AppColors.primary.withOpacity(0.45),
+                color: AppColors.primary.withValues(alpha: 0.45),
               ),
             ),
             const SizedBox(height: 24),

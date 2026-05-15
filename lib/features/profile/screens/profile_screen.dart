@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +10,7 @@ import '../../auth/screens/login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../../core/services/notification_service.dart';
 import '../../emergency/screens/emergency_contacts_screen.dart';
+import '../../../main.dart' show cancelDoctorNotificationListeners;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -102,6 +103,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _signingOut = true);
     try {
       await NotificationService.cancelWellnessReminder();
+      await NotificationService.cancelWeeklyHealthSummary();
+      cancelDoctorNotificationListeners();
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -347,7 +350,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: InputDecoration(
                       hintText: 'Write your message here…',
                       hintStyle: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.secondary.withOpacity(0.6),
+                        color: AppColors.secondary.withValues(alpha: 0.6),
                       ),
                       filled: true,
                       fillColor: AppColors.inputFill,
@@ -476,7 +479,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: InputDecoration(
                       hintText: 'Describe the bug…',
                       hintStyle: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.secondary.withOpacity(0.6),
+                        color: AppColors.secondary.withValues(alpha: 0.6),
                       ),
                       filled: true,
                       fillColor: AppColors.inputFill,
@@ -552,7 +555,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 88,
                 height: 88,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(

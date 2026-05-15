@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -117,7 +117,7 @@ class _RulerPickerState extends State<RulerPicker> {
                       width: 1.5,
                       height: isMajor ? 36 : 20,
                       color: isMajor
-                          ? AppColors.primary.withOpacity(0.55)
+                          ? AppColors.primary.withValues(alpha: 0.55)
                           : Colors.grey.shade300,
                     ),
                     const SizedBox(height: 10),
@@ -152,7 +152,7 @@ class _RulerPickerState extends State<RulerPicker> {
                   end: Alignment.centerRight,
                   colors: [
                     AppColors.background,
-                    AppColors.background.withOpacity(0),
+                    AppColors.background.withValues(alpha: 0),
                   ],
                 ),
               ),
@@ -169,7 +169,7 @@ class _RulerPickerState extends State<RulerPicker> {
                   end: Alignment.centerLeft,
                   colors: [
                     AppColors.background,
-                    AppColors.background.withOpacity(0),
+                    AppColors.background.withValues(alpha: 0),
                   ],
                 ),
               ),

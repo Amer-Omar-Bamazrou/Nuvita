@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../disease/screens/disease_selection_screen.dart';
 
@@ -63,7 +63,7 @@ class _WelcomeSplashScreenState extends State<WelcomeSplashScreen>
                   width: 110,
                   height: 110,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -94,7 +94,7 @@ class _WelcomeSplashScreenState extends State<WelcomeSplashScreen>
               child: Text(
                 'You have completed your profile',
                 style: TextStyle(
-                  color: AppColors.white.withOpacity(0.75),
+                  color: AppColors.white.withValues(alpha: 0.75),
                   fontSize: 16,
                   height: 1.5,
                 ),

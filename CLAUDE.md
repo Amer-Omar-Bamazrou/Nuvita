@@ -124,7 +124,7 @@ Notification taps are routed via a global `navigatorKey` wired in `main.dart`. T
 ## Completed Features (continued)
 - Appointment Reminders: AppointmentModel + AppointmentService (SharedPrefs), AppointmentsScreen (Upcoming/Past tabs, swipe-to-delete, mark as done, day badges), AddAppointmentScreen (form with date/time/reminder picker), NotificationService extended with scheduleNotification + cancelNotification, SuggestionsPanelScreen appointments section live, ProfileScreen appointments tile
 - Health Charts: FL Chart integration with trend lines, zone bands (normal/warning/danger), and insights per metric type
-- Navigation Fix: LoginScreen checks onboarding flag before routing Create Account (OnboardingScreen if not done, RegisterScreen if done); RegisterScreen back button + Sign In link both return to OnboardingScreen; registration marks onboarding complete via PreferencesService; WillPopScope guards both screens
+- Navigation Fix: LoginScreen checks onboarding flag before routing Create Account (OnboardingScreen if not done, RegisterScreen if done); RegisterScreen back button + Sign In link both return to OnboardingScreen; registration marks onboarding complete via PreferencesService; PopScope guards both screens (migrated from WillPopScope on 2026-05-15)
 - Onboarding Step 6 Fix: Removed Doctor Reports and Emergency Alerts from service preferences list — kept only Medications, Measurements, Activities, Appointments (these are core features, not optional services)
 - Firestore Security Rules: firestore.rules created in project root — covers /users/{uid} and all sub-collections (auth + uid match), /share_tokens (public read, auth write); must be manually published in Firebase Console
 - Homepage Improvements: Daily summary card (readings today, meds scheduled, last reading time), trend arrows on metric cards (red ↑ worse / green ↓ better per metric type, heart rate moves-toward-75 logic), warning action prompts per metric/status that replace lifestyle suggestion when in warning or critical range
@@ -275,6 +275,41 @@ None — all planned features complete.
 
 ## Firestore Structure (continued)
 /users/{uid}/adherence/{date_medId_time} — medicationId, medicationName, dosage, timeSlot, date, taken, timestamp
+
+- Full App & Dashboard Bug Audit (2026-05-15):
+  - Notification Logic Fixes (notification_service.dart + appointment_service.dart):
+    - Fix 1: Added _plugin.initialize(settings) in _onBackgroundAction — background isolate notification actions (snooze, supply remind, follow-up) were calling _plugin.show()/_plugin.zonedSchedule() on uninitialized plugin
+    - Fix 2: Moved _snoozedMedNotificationId from 1,600,000 to 2,000,000 — was colliding with _followUpId range
+    - Fix 3: Added appointmentDateTime param to scheduleAppointmentReminder — body text was showing reminder fire time instead of actual appointment time
+    - Fix 4: Moved _appointmentNotificationId from id.hashCode.abs() % 999990 to 2,100,000+ — overlapped with _notificationId range (0–99,999)
+    - Fix 5: Added payload 'critical:$readingId' to showCriticalReadingNotification + critical: handler in _onNotificationTap — tapping critical reading notifications previously did nothing
+  - Codebase Logic Fixes:
+    - Fix 6: Removed unused import 'change_password_screen.dart' from login_screen.dart
+    - Fix 7: Fixed stale _allDosesTaken in medication_detail_screen.dart — _onTakeNow() incremented _takenTodayCount but never re-evaluated _allDosesTaken, so "Take Now" button wouldn't switch to "All Doses Taken" until full screen rebuild
+    - Fix 8: Added MedicationService.saveDoseToFirebase() call to home_screen.dart _markMedTaken() — doses taken from home screen task list were only saved to SharedPreferences, not synced to Firestore adherence (doctor dashboard couldn't see them)
+  - Deprecation & Lint Cleanup (148 → 0 analyzer issues):
+    - Migrated all .withOpacity() → .withValues(alpha:) across 31 files (134 occurrences)
+    - Migrated WillPopScope → PopScope in login_screen.dart + register_screen.dart
+    - Migrated activeColor → activeThumbColor on Switch widgets in medication_detail_screen.dart + medication_screen.dart
+    - Migrated value → initialValue on DropdownButtonFormField in doctor_patient_detail_screen.dart (2 occurrences)
+    - Fixed unnecessary double underscores (__) → (_) in separatorBuilder callbacks across 5 files
+    - Renamed _val/_status local functions to getVal/getStatus in doctor_patient_detail_screen.dart (leading underscore lint)
+    - Migrated if (current != null) current → ?current null-aware element in onboarding_screen.dart
+  - Notification ID Ranges (updated):
+    - 0–99,999: base notifications (_notificationId)
+    - 100,000–199,999: missed dose alerts
+    - 200,000–299,999: low supply alerts
+    - 1,000,000–1,099,999: medication reminders
+    - 1,100,000–1,199,999: daily medication reminders
+    - 1,200,001: daily wellness reminder
+    - 1,200,002: weekly health summary
+    - 1,300,000–1,399,999: appointment tomorrow reminders
+    - 1,400,000–1,499,999: doctor-assigned med notifications
+    - 1,500,000–1,599,999: doctor suggestion notifications
+    - 1,600,000–1,699,999: follow-up notifications
+    - 2,000,000–2,099,999: snoozed medication reminders
+    - 2,100,000–2,199,999: appointment reminders
+  - flutter analyze result: 0 errors, 0 warnings, 0 info — fully clean
 
 ## Modifications List — Do Later
 - (none — all modifications complete)

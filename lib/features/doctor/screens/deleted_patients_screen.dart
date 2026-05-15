@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 
@@ -125,7 +125,7 @@ class _DeletedPatientsScreenState extends State<DeletedPatientsScreen> {
                   child: ListView.separated(
                     padding: const EdgeInsets.all(20),
                     itemCount: _patients.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, i) =>
                         _buildPatientCard(_patients[i]),
                   ),
@@ -266,13 +266,13 @@ class _DeletedPatientsScreenState extends State<DeletedPatientsScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF004346).withOpacity(0.07),
+              color: const Color(0xFF004346).withValues(alpha: 0.07),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.person_off_outlined,
               size: 40,
-              color: const Color(0xFF004346).withOpacity(0.4),
+              color: const Color(0xFF004346).withValues(alpha: 0.4),
             ),
           ),
           const SizedBox(height: 20),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../features/dashboard/providers/health_provider.dart';
@@ -55,7 +55,7 @@ class HealthMetricCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.08),
+              color: AppColors.textDark.withValues(alpha: 0.08),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -71,7 +71,7 @@ class HealthMetricCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: AppColors.primary, size: 20),
@@ -117,7 +117,7 @@ class HealthMetricCard extends StatelessWidget {
               title,
               style: AppTextStyles.label.copyWith(
                 fontSize: 13,
-                color: AppColors.textDark.withOpacity(0.75),
+                color: AppColors.textDark.withValues(alpha: 0.75),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -230,9 +230,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.12),
+        color: _color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color.withOpacity(0.4), width: 1),
+        border: Border.all(color: _color.withValues(alpha: 0.4), width: 1),
       ),
       child: Text(
         _label,

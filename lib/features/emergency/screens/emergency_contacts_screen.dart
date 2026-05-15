@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -425,7 +425,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.06),
+            color: AppColors.primary.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -435,7 +435,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: AppColors.primary.withOpacity(0.1),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
             child: Text(
               contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
               style: const TextStyle(
@@ -471,7 +471,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.card.withOpacity(0.25),
+                    color: AppColors.card.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(

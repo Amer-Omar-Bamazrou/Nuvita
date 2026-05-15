@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -295,7 +295,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -356,8 +356,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
                       horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: takenCount == total
-                        ? AppColors.success.withOpacity(0.12)
-                        : AppColors.primary.withOpacity(0.08),
+                        ? AppColors.success.withValues(alpha: 0.12)
+                        : AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -552,7 +552,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.textDark.withOpacity(0.06),
+                  color: AppColors.textDark.withValues(alpha: 0.06),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
@@ -564,7 +564,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   if (i > 0)
                     Divider(
                       height: 1,
-                      color: AppColors.divider.withOpacity(0.6),
+                      color: AppColors.divider.withValues(alpha: 0.6),
                       indent: 84,
                     ),
                   _buildScheduleRow(entries[i]),
@@ -713,7 +713,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.error.withOpacity(0.12),
+                              color: AppColors.error.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
@@ -732,7 +732,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.success.withOpacity(0.12),
+                              color: AppColors.success.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
@@ -819,7 +819,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.textDark.withOpacity(0.06),
+                    color: AppColors.textDark.withValues(alpha: 0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -833,10 +833,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     height: 48,
                     decoration: BoxDecoration(
                       color: isLow
-                          ? _orange.withOpacity(0.12)
+                          ? _orange.withValues(alpha: 0.12)
                           : med.isActive
-                              ? AppColors.primary.withOpacity(0.1)
-                              : AppColors.divider.withOpacity(0.4),
+                              ? AppColors.primary.withValues(alpha: 0.1)
+                              : AppColors.divider.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
@@ -885,7 +885,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   Switch(
                     value: med.isActive,
                     onChanged: (_) => _toggleActive(med),
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     materialTapTargetSize:
                         MaterialTapTargetSize.shrinkWrap,
                   ),

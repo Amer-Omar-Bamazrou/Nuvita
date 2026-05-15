@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,8 +16,15 @@ import 'features/dashboard/providers/health_history_provider.dart';
 import 'features/doctor/screens/doctor_login_screen.dart';
 import 'features/appointments/services/appointment_service.dart';
 import 'features/appointments/screens/appointment_detail_screen.dart';
+import 'features/medication/services/medication_service.dart';
+import 'features/medication/screens/medication_detail_screen.dart';
+import 'features/notifications/screens/suggestions_panel_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+
+// Firestore listener subscriptions for doctor-assigned meds and suggestions
+StreamSubscription<QuerySnapshot>? _medListenerSub;
+StreamSubscription<QuerySnapshot>? _suggestionListenerSub;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,19 +34,17 @@ void main() async {
 
   Widget home;
   bool scheduleWellness = false;
+  String? loggedInUid;
 
   if (kIsWeb) {
-    // Web build always lands on the doctor portal
     home = const DoctorLoginScreen();
   } else {
-    // Mobile routing unchanged
     final onboardingDone = await PreferencesService.isOnboardingComplete();
     final user = FirebaseAuth.instance.currentUser;
 
     if (!onboardingDone) {
       home = const OnboardingScreen();
     } else if (user != null) {
-      // Check if account was deactivated by a doctor before restoring session
       bool deactivated = false;
       try {
         final doc = await FirebaseFirestore.instance
@@ -56,6 +62,7 @@ void main() async {
       } else {
         home = const MainShell();
         scheduleWellness = true;
+        loggedInUid = user.uid;
       }
     } else {
       home = const LoginScreen();
@@ -63,16 +70,15 @@ void main() async {
   }
 
   await NotificationService.initialize(navigatorKey: navigatorKey);
+
   if (scheduleWellness) {
     try {
       await NotificationService.scheduleDailyWellnessReminder();
-    } catch (_) {
-      // Exact alarms may not be permitted on Android 12+; non-critical
-    }
+      await NotificationService.scheduleWeeklyHealthSummary();
+    } catch (_) {}
   }
 
-  // Handles appointment notification taps — wired here to avoid circular
-  // dependency between notification_service and appointment_service.
+  // Appointment tap handler
   NotificationService.setAppointmentTapHandler((appointmentId) async {
     await Future.delayed(const Duration(milliseconds: 500));
     final apt = await AppointmentService.getAppointmentById(appointmentId);
@@ -89,7 +95,113 @@ void main() async {
     );
   });
 
+  // Medication detail tap handler (for missed dose / doctor assigned)
+  NotificationService.setMedicationDetailHandler((medicationId) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final med = await MedicationService.getById(medicationId);
+    if (med == null) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MedicationDetailScreen(medication: med),
+      ),
+    );
+  });
+
+  // Suggestions panel tap handler (for doctor suggestion / weekly summary)
+  NotificationService.setSuggestionsPanelHandler(() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const SuggestionsPanelScreen(
+          diseaseType: '',
+          currentReadings: {},
+        ),
+      ),
+    );
+  });
+
+  // Start Firestore listeners for logged-in patient
+  if (loggedInUid != null) {
+    _startDoctorNotificationListeners(loggedInUid);
+  }
+
   runApp(NuvitaApp(home: home));
+}
+
+// Listens for doctor-assigned medications and doctor-sent suggestions.
+// Shows a local notification when a new document is detected.
+void _startDoctorNotificationListeners(String uid) {
+  // Track known doc IDs to avoid notifying for existing documents on first load
+  Set<String>? knownMedIds;
+  Set<String>? knownSuggestionIds;
+
+  // Doctor-assigned medications
+  _medListenerSub?.cancel();
+  _medListenerSub = FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .collection('medications')
+      .snapshots()
+      .listen((snapshot) {
+    final currentIds = snapshot.docs.map((d) => d.id).toSet();
+
+    if (knownMedIds == null) {
+      // First snapshot — just record existing IDs
+      knownMedIds = currentIds;
+      return;
+    }
+
+    for (final doc in snapshot.docs) {
+      if (knownMedIds!.contains(doc.id)) continue;
+      final data = doc.data();
+      if (data['addedByDoctor'] == true) {
+        NotificationService.showDoctorAssignedMedNotification(
+          medId: doc.id,
+          doctorName: data['doctorName'] as String? ?? 'Your Doctor',
+          medName: data['name'] as String? ?? 'Medication',
+          dosage: data['dosage'] as String? ?? '',
+        );
+      }
+    }
+    knownMedIds = currentIds;
+  });
+
+  // Doctor-sent suggestions
+  _suggestionListenerSub?.cancel();
+  _suggestionListenerSub = FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .collection('suggestions')
+      .snapshots()
+      .listen((snapshot) {
+    final currentIds = snapshot.docs.map((d) => d.id).toSet();
+
+    if (knownSuggestionIds == null) {
+      knownSuggestionIds = currentIds;
+      return;
+    }
+
+    for (final doc in snapshot.docs) {
+      if (knownSuggestionIds!.contains(doc.id)) continue;
+      final data = doc.data();
+      NotificationService.showDoctorSuggestionNotification(
+        suggestionId: doc.id,
+        doctorName: data['doctorName'] as String? ?? 'Your Doctor',
+      );
+    }
+    knownSuggestionIds = currentIds;
+  });
+}
+
+void cancelDoctorNotificationListeners() {
+  _medListenerSub?.cancel();
+  _suggestionListenerSub?.cancel();
+  _medListenerSub = null;
+  _suggestionListenerSub = null;
 }
 
 class NuvitaApp extends StatelessWidget {

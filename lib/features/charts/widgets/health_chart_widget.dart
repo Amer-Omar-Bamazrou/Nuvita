@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/chart_data_point.dart';
@@ -98,7 +98,7 @@ class HealthChartWidget extends StatelessWidget {
               show: true,
               drawVerticalLine: false,
               getDrawingHorizontalLine: (_) => FlLine(
-                color: AppColors.divider.withOpacity(0.5),
+                color: AppColors.divider.withValues(alpha: 0.5),
                 strokeWidth: 1,
               ),
             ),
@@ -165,8 +165,8 @@ class HealthChartWidget extends StatelessWidget {
                   show: !_isDualLine,
                   gradient: LinearGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.22),
-                      AppColors.primary.withOpacity(0.0),
+                      AppColors.primary.withValues(alpha: 0.22),
+                      AppColors.primary.withValues(alpha: 0.0),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,

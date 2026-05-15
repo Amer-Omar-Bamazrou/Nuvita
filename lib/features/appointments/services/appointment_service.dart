@@ -104,17 +104,28 @@ class AppointmentService {
     final reminderTime = appointment.dateTime
         .subtract(Duration(minutes: appointment.reminderMinutes));
     await NotificationService.initialize();
-    await NotificationService.scheduleNotification(
+
+    // Main reminder with Confirm / Reschedule actions
+    await NotificationService.scheduleAppointmentReminder(
       id: appointment.id,
-      title: 'Appointment Reminder',
-      body: 'Your appointment with ${appointment.doctorName} is coming up',
+      doctorName: appointment.doctorName,
+      speciality: appointment.speciality,
       scheduledDate: reminderTime,
-      payload: 'appt:${appointment.id}',
+      appointmentDateTime: appointment.dateTime,
+    );
+
+    // Day-before reminder at 18:00 (skipped if appointment is today)
+    await NotificationService.scheduleAppointmentTomorrowReminder(
+      id: appointment.id,
+      doctorName: appointment.doctorName,
+      speciality: appointment.speciality,
+      appointmentDateTime: appointment.dateTime,
     );
   }
 
   static Future<void> cancelReminder(String id) async {
-    await NotificationService.cancelNotification(id);
+    await NotificationService.cancelAppointmentReminder(id);
+    await NotificationService.cancelAppointmentTomorrowReminder(id);
   }
 
   static Future<void> _saveAll(List<AppointmentModel> list) async {

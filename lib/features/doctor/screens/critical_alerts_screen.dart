@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 import 'doctor_patient_detail_screen.dart';
@@ -42,7 +42,7 @@ class CriticalAlertsScreen extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(20),
             itemCount: alerts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) =>
                 _AlertCard(alert: alerts[i], doctorName: doctorName),
           );
@@ -60,13 +60,13 @@ class CriticalAlertsScreen extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF004346).withOpacity(0.07),
+              color: const Color(0xFF004346).withValues(alpha: 0.07),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.check_circle_outline_rounded,
               size: 40,
-              color: const Color(0xFF2E7D32).withOpacity(0.6),
+              color: const Color(0xFF2E7D32).withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: 20),

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -157,7 +157,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
           Text(
             'Tap CANCEL to stop',
             style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.error.withOpacity(0.7),
+              color: AppColors.error.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),

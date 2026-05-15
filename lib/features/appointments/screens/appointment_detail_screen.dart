@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../models/appointment_model.dart';
@@ -112,7 +112,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
@@ -144,7 +144,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.12),
+                color: AppColors.success.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -223,14 +223,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
   }
 
   Widget _rowDivider() =>
-      Divider(height: 1, color: AppColors.divider.withOpacity(0.6));
+      Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.6));
 
   BoxDecoration _cardDecoration() => BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),

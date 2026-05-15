@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -58,7 +58,10 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
 
     // No pill tracking — just record the tap and warn if overdosing
     if (_med.pillsRemaining == null) {
-      setState(() => _takenTodayCount++);
+      setState(() {
+        _takenTodayCount++;
+        _allDosesTaken = _takenTodayCount >= _med.times.length;
+      });
       if (_takenTodayCount > _med.times.length) {
         _showOverdoseWarning();
       } else if (mounted) {
@@ -109,6 +112,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
       });
     }
 
+    _allDosesTaken = _takenTodayCount >= _med.times.length;
     if (_takenTodayCount > _med.times.length) _showOverdoseWarning();
   }
 
@@ -136,6 +140,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     if (value) {
       await NotificationService.scheduleDailyMedicationReminder(
         updated.id, updated.name, updated.dosage, updated.times,
+        pillsPerDose: updated.pillsPerDose,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -271,8 +276,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             height: 56,
             decoration: BoxDecoration(
               color: _med.isActive
-                  ? AppColors.primary.withOpacity(0.1)
-                  : AppColors.divider.withOpacity(0.4),
+                  ? AppColors.primary.withValues(alpha: 0.1)
+                  : AppColors.divider.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
@@ -300,8 +305,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
                     color: _med.isActive
-                        ? AppColors.success.withOpacity(0.12)
-                        : AppColors.secondary.withOpacity(0.12),
+                        ? AppColors.success.withValues(alpha: 0.12)
+                        : AppColors.secondary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -385,7 +390,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           Switch(
             value: _med.reminderEnabled,
             onChanged: (val) => _onReminderToggle(val),
-            activeColor: AppColors.primary,
+            activeThumbColor: AppColors.primary,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ],
@@ -404,11 +409,11 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
         color: isLow ? const Color(0xFFFFF3E0) : AppColors.white,
         borderRadius: BorderRadius.circular(16),
         border: isLow
-            ? Border.all(color: _orange.withOpacity(0.4))
+            ? Border.all(color: _orange.withValues(alpha: 0.4))
             : null,
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -446,7 +451,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: _orange.withOpacity(0.15),
+                color: _orange.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -501,11 +506,11 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           backgroundColor: _allDosesTaken
               ? AppColors.success
               : outOfPills
-                  ? AppColors.secondary.withOpacity(0.45)
+                  ? AppColors.secondary.withValues(alpha: 0.45)
                   : AppColors.primary,
           disabledBackgroundColor: _allDosesTaken
-              ? AppColors.success.withOpacity(0.6)
-              : AppColors.secondary.withOpacity(0.3),
+              ? AppColors.success.withValues(alpha: 0.6)
+              : AppColors.secondary.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
         ),
@@ -583,14 +588,14 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   }
 
   Widget _rowDivider() =>
-      Divider(height: 1, color: AppColors.divider.withOpacity(0.6));
+      Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.6));
 
   BoxDecoration _cardDecoration() => BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),

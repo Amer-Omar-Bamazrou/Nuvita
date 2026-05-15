@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
@@ -290,7 +290,7 @@ class _DoctorPatientDetailScreenState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedFreq,
+                  initialValue: selectedFreq,
                   items: _frequencies
                       .map((f) => DropdownMenuItem(
                             value: f,
@@ -554,8 +554,8 @@ class _DoctorPatientDetailScreenState
       _MetricDef('temperature', 'Temperature', '°C'),
     ];
 
-    String _val(String key) => latest[key]?['value']?.toString() ?? '—';
-    String _status(String key) => latest[key]?['status'] as String? ?? '—';
+    String getVal(String key) => latest[key]?['value']?.toString() ?? '—';
+    String getStatus(String key) => latest[key]?['status'] as String? ?? '—';
 
     return Column(
       children: [
@@ -571,14 +571,14 @@ class _DoctorPatientDetailScreenState
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _BPSubValue(label: 'Sys', value: _val('systolic'), unit: 'mmHg',
-                        status: _status('systolic')),
+                    _BPSubValue(label: 'Sys', value: getVal('systolic'), unit: 'mmHg',
+                        status: getStatus('systolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Dia', value: _val('diastolic'), unit: 'mmHg',
-                        status: _status('diastolic')),
+                    _BPSubValue(label: 'Dia', value: getVal('diastolic'), unit: 'mmHg',
+                        status: getStatus('diastolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Pulse', value: _val('heartRate'), unit: 'bpm',
-                        status: _status('heartRate')),
+                    _BPSubValue(label: 'Pulse', value: getVal('heartRate'), unit: 'bpm',
+                        status: getStatus('heartRate')),
                   ],
                 ),
               ],
@@ -588,8 +588,8 @@ class _DoctorPatientDetailScreenState
 
         // ── Remaining single-value cards ──────────────────────────────────
         ...singleMetrics.map((m) {
-          final value = _val(m.metricType);
-          final status = _status(m.metricType);
+          final value = getVal(m.metricType);
+          final status = getStatus(m.metricType);
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _Card(
@@ -814,6 +814,7 @@ class _DoctorPatientDetailScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => _AssignMedicationSheet(
+        doctorName: widget.doctorName,
         onAssign: (data) async {
           try {
             await _service.addMedication(_uid, data);
@@ -1165,7 +1166,7 @@ class _DoctorPatientDetailScreenState
       decoration: BoxDecoration(
         color: const Color(0xFFF0F8F8),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF004346).withOpacity(0.15)),
+        border: Border.all(color: const Color(0xFF004346).withValues(alpha: 0.15)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1401,8 +1402,9 @@ class _BPDivider extends StatelessWidget {
 // ── Assign Medication bottom sheet ────────────────────────────────────────────
 
 class _AssignMedicationSheet extends StatefulWidget {
+  final String doctorName;
   final Future<void> Function(Map<String, dynamic> data) onAssign;
-  const _AssignMedicationSheet({required this.onAssign});
+  const _AssignMedicationSheet({required this.doctorName, required this.onAssign});
 
   @override
   State<_AssignMedicationSheet> createState() =>
@@ -1504,6 +1506,8 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
       'pillsPerDose': 1,
       'lowSupplyNotified': false,
       'reminderEnabled': false,
+      'addedByDoctor': true,
+      'doctorName': widget.doctorName,
     };
 
     await widget.onAssign(data);
@@ -1617,7 +1621,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                                 onTap: () => _selectMedicine(med),
                                 child: Container(
                                   color: isSelected
-                                      ? _primary.withOpacity(0.06)
+                                      ? _primary.withValues(alpha: 0.06)
                                       : Colors.transparent,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 10),
@@ -1677,7 +1681,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: _selectedFrequency,
+                    initialValue: _selectedFrequency,
                     items: _frequencies
                         .map((f) => DropdownMenuItem(
                               value: f,

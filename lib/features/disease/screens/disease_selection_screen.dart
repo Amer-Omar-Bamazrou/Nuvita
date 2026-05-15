@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_colors.dart';
@@ -182,7 +182,7 @@ class DiseaseCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.07)
+              ? AppColors.primary.withValues(alpha: 0.07)
               : AppColors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -191,7 +191,7 @@ class DiseaseCard extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.06),
+              color: AppColors.textDark.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 3),
             ),

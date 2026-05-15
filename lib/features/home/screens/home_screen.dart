@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +18,7 @@ import '../../health/models/metric_config.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../health/screens/add_reading_list_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
+import '../../../core/services/notification_service.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
 
@@ -423,7 +424,7 @@ class _HomeBodyState extends State<_HomeBody> {
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
@@ -464,7 +465,7 @@ class _HomeBodyState extends State<_HomeBody> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -519,7 +520,7 @@ class _HomeBodyState extends State<_HomeBody> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 15, color: color),
@@ -590,7 +591,7 @@ class _HomeBodyState extends State<_HomeBody> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.25),
+            color: AppColors.primary.withValues(alpha: 0.25),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -607,7 +608,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 Text(
                   'Managing',
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.white.withOpacity(0.7),
+                    color: AppColors.white.withValues(alpha: 0.7),
                     fontSize: 13,
                   ),
                 ),
@@ -694,7 +695,7 @@ class _HomeBodyState extends State<_HomeBody> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _tasks.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (_, i) => _buildTaskCard(_tasks[i]),
           ),
       ],
@@ -714,7 +715,7 @@ class _HomeBodyState extends State<_HomeBody> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -861,6 +862,13 @@ class _HomeBodyState extends State<_HomeBody> {
 
     if (task.medicationId != null) {
       await MedicationService.takeMedication(task.medicationId!);
+      MedicationService.saveDoseToFirebase(
+        medicationId: task.medicationId!,
+        medicationName: task.displayName,
+        dosage: task.subtitle ?? '',
+        timeSlot: task.timeOfDay,
+        date: todayStr,
+      );
     }
 
     if (mounted) {
@@ -1036,8 +1044,19 @@ class _HomeBodyState extends State<_HomeBody> {
       status: _statusToString(status),
       timestamp: when,
     );
-    await HealthReadingService.saveReading(uid, reading);
+    final readingId = await HealthReadingService.saveReading(uid, reading);
     historyProvider.addReading(metric, value);
+
+    // Fire critical reading notification
+    final statusStr = _statusToString(status);
+    if (statusStr == 'High' || statusStr == 'Low') {
+      NotificationService.showCriticalReadingNotification(
+        readingId: readingId,
+        metricName: config?.title ?? metric.name,
+        value: value,
+        unit: config?.unit ?? '',
+      );
+    }
   }
 }
 

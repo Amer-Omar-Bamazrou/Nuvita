@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -118,7 +118,7 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.textDark.withOpacity(0.08),
+                        color: AppColors.textDark.withValues(alpha: 0.08),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -161,7 +161,7 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
             Icon(
               Icons.spa_outlined,
               size: 72,
-              color: AppColors.secondary.withOpacity(0.5),
+              color: AppColors.secondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 20),
             Text(

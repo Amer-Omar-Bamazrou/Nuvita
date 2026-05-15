@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -179,7 +179,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: AppColors.error.withOpacity(0.12),
+          color: AppColors.error.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Icon(Icons.delete_rounded,
@@ -208,7 +208,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -281,7 +281,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
                           fontSize: 12,
                           color: isCompleted
                               ? Colors.grey.shade400
-                              : AppColors.secondary.withOpacity(0.8),
+                              : AppColors.secondary.withValues(alpha: 0.8),
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

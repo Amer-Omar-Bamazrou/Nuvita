@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
@@ -107,7 +107,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.calendar_month_rounded,
@@ -131,7 +131,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       itemCount: _days.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, i) => _buildDayCard(_days[i]),
     );
   }
@@ -158,7 +158,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -191,7 +191,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: 8,
-              backgroundColor: AppColors.divider.withOpacity(0.4),
+              backgroundColor: AppColors.divider.withValues(alpha: 0.4),
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),

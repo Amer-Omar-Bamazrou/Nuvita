@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'doctor_login_screen.dart';
 import 'doctor_overview_screen.dart';
@@ -97,7 +97,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
               ],
             ),
           ),
-          Divider(color: Colors.white.withOpacity(0.15), height: 1),
+          Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
           const SizedBox(height: 16),
           // Nav items
           ..._navItems.asMap().entries.map((e) =>
@@ -105,7 +105,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           const Spacer(),
           // Session status indicator
           _buildSessionIndicator(),
-          Divider(color: Colors.white.withOpacity(0.15), height: 1),
+          Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
           // Doctor info + logout
           Padding(
             padding: const EdgeInsets.all(16),
@@ -133,7 +133,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                         horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.3)),
+                          color: Colors.white.withValues(alpha: 0.3)),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Row(

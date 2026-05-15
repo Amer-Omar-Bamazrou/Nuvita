@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -555,7 +555,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    color: AppColors.white.withOpacity(0.75),
+                    color: AppColors.white.withValues(alpha: 0.75),
                     fontSize: 13,
                   ),
                 ),
@@ -577,7 +577,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Text(
                 'Last entry',
                 style: TextStyle(
-                  color: AppColors.white.withOpacity(0.75),
+                  color: AppColors.white.withValues(alpha: 0.75),
                   fontSize: 12,
                 ),
               ),
@@ -779,7 +779,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.06),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -791,7 +791,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(_metricIcon(reading.metricType),
@@ -815,7 +815,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(

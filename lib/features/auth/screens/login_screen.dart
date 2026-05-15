@@ -10,7 +10,6 @@ import '../services/auth_service.dart';
 import '../../home/screens/main_shell.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import 'register_screen.dart';
-import 'change_password_screen.dart';
 import 'forgot_password_sent_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -157,10 +156,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        _goBackToOnboarding();
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBackToOnboarding();
       },
       child: Scaffold(
         body: SafeArea(

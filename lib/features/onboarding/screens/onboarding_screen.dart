@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -309,7 +309,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.textDark.withOpacity(0.08),
+                    color: AppColors.textDark.withValues(alpha: 0.08),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -389,7 +389,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       layoutBuilder: (current, previous) => Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
-        children: [...previous, if (current != null) current],
+        children: [...previous, ?current],
       ),
       child: SizedBox.expand(
         key: ValueKey<int>(_step),
@@ -423,7 +423,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: 96,
             height: 96,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -604,7 +604,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.07)
+              ? AppColors.primary.withValues(alpha: 0.07)
               : AppColors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -613,7 +613,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.06),
+              color: AppColors.textDark.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 3),
             ),
@@ -693,7 +693,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.06),
+              color: AppColors.textDark.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -705,7 +705,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
@@ -802,7 +802,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withOpacity(0.05),
+              color: AppColors.textDark.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -814,7 +814,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: service.iconColor.withOpacity(0.12),
+                color: service.iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(service.icon, color: service.iconColor, size: 26),
@@ -873,7 +873,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(

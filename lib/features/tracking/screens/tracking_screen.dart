@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
@@ -158,7 +158,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -205,7 +205,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -220,7 +220,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       children: [
         const SizedBox(height: 8),
         Icon(Icons.medication_rounded,
-            size: 40, color: AppColors.primary.withOpacity(0.4)),
+            size: 40, color: AppColors.primary.withValues(alpha: 0.4)),
         const SizedBox(height: 12),
         Text(
           'No medications added yet',
@@ -255,7 +255,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       children: [
         for (int i = 0; i < displayMeds.length; i++) ...[
           if (i > 0)
-            Divider(height: 1, color: AppColors.divider.withOpacity(0.5)),
+            Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.5)),
           _buildMedRow(displayMeds[i]),
         ],
         if (remaining > 0) ...[
@@ -320,7 +320,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -368,7 +368,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -385,7 +385,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       children: [
         const SizedBox(height: 8),
         Icon(Icons.calendar_today_rounded,
-            size: 40, color: AppColors.primary.withOpacity(0.4)),
+            size: 40, color: AppColors.primary.withValues(alpha: 0.4)),
         const SizedBox(height: 12),
         Text(
           'No upcoming appointments',
@@ -419,7 +419,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       children: [
         for (int i = 0; i < displayAppts.length; i++) ...[
           if (i > 0)
-            Divider(height: 1, color: AppColors.divider.withOpacity(0.5)),
+            Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.5)),
           _buildAppointmentRow(displayAppts[i]),
         ],
         const SizedBox(height: 12),
@@ -457,7 +457,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -520,7 +520,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.12),
+        color: bgColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -556,7 +556,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withOpacity(0.06),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -571,7 +571,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
