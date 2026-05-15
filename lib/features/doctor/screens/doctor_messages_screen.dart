@@ -2,15 +2,51 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 
-class DoctorMessagesScreen extends StatelessWidget {
+class DoctorMessagesScreen extends StatefulWidget {
   const DoctorMessagesScreen({super.key});
 
+  @override
+  State<DoctorMessagesScreen> createState() => _DoctorMessagesScreenState();
+}
+
+class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
   static const _primary = Color(0xFF004346);
+
+  final _service = DoctorService();
+  List<Map<String, dynamic>>? _messages;
+  bool _loading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final msgs = await _service.getPatientMessages();
+      if (!mounted) return;
+      setState(() {
+        _messages = msgs;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('DoctorMessagesScreen error: $e');
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final service = DoctorService();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
@@ -26,31 +62,20 @@ class DoctorMessagesScreen extends StatelessWidget {
           child: Divider(height: 1, color: Color(0xFFEEEEEE)),
         ),
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: service.getPatientMessages(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: _primary),
-            );
-          }
-          if (snap.hasError) {
-            debugPrint('DoctorMessagesScreen error: ${snap.error}');
-            return _buildEmpty(isError: true);
-          }
-          final messages = snap.data ?? [];
-          if (messages.isEmpty) return _buildEmpty();
-          return _buildList(context, service, messages);
-        },
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: _primary))
+          : _hasError
+              ? _buildEmpty(isError: true)
+              : _messages == null || _messages!.isEmpty
+                  ? _buildEmpty()
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: _buildList(_messages!),
+                    ),
     );
   }
 
-  Widget _buildList(
-    BuildContext context,
-    DoctorService service,
-    List<Map<String, dynamic>> messages,
-  ) {
+  Widget _buildList(List<Map<String, dynamic>> messages) {
     final unreadCount =
         messages.where((m) => !(m['readByDoctor'] as bool? ?? false)).length;
 
@@ -71,9 +96,9 @@ class DoctorMessagesScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Row(
               children: [
-                Text(
+                const Text(
                   'All Messages',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF172A3A),
@@ -101,16 +126,12 @@ class DoctorMessagesScreen extends StatelessWidget {
             ),
           );
         }
-        return _buildMessageTile(context, service, messages[i - 1]);
+        return _buildMessageTile(messages[i - 1]);
       },
     );
   }
 
-  Widget _buildMessageTile(
-    BuildContext context,
-    DoctorService service,
-    Map<String, dynamic> data,
-  ) {
+  Widget _buildMessageTile(Map<String, dynamic> data) {
     final id = data['id'] as String;
     final patientUid = data['patientUid'] as String;
     final text = data['text'] as String? ?? '';
@@ -139,7 +160,6 @@ class DoctorMessagesScreen extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Patient avatar with unread dot
           Stack(
             clipBehavior: Clip.none,
             children: [
@@ -155,8 +175,8 @@ class DoctorMessagesScreen extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   initials,
-                  style: TextStyle(
-                    color: isRead ? _primary : _primary,
+                  style: const TextStyle(
+                    color: _primary,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -182,8 +202,6 @@ class DoctorMessagesScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 14),
-
-          // Content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,9 +276,10 @@ class DoctorMessagesScreen extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () async {
                         try {
-                          await service.markMessageAsRead(patientUid, id);
+                          await _service.markMessageAsRead(patientUid, id);
+                          _load();
                         } catch (_) {
-                          if (context.mounted) {
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text('Failed to mark as read')),
@@ -268,7 +287,7 @@ class DoctorMessagesScreen extends StatelessWidget {
                           }
                         }
                       },
-                      child: Text(
+                      child: const Text(
                         'Mark as read',
                         style: TextStyle(
                           fontSize: 12,

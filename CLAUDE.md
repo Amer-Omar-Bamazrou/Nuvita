@@ -52,7 +52,7 @@ Notification taps are routed via a global `navigatorKey` wired in `main.dart`. T
 
 ### Firestore conventions
 
-- Patient data lives under `/users/{uid}/` with sub-collections: `readings`, `medications`, `alerts`, `suggestions`, `messages`
+- Patient data lives under `/users/{uid}/` with sub-collections: `readings`, `medications`, `alerts`, `suggestions`, `messages`, `appointments`, `emergency_contacts`, `adherence`
 - Doctors are identified by a document existing at `/doctors/{uid}`
 - `collectionGroup` queries are used by the doctor portal for cross-patient reads (`readings`, `alerts`, `messages`, `suggestions`)
 - Compound Firestore queries on `collectionGroup` require composite indexes — prefer single-field filtering in Firestore and filter additional conditions client-side to avoid index errors
@@ -168,7 +168,7 @@ None — all planned features complete.
 ## Firestore Security Rules
 - Rules file: `firestore.rules` in project root
 - Applied: 2026-05-02 on branch feature/firebase-security-rules; updated 2026-05-06 for doctor access
-- Coverage: /users/{userId} (read/write own data OR isDoctor()), /readings, /alerts, /medications, /profile sub-collections, /share_tokens (public read, auth write), /doctors/{doctorId} (read own only), collectionGroup readings + suggestions (doctor read)
+- Coverage: /users/{userId} (read/write own data OR isDoctor()), /readings, /alerts, /medications, /profile, /suggestions, /messages, /appointments, /emergency_contacts, /adherence sub-collections, /share_tokens (public read, auth write), /doctors/{doctorId} (read own only), /bugReports (anyone write, doctor read), collectionGroup readings + suggestions + alerts + messages (doctor read)
 - Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
 
 - Doctor Suggestions History (branch: feature/doctor-suggestions):
@@ -253,6 +253,29 @@ None — all planned features complete.
   - Enhancement 5 — Undo Snackbar: _toggleTaken() shows 5-second snackbar after marking dose taken; "Undo" action removes SharedPreferences key, restores pillsRemaining by pillsPerDose, resets lowSupplyNotified if count > 7, cancels low supply notification, refreshes UI via _load()
   - Bug Fix — Undo Pill Count: undo callback now fetches medication via getById(), increments pillsRemaining by pillsPerDose, updates via MedicationService.update() to persist to SharedPreferences + Firestore
 
+- Medication Adherence Sync (branch: feature/adherence-sync):
+  - MedicationService: added saveDoseToFirebase(), removeDoseFromFirebase(), getAdherenceHistory() — writes/deletes/reads from /users/{uid}/adherence/{date_medId_time}; doc fields: medicationId, medicationName, dosage, timeSlot, date, taken, timestamp
+  - medication_screen.dart: _toggleTaken() now calls saveDoseToFirebase on take and removeDoseFromFirebase on untoggle + undo; all Firebase calls fire-and-forget alongside existing SharedPreferences writes
+  - medication_history_screen.dart: _load() fetches Firestore adherence via getAdherenceHistory() when logged in; merges with SharedPreferences — dose counts as taken if either source says true; survives reinstalls
+  - DoctorService: added getPatientAdherence(uid, days) — queries /users/{uid}/adherence filtered by date
+  - doctor_patient_detail_screen.dart: new "Medication Adherence" section in right column between Medications and Readings; _loadAdherence() cross-references adherence docs with medication schedules; 7-day progress bars (green 100% / orange 50%+ / red below); _AdherenceDay data class
+  - firestore.rules: added /users/{userId}/adherence/{doseId} rule (owner + doctor read/write)
+
+- Blood Pressure Dual Line Chart (branch: feature/charts-bp-dual):
+  - ChartDataService: added getBPChartData(uid, days) — single Firestore query returning Map<String, List<ChartDataPoint>> with 'systolic' and 'diastolic' keys
+  - HealthChartWidget: added optional secondaryData, secondaryLabel, secondaryColor params; dual line mode draws second line with outlined circle dots; _alignSecondarySpots() matches diastolic to systolic x-axis by date; _dualTooltip() shows combined "Sys: 125 / Dia: 82" on tap; gradient fill disabled in dual mode
+  - charts_screen.dart: _loadChartData() calls getBPChartData() when BP selected; trend header shows both Sys/Dia values with coloured dots; average shows "Avg Sys 125 / Dia 80 mmHg"; _getBPInsight() considers both values (sys normal + dia elevated, etc.); legend row with Systolic + Diastolic dots; trend calculated from systolic only
+  - Design: Systolic #004346 solid dots, Diastolic #508991 outlined dots, zone bands systolic only
+
+- Doctor Patient Health Trends (branch: feature/charts-bp-dual):
+  - doctor_patient_detail_screen.dart: added imports for ChartDataPoint, ChartDataService, HealthChartWidget; new "Health Trends" section at top of right column; _loadChart() picks metric by patient disease type (BP→systolic dual line, diabetes→bloodSugar, heart→heartRate); inline HealthChartWidget at 200px with legend dots + trend badge (Improving/Stable/Worsening); empty state "No chart data available"
+
+- PDF Report Charts (branch: feature/pdf-charts):
+  - report_service.dart: added _buildMetricChart() using pw.CustomPaint with PdfGraphics canvas drawing; draws line chart for each metric with 2+ readings below its table; zone bands (green normal, orange warning) from MetricThresholds; horizontal grid lines, axis labels, data dots; BP dual line with systolic (#004346) + diastolic (#508991) and "— Systolic — Diastolic" legend; chart height 150pt, full page width
+
+## Firestore Structure (continued)
+/users/{uid}/adherence/{date_medId_time} — medicationId, medicationName, dosage, timeSlot, date, taken, timestamp
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
@@ -277,7 +300,12 @@ lib/features/lifestyle/services/ — lifestyle_engine
 lib/features/lifestyle/widgets/ — suggestion_card
 lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wired to nav)
 lib/features/notifications/screens/ — suggestions_panel_screen
-lib/features/emergency/ — emergency_service, trend_warning_service
+lib/features/emergency/ — emergency_service, trend_warning_service, models/emergency_contact
+lib/features/emergency/screens/ — emergency_contacts_screen
+lib/features/charts/models/ — chart_data_point, metric_thresholds
+lib/features/charts/services/ — chart_data_service
+lib/features/charts/widgets/ — health_chart_widget
+lib/features/charts/screens/ — charts_screen
 lib/features/report/ — report_service, report_screen
 lib/features/doctor/data/ — medicine_library
 lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen, doctor_messages_screen, doctor_suggestions_history_screen, critical_alerts_screen, deleted_patients_screen

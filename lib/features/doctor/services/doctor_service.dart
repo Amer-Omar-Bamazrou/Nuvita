@@ -273,16 +273,49 @@ class DoctorService {
 
   // ── Patient Messages (Mod 2) ───────────────────────────────────────────────
 
-  // Stream of all patient messages, newest first
-  Stream<List<Map<String, dynamic>>> getPatientMessages() {
-    return _db
-        .collectionGroup('messages')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) {
-              final uid = d.reference.parent.parent?.id ?? '';
-              return {'id': d.id, 'patientUid': uid, ...d.data()};
-            }).toList());
+  // All patient messages across all patients, newest first.
+  // Iterates per-patient to avoid collectionGroup index requirements.
+  Future<List<Map<String, dynamic>>> getPatientMessages() async {
+    final patients = await getAllPatients();
+    final results = <Map<String, dynamic>>[];
+
+    for (final patient in patients) {
+      final uid = patient['uid'] as String;
+      final patientName = patient['name'] as String? ??
+          (patient['profile'] as Map?)?['name'] as String? ??
+          'Unknown';
+      final patientId = patient['patientId'] as String? ?? '';
+
+      try {
+        final snap = await _db
+            .collection('users')
+            .doc(uid)
+            .collection('messages')
+            .orderBy('timestamp', descending: true)
+            .get();
+
+        for (final doc in snap.docs) {
+          results.add({
+            'id': doc.id,
+            'patientUid': uid,
+            'patientName': doc.data()['patientName'] ?? patientName,
+            'patientId': doc.data()['patientId'] ?? patientId,
+            ...doc.data(),
+          });
+        }
+      } catch (e) {
+        debugPrint('getPatientMessages for $uid: $e');
+      }
+    }
+
+    results.sort((a, b) {
+      final aTs = a['timestamp'];
+      final bTs = b['timestamp'];
+      if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+      return 0;
+    });
+
+    return results;
   }
 
   // Mark a patient message as read by the doctor
@@ -295,13 +328,10 @@ class DoctorService {
         .update({'readByDoctor': true});
   }
 
-  // Real-time count of unread patient messages
-  Stream<int> getUnreadMessagesCount() {
-    return _db
-        .collectionGroup('messages')
-        .where('readByDoctor', isEqualTo: false)
-        .snapshots()
-        .map((snap) => snap.docs.length);
+  // Count of unread patient messages
+  Future<int> getUnreadMessagesCount() async {
+    final messages = await getPatientMessages();
+    return messages.where((m) => !(m['readByDoctor'] as bool? ?? false)).length;
   }
 
   // ── Patient Deactivation (Mod 5) ───────────────────────────────────────────

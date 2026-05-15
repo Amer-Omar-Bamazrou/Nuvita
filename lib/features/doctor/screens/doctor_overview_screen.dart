@@ -29,6 +29,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
   int _lowMedications = 0;
   int _totalSuggestions = 0;
   int _deactivated = 0;
+  int _unreadMessages = 0;
   List<Map<String, dynamic>> _recentReadings = [];
   Map<String, String> _patientNames = {};
 
@@ -46,6 +47,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     int lowMeds = 0;
     int suggestions = 0;
     int deactivated = 0;
+    int unreadMsgs = 0;
     List<Map<String, dynamic>> recent = [];
 
     try {
@@ -82,6 +84,12 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     }
 
     try {
+      unreadMsgs = await _service.getUnreadMessagesCount();
+    } catch (e) {
+      debugPrint('Overview: getUnreadMessagesCount failed: $e');
+    }
+
+    try {
       recent = await _service.getRecentReadingsAllPatients();
     } catch (e) {
       debugPrint('Overview: getRecentReadingsAllPatients failed: $e');
@@ -103,6 +111,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
       _lowMedications = lowMeds;
       _totalSuggestions = suggestions;
       _deactivated = deactivated;
+      _unreadMessages = unreadMsgs;
       _recentReadings = recent;
       _patientNames = names;
       _loading = false;
@@ -213,29 +222,23 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     );
   }
 
-  // Patient Messages card uses a real-time stream for the unread count
   Widget _buildMessagesCard() {
-    return StreamBuilder<int>(
-      stream: _service.getUnreadMessagesCount(),
-      builder: (context, snap) {
-        final count = snap.data ?? 0;
-        return _buildStatCard(_StatCard(
-          label: 'Unread Messages',
-          value: '$count',
-          icon: Icons.message_rounded,
-          iconColor: const Color(0xFF1565C0),
-          iconBg: const Color(0xFFE3F2FD),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const DoctorMessagesScreen(),
-              ),
-            );
-          },
-        ));
+    return _buildStatCard(_StatCard(
+      label: 'Unread Messages',
+      value: '$_unreadMessages',
+      icon: Icons.message_rounded,
+      iconColor: const Color(0xFF1565C0),
+      iconBg: const Color(0xFFE3F2FD),
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const DoctorMessagesScreen(),
+          ),
+        );
+        _loadData();
       },
-    );
+    ));
   }
 
   Widget _buildStatCard(_StatCard s) {
