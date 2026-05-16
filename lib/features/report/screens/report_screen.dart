@@ -54,6 +54,8 @@ class _ReportScreenState extends State<ReportScreen> {
     }
 
     try {
+      await MedicationService.syncFromFirebase(uid);
+
       final docFuture = FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -162,13 +164,32 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildGuestMessage() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Center(
-        child: Text(
-          'Create an account to generate your health report.',
-          style: AppTextStyles.body.copyWith(color: AppColors.secondary),
-          textAlign: TextAlign.center,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.description_rounded,
+                  size: 48, color: AppColors.primary),
+            ),
+            const SizedBox(height: 24),
+            Text('Sign in to generate reports',
+                style: AppTextStyles.heading3, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(
+              'Create an account to generate your health report.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
@@ -177,34 +198,57 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget _buildContent() {
     final condition = _diseaseLabels[_diseaseType] ?? 'General Monitoring';
 
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: _buildSummaryCard(condition),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-          child: Column(
-            children: [
-              NuvitaButton(
-                label: 'Preview Report',
-                onPressed: _isGenerating ? null : _previewReport,
-                isLoading: _isGenerating,
-                icon: Icons.visibility_outlined,
+        Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: _buildSummaryCard(condition),
               ),
-              const SizedBox(height: 12),
-              NuvitaButton(
-                label: 'Share with Doctor',
-                onPressed: _isGenerating ? null : _shareReport,
-                isOutlined: true,
-                icon: Icons.share_outlined,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              child: Column(
+                children: [
+                  NuvitaButton(
+                    label: 'Preview Report',
+                    onPressed: _isGenerating ? null : _previewReport,
+                    icon: Icons.visibility_outlined,
+                  ),
+                  const SizedBox(height: 12),
+                  NuvitaButton(
+                    label: 'Share with Doctor',
+                    onPressed: _isGenerating ? null : _shareReport,
+                    isOutlined: true,
+                    icon: Icons.share_outlined,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        if (_isGenerating)
+          Container(
+            color: AppColors.background.withValues(alpha: 0.85),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: AppColors.primary),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Generating your report...',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -218,9 +262,9 @@ class _ReportScreenState extends State<ReportScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),

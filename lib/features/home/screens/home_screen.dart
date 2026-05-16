@@ -16,7 +16,9 @@ import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/models/metric_config.dart';
 import '../../health/services/health_reading_service.dart';
-import '../../health/screens/add_reading_list_screen.dart';
+import '../../health/screens/add_reading_input_screen.dart';
+import '../../health/screens/blood_pressure_input_screen.dart';
+import '../../appointments/screens/add_appointment_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
 import '../../../core/services/notification_service.dart';
 
@@ -71,8 +73,6 @@ class _HomeBodyState extends State<_HomeBody> {
   int _medScheduleCount = 0;
   List<DailyTask> _tasks = [];
   bool _isLoadingTasks = false;
-  bool _showMedTasks = true;
-  bool _showReadingTasks = true;
   final _suggestionService = PatientSuggestionService();
 
   static const _diseaseLabels = {
@@ -134,11 +134,11 @@ class _HomeBodyState extends State<_HomeBody> {
       max: 300,
     ),
     HealthMetric.steps: MetricConfig(
-      title: 'Daily Steps',
+      title: 'Walking',
       icon: Icons.directions_walk,
-      unit: 'steps',
+      unit: 'min',
       min: 0,
-      max: 100000,
+      max: 300,
     ),
     HealthMetric.temperature: MetricConfig(
       title: 'Temperature',
@@ -235,15 +235,6 @@ class _HomeBodyState extends State<_HomeBody> {
     final services = await PreferencesService.getSelectedServices();
     final showMeds =
         services.isEmpty || services.contains('medications');
-    final showReadings =
-        services.isEmpty || services.contains('measurements');
-
-    if (mounted) {
-      setState(() {
-        _showMedTasks = showMeds;
-        _showReadingTasks = showReadings;
-      });
-    }
 
     // Medication tasks only
     if (uid != null && showMeds) {
@@ -523,7 +514,7 @@ class _HomeBodyState extends State<_HomeBody> {
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 15, color: color),
+            child: Icon(icon, size: 16, color: color),
           ),
           const SizedBox(width: 7),
           Expanded(
@@ -627,7 +618,7 @@ class _HomeBodyState extends State<_HomeBody> {
             child: const Icon(
               Icons.warning_rounded,
               color: Colors.red,
-              size: 20,
+              size: 22,
             ),
           ),
         ],
@@ -753,7 +744,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 foregroundColor: AppColors.white,
                 minimumSize: const Size(double.infinity, 48),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(14)),
               ),
               child: const Text('Mark as Taken',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
@@ -897,51 +888,144 @@ class _HomeBodyState extends State<_HomeBody> {
   // ── FAB ───────────────────────────────────────────────────────────────────
 
   Widget _buildFAB(BuildContext _) {
-    return FloatingActionButton.extended(
-      heroTag: 'fab_home',
-      onPressed: _showAddSheet,
-      backgroundColor: AppColors.primary,
-      elevation: 4,
-      icon: const Icon(Icons.add_rounded, color: AppColors.white),
-      label: Text("Add Today's Reading", style: AppTextStyles.buttonText),
+    return SizedBox(
+      height: 52,
+      child: FloatingActionButton.extended(
+        heroTag: 'fab_home',
+        onPressed: _showAddSheet,
+        backgroundColor: AppColors.primary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(26),
+        ),
+        icon: const Icon(Icons.add_rounded, color: AppColors.white, size: 22),
+        label: Text(
+          "Add Today's Reading",
+          style: AppTextStyles.buttonText.copyWith(fontSize: 15),
+        ),
+      ),
     );
   }
 
   // Sheet methods use the State's own context directly — it outlives any sheet
   // or Consumer2 builder context, preventing _dependents.isEmpty assertion errors.
   void _showAddSheet() {
+    final now = DateTime.now();
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final dateLabel = '${weekdays[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x2E004346),
+                blurRadius: 30,
+                offset: Offset(0, -8),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  "Add Today's Entry",
-                  style: AppTextStyles.heading3,
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-              ),
-              if (_showMedTasks)
-                _buildSheetOption(
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      "Add Today's Entry",
+                      style: AppTextStyles.heading2.copyWith(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      dateLabel,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'What would you like to log right now?',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.secondary,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'QUICK MEASUREMENT',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: const Color(0xFF6E7A82),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GridView.count(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 1.15,
+                  children: [
+                    _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugarBefore),
+                    _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
+                    _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
+                    _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
+                    _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Steps', sheetCtx, HealthMetric.steps),
+                    _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: 16),
+                Text(
+                  'OTHER',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: const Color(0xFF6E7A82),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildOtherRow(
                   icon: Icons.medication_rounded,
-                  label: 'Medications',
-                  subtitle: 'Add or log a medication',
+                  color: AppColors.card,
+                  label: 'Medication',
+                  subtitle: 'Log a dose or add a new med',
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     Navigator.push(
@@ -951,62 +1035,44 @@ class _HomeBodyState extends State<_HomeBody> {
                     ).then((_) => _loadMedSummary());
                   },
                 ),
-              if (_showReadingTasks)
-                _buildSheetOption(
-                  icon: Icons.monitor_heart_rounded,
-                  label: 'Measurement',
-                  subtitle: 'Record a health reading',
+                const SizedBox(height: 8),
+                _buildOtherRow(
+                  icon: Icons.calendar_month_rounded,
+                  color: const Color(0xFF00695C),
+                  label: 'Appointment',
+                  subtitle: 'Book or note a visit',
                   onTap: () {
                     Navigator.pop(sheetCtx);
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _showMeasurementSheet();
-                    });
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AddAppointmentScreen()),
+                    );
                   },
                 ),
-              const SizedBox(height: 8),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildSheetOption({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-      leading: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, color: AppColors.primary, size: 22),
-      ),
-      title: Text(label,
-          style: AppTextStyles.label.copyWith(fontSize: 15)),
-      subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
-      trailing: const Icon(Icons.chevron_right_rounded,
-          color: Colors.grey, size: 20),
-      onTap: onTap,
-    );
-  }
-
-  Future<void> _showMeasurementSheet() async {
+  void _navigateToMetric(HealthMetric? metric) async {
+    Widget screen;
+    if (metric == null) {
+      screen = BloodPressureInputScreen(onSave: _saveReading);
+    } else {
+      final config = _configs[metric]!;
+      screen = AddReadingInputScreen(
+        metric: metric,
+        config: config,
+        onSave: _saveReading,
+      );
+    }
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => AddReadingListScreen(
-          diseaseType: _diseaseType,
-          onSave: (metric, value, when) => _saveReading(metric, value, when),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => screen),
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1020,6 +1086,99 @@ class _HomeBodyState extends State<_HomeBody> {
         ),
       );
     }
+  }
+
+  Widget _buildQuickChip(IconData icon, Color color, String label, BuildContext sheetCtx, HealthMetric? metric) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(sheetCtx);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _navigateToMetric(metric);
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: color),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOtherRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark,
+                  )),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.secondary,
+                  )),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.secondary),
+          ],
+        ),
+      ),
+    );
   }
 
   // Saves a reading submitted via the new full-screen reading flow.

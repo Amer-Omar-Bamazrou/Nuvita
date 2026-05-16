@@ -156,32 +156,25 @@ class _DeletedPatientsScreenState extends State<DeletedPatientsScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEEE)),
       ),
       child: Row(
         children: [
-          // Avatar
           Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF0F2F4),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Text(
               name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+              style: const TextStyle(
+                color: Color(0xFF9AA3AB),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -228,7 +221,7 @@ class _DeletedPatientsScreenState extends State<DeletedPatientsScreen> {
                     deactivatedLabel,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade500,
+                      color: const Color(0xFF6E7A82),
                     ),
                   ),
                 ],
@@ -287,7 +280,7 @@ class _DeletedPatientsScreenState extends State<DeletedPatientsScreen> {
           const SizedBox(height: 8),
           Text(
             'Deactivated patients\nwill appear here.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)),
             textAlign: TextAlign.center,
           ),
         ],

@@ -272,18 +272,18 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
       child: Row(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
               color: _med.isActive
-                  ? AppColors.primary.withValues(alpha: 0.1)
+                  ? const Color(0xFF1565C0).withValues(alpha: 0.12)
                   : AppColors.divider.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               Icons.medication_rounded,
-              size: 30,
-              color: _med.isActive ? AppColors.primary : AppColors.secondary,
+              size: 32,
+              color: _med.isActive ? const Color(0xFF1565C0) : AppColors.secondary,
             ),
           ),
           const SizedBox(width: 16),
@@ -308,11 +308,16 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                         ? AppColors.success.withValues(alpha: 0.12)
                         : AppColors.secondary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _med.isActive
+                          ? AppColors.success.withValues(alpha: 0.4)
+                          : AppColors.secondary.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: Text(
                     _med.isActive ? 'Active' : 'Inactive',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: _med.isActive
                           ? AppColors.success
@@ -451,13 +456,14 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: _orange.withValues(alpha: 0.15),
+                color: _orange.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _orange.withValues(alpha: 0.4)),
               ),
               child: const Text(
                 'Low supply',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: _orange,
                 ),

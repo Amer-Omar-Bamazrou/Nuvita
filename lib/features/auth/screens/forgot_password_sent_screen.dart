@@ -9,9 +9,9 @@ class ForgotPasswordSentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.white,
         foregroundColor: AppColors.primary,
         elevation: 0,
       ),
@@ -23,8 +23,8 @@ class ForgotPasswordSentScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 88,
-                  height: 88,
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
@@ -32,7 +32,7 @@ class ForgotPasswordSentScreen extends StatelessWidget {
                   child: const Icon(
                     Icons.mark_email_read_rounded,
                     color: AppColors.primary,
-                    size: 44,
+                    size: 48,
                   ),
                 ),
                 const SizedBox(height: 28),

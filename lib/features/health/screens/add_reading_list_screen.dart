@@ -207,11 +207,11 @@ class _AddReadingListScreenState extends State<AddReadingListScreen> {
               onChanged: (v) => setState(() => _query = v),
               decoration: InputDecoration(
                 hintText: 'Search measurements…',
-                hintStyle: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
+                hintStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.secondary),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.secondary, size: 20),
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                        icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.secondary),
                         onPressed: () {
                           _searchCtrl.clear();
                           setState(() => _query = '');
@@ -266,11 +266,12 @@ class _AddReadingListScreenState extends State<AddReadingListScreen> {
 
   Widget _sectionHeader(String label) {
     return Text(
-      label,
-      style: AppTextStyles.label.copyWith(
-        color: AppColors.textDark.withValues(alpha: 0.5),
+      label.toUpperCase(),
+      style: const TextStyle(
         fontSize: 12,
-        letterSpacing: 0.6,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.2,
+        color: Color(0xFF6E7A82),
       ),
     );
   }
@@ -280,7 +281,14 @@ class _AddReadingListScreenState extends State<AddReadingListScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -298,7 +306,7 @@ class _AddReadingListScreenState extends State<AddReadingListScreen> {
           item.subtitle,
           style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 22),
+        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.secondary, size: 22),
         onTap: () => _openItem(item),
       ),
     );

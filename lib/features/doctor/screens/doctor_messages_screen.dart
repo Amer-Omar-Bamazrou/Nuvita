@@ -88,7 +88,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
               height: 1,
               indent: 80,
               endIndent: 20,
-              color: Colors.grey.shade200,
+              color: const Color(0xFFEEEEEE),
             ),
       itemBuilder: (context, i) {
         if (i == 0) {
@@ -164,8 +164,8 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: isRead
                       ? const Color(0xFFE0F0F0)
@@ -265,7 +265,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
                     fontSize: 13,
                     height: 1.4,
                     color: isRead
-                        ? Colors.grey.shade600
+                        ? const Color(0xFF6E7A82)
                         : const Color(0xFF172A3A),
                   ),
                 ),
@@ -340,7 +340,7 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
             isError
                 ? 'Check your connection and try again.'
                 : 'Messages sent by patients\nwill appear here.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)),
             textAlign: TextAlign.center,
           ),
         ],

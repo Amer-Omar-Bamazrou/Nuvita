@@ -118,9 +118,9 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.textDark.withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        color: AppColors.textDark.withValues(alpha: 0.06),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
@@ -158,12 +158,20 @@ class _LifestyleScreenState extends State<LifestyleScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.spa_outlined,
-              size: 72,
-              color: AppColors.secondary.withValues(alpha: 0.5),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.spa_outlined,
+                size: 48,
+                color: AppColors.primary,
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Text(
               'No tips yet',
               style: AppTextStyles.heading3.copyWith(color: AppColors.secondary),

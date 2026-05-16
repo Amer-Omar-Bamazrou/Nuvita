@@ -304,7 +304,7 @@ class _DoctorPatientDetailScreenState
                   decoration: InputDecoration(
                     labelText: 'Frequency',
                     labelStyle: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade600),
+                        fontSize: 12, color: const Color(0xFF6E7A82)),
                     isDense: true,
                     filled: true,
                     fillColor: const Color(0xFFF9F9F9),
@@ -312,11 +312,11 @@ class _DoctorPatientDetailScreenState
                         horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
                     ),
                   ),
                   style: const TextStyle(
@@ -375,7 +375,7 @@ class _DoctorPatientDetailScreenState
       keyboardType: numeric ? TextInputType.number : TextInputType.text,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+        hintStyle: TextStyle(fontSize: 12, color: const Color(0xFF9AA3AB)),
         isDense: true,
         filled: true,
         fillColor: const Color(0xFFF9F9F9),
@@ -383,11 +383,11 @@ class _DoctorPatientDetailScreenState
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
         ),
       ),
       style: const TextStyle(fontSize: 13),
@@ -552,6 +552,7 @@ class _DoctorPatientDetailScreenState
       _MetricDef('bloodSugarAfter', 'Blood Sugar (After Meal)', 'mg/dL'),
       _MetricDef('weight', 'Weight', 'kg'),
       _MetricDef('temperature', 'Temperature', '°C'),
+      _MetricDef('steps', 'Walking', 'min'),
     ];
 
     String getVal(String key) => latest[key]?['value']?.toString() ?? '—';
@@ -567,7 +568,7 @@ class _DoctorPatientDetailScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Blood Pressure',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    style: TextStyle(fontSize: 12, color: const Color(0xFF6E7A82))),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -601,7 +602,7 @@ class _DoctorPatientDetailScreenState
                       children: [
                         Text(m.label,
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
+                                fontSize: 12, color: const Color(0xFF6E7A82))),
                         const SizedBox(height: 4),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -620,7 +621,7 @@ class _DoctorPatientDetailScreenState
                               Text(m.unit,
                                   style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade500)),
+                                      color: const Color(0xFF9AA3AB))),
                             ],
                           ],
                         ),
@@ -663,7 +664,7 @@ class _DoctorPatientDetailScreenState
                 child: CircularProgressIndicator(color: _primary))
           else if (_chartPoints.isEmpty)
             Text('No chart data available.',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
+                style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)))
           else ...[
             // Legend
             Padding(
@@ -699,7 +700,7 @@ class _DoctorPatientDetailScreenState
               children: [
                 Text(
                   'Last 7 days',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 12, color: const Color(0xFF9AA3AB)),
                 ),
                 const Spacer(),
                 _buildChartTrendBadge(),
@@ -722,7 +723,7 @@ class _DoctorPatientDetailScreenState
         ),
         const SizedBox(width: 4),
         Text(label,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            style: TextStyle(fontSize: 11, color: const Color(0xFF6E7A82))),
       ],
     );
   }
@@ -745,7 +746,7 @@ class _DoctorPatientDetailScreenState
         break;
       case TrendDirection.stable:
         icon = Icons.trending_flat_rounded;
-        color = Colors.grey;
+        color = const Color(0xFF9AA3AB);
         label = 'Stable';
         break;
     }
@@ -798,7 +799,7 @@ class _DoctorPatientDetailScreenState
           else if (_medications.isEmpty)
             Text('No medications recorded.',
                 style: TextStyle(
-                    fontSize: 13, color: Colors.grey.shade500))
+                    fontSize: 13, color: const Color(0xFF6E7A82)))
           else
             ..._medications.map(_buildMedRow),
         ],
@@ -847,7 +848,7 @@ class _DoctorPatientDetailScreenState
       decoration: BoxDecoration(
         color: const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: const Color(0xFFEEEEEE)),
       ),
       child: Row(
         children: [
@@ -870,8 +871,9 @@ class _DoctorPatientDetailScreenState
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF3E0),
-                          borderRadius: BorderRadius.circular(4),
+                          color: const Color(0xFFFF6F00).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFFF6F00).withValues(alpha: 0.4)),
                         ),
                         child: const Text(
                           'Low Supply',
@@ -888,7 +890,7 @@ class _DoctorPatientDetailScreenState
                   '${med['dosage'] ?? ''} · ${med['frequency'] ?? ''}'
                   '${pills != null ? ' · $pills pills left' : ''}',
                   style: TextStyle(
-                      fontSize: 12, color: Colors.grey.shade600),
+                      fontSize: 12, color: const Color(0xFF6E7A82)),
                 ),
               ],
             ),
@@ -896,7 +898,7 @@ class _DoctorPatientDetailScreenState
           IconButton(
             onPressed: () => _showEditMedDialog(med),
             icon: const Icon(Icons.edit_outlined, size: 16),
-            color: Colors.grey.shade500,
+            color: const Color(0xFF9AA3AB),
             tooltip: 'Edit',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -918,7 +920,7 @@ class _DoctorPatientDetailScreenState
                 child: CircularProgressIndicator(color: _primary))
           else if (_adherenceDays.every((d) => d.total == 0))
             Text('No medication schedule found.',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
+                style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)))
           else
             ..._adherenceDays.map(_buildAdherenceRow),
         ],
@@ -969,7 +971,7 @@ class _DoctorPatientDetailScreenState
               child: LinearProgressIndicator(
                 value: ratio,
                 minHeight: 10,
-                backgroundColor: Colors.grey.shade200,
+                backgroundColor: const Color(0xFFEEEEEE),
                 valueColor: AlwaysStoppedAnimation<Color>(barColor),
               ),
             ),
@@ -1005,7 +1007,7 @@ class _DoctorPatientDetailScreenState
           else if (_readings.isEmpty)
             Text('No readings recorded.',
                 style: TextStyle(
-                    fontSize: 13, color: Colors.grey.shade500))
+                    fontSize: 13, color: const Color(0xFF6E7A82)))
           else ...[
             // Table header
             Container(
@@ -1090,18 +1092,18 @@ class _DoctorPatientDetailScreenState
               hintText:
                   'Write a health suggestion for this patient…',
               hintStyle: TextStyle(
-                  fontSize: 13, color: Colors.grey.shade400),
+                  fontSize: 13, color: const Color(0xFF9AA3AB)),
               filled: true,
               fillColor: const Color(0xFFF9F9F9),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide:
-                    BorderSide(color: Colors.grey.shade300),
+                    BorderSide(color: const Color(0xFFEEEEEE)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide:
-                    BorderSide(color: Colors.grey.shade300),
+                    BorderSide(color: const Color(0xFFEEEEEE)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -1142,7 +1144,7 @@ class _DoctorPatientDetailScreenState
               'Recent suggestions',
               style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade500,
+                  color: const Color(0xFF6E7A82),
                   fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
@@ -1184,7 +1186,7 @@ class _DoctorPatientDetailScreenState
           const SizedBox(width: 8),
           Text(time,
               style: TextStyle(
-                  fontSize: 11, color: Colors.grey.shade400)),
+                  fontSize: 11, color: const Color(0xFF9AA3AB))),
         ],
       ),
     );
@@ -1204,14 +1206,8 @@ class _Card extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEEE)),
       ),
       child: child,
     );
@@ -1252,7 +1248,7 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                  fontSize: 12, color: Colors.grey.shade500),
+                  fontSize: 12, color: const Color(0xFF9AA3AB)),
             ),
           ),
           Expanded(
@@ -1295,32 +1291,28 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg;
     Color fg;
     switch (status) {
       case 'Normal':
-        bg = const Color(0xFFE8F5E9);
         fg = const Color(0xFF2E7D32);
         break;
       case 'Warning':
-        bg = const Color(0xFFFFF3E0);
         fg = const Color(0xFFFF6F00);
         break;
       case 'Critical':
       case 'High':
       case 'Low':
-        bg = const Color(0xFFFFEBEE);
         fg = const Color(0xFFD32F2F);
         break;
       default:
-        bg = const Color(0xFFF5F5F5);
-        fg = Colors.grey;
+        fg = const Color(0xFF9AA3AB);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
+        color: fg.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: fg.withValues(alpha: 0.4)),
       ),
       child: Text(
         status,
@@ -1362,7 +1354,7 @@ class _BPSubValue extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(label,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+              style: TextStyle(fontSize: 11, color: const Color(0xFF9AA3AB))),
           const SizedBox(height: 4),
           Text(
             value,
@@ -1375,7 +1367,7 @@ class _BPSubValue extends StatelessWidget {
           if (value != '—') ...[
             const SizedBox(height: 2),
             Text(unit,
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                style: TextStyle(fontSize: 10, color: const Color(0xFF9AA3AB))),
           ],
           if (status != '—') ...[
             const SizedBox(height: 4),
@@ -1393,7 +1385,7 @@ class _BPDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 48,
-      color: Colors.grey.shade200,
+      color: const Color(0xFFEEEEEE),
       margin: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
@@ -1530,7 +1522,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: const Color(0xFFEEEEEE),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1553,7 +1545,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                   icon: const Icon(Icons.close_rounded, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  color: Colors.grey.shade500,
+                  color: const Color(0xFF9AA3AB),
                 ),
               ],
             ),
@@ -1571,7 +1563,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                     decoration: InputDecoration(
                       hintText: 'Search medicines by name or category…',
                       hintStyle: TextStyle(
-                          fontSize: 13, color: Colors.grey.shade400),
+                          fontSize: 13, color: const Color(0xFF9AA3AB)),
                       prefixIcon:
                           const Icon(Icons.search_rounded, size: 18),
                       filled: true,
@@ -1582,12 +1574,12 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                            BorderSide(color: const Color(0xFFEEEEEE)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                            BorderSide(color: const Color(0xFFEEEEEE)),
                       ),
                     ),
                   ),
@@ -1597,7 +1589,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                   Container(
                     constraints: const BoxConstraints(maxHeight: 200),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: const Color(0xFFEEEEEE)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: _filtered.isEmpty
@@ -1607,7 +1599,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                               child: Text(
                                 'No medicines found',
                                 style: TextStyle(
-                                    fontSize: 13, color: Colors.grey),
+                                    fontSize: 13, color: Color(0xFF6E7A82)),
                               ),
                             ),
                           )
@@ -1650,7 +1642,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                                               '${med.category} · ${med.defaultDosage} · ${med.type}',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.grey.shade500,
+                                                color: const Color(0xFF6E7A82),
                                               ),
                                             ),
                                           ],
@@ -1697,7 +1689,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                     decoration: InputDecoration(
                       labelText: 'Frequency',
                       labelStyle: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600),
+                          fontSize: 12, color: const Color(0xFF6E7A82)),
                       isDense: true,
                       filled: true,
                       fillColor: Colors.white,
@@ -1706,12 +1698,12 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                            BorderSide(color: const Color(0xFFEEEEEE)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                            BorderSide(color: const Color(0xFFEEEEEE)),
                       ),
                     ),
                   ),
@@ -1777,7 +1769,7 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle:
-            TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            TextStyle(fontSize: 12, color: const Color(0xFF9AA3AB)),
         isDense: true,
         filled: true,
         fillColor: Colors.white,
@@ -1785,11 +1777,11 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: const Color(0xFFEEEEEE)),
         ),
       ),
       style: const TextStyle(fontSize: 13),

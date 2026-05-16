@@ -214,7 +214,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.inputFill,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
                   children: [
@@ -355,17 +355,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       filled: true,
                       fillColor: AppColors.inputFill,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.primary),
                       ),
@@ -484,17 +484,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       filled: true,
                       fillColor: AppColors.inputFill,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.primary),
                       ),
@@ -806,7 +806,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.error),
+                      side: const BorderSide(color: AppColors.error, width: 2),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -853,7 +853,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
+          const Divider(height: 1),
           ...children,
         ],
       ),
@@ -879,12 +879,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title,
         style: AppTextStyles.body.copyWith(
           fontWeight: FontWeight.w500,
+          fontSize: 15,
           color: titleColor ?? AppColors.textDark,
         ),
       ),
       subtitle: Text(
         subtitle,
         style: AppTextStyles.bodySmall.copyWith(
+          fontSize: 13,
           color: AppColors.secondary,
         ),
       ),

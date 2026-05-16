@@ -155,7 +155,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         if (!didPop) _goBackToOnboarding();
       },
       child: Scaffold(
+        backgroundColor: AppColors.white,
         appBar: AppBar(
+          backgroundColor: AppColors.white,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded),
             onPressed: _goBackToOnboarding,
@@ -176,7 +178,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     'Start your health journey with Nuvita',
                     style: AppTextStyles.bodySmall,
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 32),
                   NuvitaTextField(
                     label: 'Full Name',
                     hint: 'John Doe',
@@ -218,7 +220,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 12),
                   _buildTermsNote(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                   if (_errorMessage != null) ...[
                     Text(
                       _errorMessage!,

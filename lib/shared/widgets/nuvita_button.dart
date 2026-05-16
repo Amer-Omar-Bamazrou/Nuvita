@@ -27,9 +27,22 @@ class NuvitaButton extends StatelessWidget {
   }
 
   Widget _buildFilled() {
-    return SizedBox(
+    final enabled = onPressed != null && !isLoading;
+    return Container(
       width: double.infinity,
       height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: enabled
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.16),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         child: _buildChild(color: AppColors.white),

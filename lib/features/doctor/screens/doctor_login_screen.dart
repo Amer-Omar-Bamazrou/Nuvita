@@ -97,53 +97,90 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade200),
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFEEEEEE)),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primary.withValues(alpha: 0.10),
+                    blurRadius: 30,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Padding(
-                padding: const EdgeInsets.all(40),
+                padding: const EdgeInsets.fromLTRB(36, 40, 36, 32),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Logo
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: _primary,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.favorite_rounded,
-                          color: Colors.white,
-                          size: 30,
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: _primary,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.favorite_rounded,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Nuvita',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  color: _primary,
+                                ),
+                              ),
+                              Text(
+                                'Doctor Portal',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Sign in',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: _primary,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Nuvita',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: _primary,
-                          letterSpacing: 0.5,
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Access your patient dashboard',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Doctor Portal',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 36),
+                      const SizedBox(height: 28),
                       // Email
                       TextFormField(
                         controller: _emailCtrl,
@@ -211,17 +248,26 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
                         const SizedBox(height: 12),
                       ],
                       const SizedBox(height: 8),
-                      // Sign In button
-                      SizedBox(
+                      Container(
                         width: double.infinity,
-                        height: 48,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _primary.withValues(alpha: 0.16),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
                         child: ElevatedButton(
                           onPressed: _loading ? null : _signIn,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _primary,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             elevation: 0,
                           ),
@@ -237,11 +283,25 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
                               : const Text(
                                   'Sign In',
                                   style: TextStyle(
-                                    fontSize: 15,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
                         ),
+                      ),
+                      const SizedBox(height: 24),
+                      Divider(color: const Color(0xFFEEEEEE), height: 1),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Icon(Icons.shield_rounded, size: 16, color: Colors.grey.shade500),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Authorised personnel only. All access is logged.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -264,21 +324,21 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
       prefixIcon: Icon(icon, size: 20, color: Colors.grey.shade500),
       suffixIcon: suffix,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: _primary, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: _primary, width: 2),
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFFF0F4F6),
       contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
     );
   }
 }

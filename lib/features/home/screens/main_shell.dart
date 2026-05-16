@@ -46,7 +46,7 @@ class _MainShellState extends State<MainShell> {
           type: BottomNavigationBarType.fixed,
           backgroundColor: AppColors.white,
           selectedItemColor: AppColors.primary,
-          unselectedItemColor: Colors.grey,
+          unselectedItemColor: const Color(0xFF9AA3AB),
           elevation: 0,
           selectedLabelStyle: const TextStyle(
             fontSize: 12,

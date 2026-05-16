@@ -91,13 +91,21 @@ Notification taps are routed via a global `navigatorKey` wired in `main.dart`. T
 - fl_chart (health charts — trends, zone bands, insights)
 
 ## Design System
-- Background: #D6F3F4
+- Background: #F7F9FB (was #D6F3F4 — migrated to neutral near-white)
+- Input Fill: #F0F4F6 (was #EAF7F8)
+- Divider: #E2EAED (was #B0D8DC)
 - Primary: #004346
 - Cards: #74B3CE
 - Secondary: #508991
 - Text: #172A3A
-- Card Radius: 16
+- White: #FFFFFF
+- Card Radius: 16 (patient app), 12 (doctor portal)
+- Button Height: 56, Radius: 14
 - Style: Minimal, elderly friendly
+- Shadow System: xs `0 2px 8px rgba(23,42,58,0.06)`, sm `0 3px 10px rgba(23,42,58,0.06)`, md `0 4px 12px rgba(23,42,58,0.08)`, brand `0 4px 14px rgba(0,67,70,0.25)`
+- Status Badges: outlined pill style — 12% alpha fill + 40% alpha border + coloured text, borderRadius 20
+- Doctor Portal Greys: border #EEEEEE, light text #9AA3AB, muted text #6E7A82
+- Design reference: `C:\Users\lenovo\Downloads\Nuvita Design System` (CSS tokens, JSX component recreations, HTML previews)
 
 ## Completed Features
 - Flutter + Firebase setup
@@ -311,6 +319,43 @@ None — all planned features complete.
     - 2,100,000–2,199,999: appointment reminders
   - flutter analyze result: 0 errors, 0 warnings, 0 info — fully clean
 
+- UI Polish & Design System Standardisation (branch: feature/ui-polish):
+  - Full design system created externally (CSS tokens, JSX component recreations, HTML previews) then implemented across 42 files
+  - Colour Token Migration: app_colors.dart updated — background #D6F3F4→#F7F9FB, inputFill #EAF7F8→#F0F4F6, divider #B0D8DC→#E2EAED (teal-heavy palette to neutral near-white)
+  - Card Shadows: neutralised from AppColors.primary-based to AppColors.textDark 6% alpha; doctor portal cards switched from box shadows to 1px #EEEEEE border
+  - Status Badges: solid coloured backgrounds → outlined pill style (12% alpha fill + 40% alpha border + coloured text, borderRadius 20) across patient app and doctor portal
+  - NuvitaButton Refactor: wrapped ElevatedButton in Container with BoxDecoration shadow (primary 16% alpha, blurRadius 10, offset 0,3); 56px height, 14 radius; outlined variant with 2px primary border
+  - Auth Screens: login_screen.dart + register_screen.dart switched to white background (was teal)
+  - Doctor Login Rework: maxWidth 420 container with border+shadow, row layout for logo+title, "Sign in" heading, "Access your patient dashboard" subtitle, 52px button, security footer with shield icon, input fields radius 14 + fillColor #F0F4F6
+  - Doctor Overview: stat cards changed from horizontal Row to vertical Column layout (icon on top, 28px number, label below), 240px wide, #EEEEEE border; activity feed bottom-border rows instead of zebra-striping; "Recent Patient Activity" title
+  - Doctor Patient Detail: all _Card widgets radius 8→12, boxShadow→#EEEEEE border; all Colors.grey.shade* → explicit hex constants (#EEEEEE, #9AA3AB, #6E7A82)
+  - Charts Screen: time range toggle changed from bordered buttons to iOS-style segmented control (inputFill background, white active segment with shadow); metric chips gained outlined border when unselected; empty states now 96px circle containers with 8% primary fill + 48px icon
+  - app_theme.dart: card elevation 3→2, shadow neutralised, ElevatedButton elevation→0 with transparent shadow, input border width 1→1.5
+  - Consistent updates across: onboarding, home, tracking, history, profile, medication (all screens), appointments (all screens), emergency contacts, suggestions panel, disease selection, doctor messages, doctor suggestions history, critical alerts, deleted patients, doctor settings, doctor patients, forgot password, change password, blood pressure input, add reading screens, lifestyle screen
+
+- Health Report Fixes (branch: feature/ui-polish, 2026-05-16):
+  - report_screen.dart: added full-screen loading overlay ("Generating your report...") with semi-transparent background when PDF is generating — replaced tiny spinner inside Preview button
+  - report_screen.dart: added MedicationService.syncFromFirebase(uid) in _loadData() before loadAll() — doctor-assigned medications now appear in summary card and generated PDF (previously only locally-added meds showed)
+
+- Measurement Entry Screens Redesign (branch: feature/ui-polish, 2026-05-16):
+  - Design source: `C:\Users\lenovo\Downloads\Nuvita Design System (1)\ui_kits\patient_app\PatientSecondary.jsx` (AddTemperatureScreen, AddBloodPressureScreen, AddWeightScreen, AddBloodSugarBeforeScreen, AddBloodSugarAfterScreen)
+  - add_reading_input_screen.dart: full rewrite — ruler picker replaced with +/− stepper buttons (56px circles, haptic feedback); hero card with icon tile, kicker text, 72sp value, status badge (Normal/High/Low with colored dot), range hint; "Type a value" link opens dialog for keyboard entry; date/time card with icon tiles + chevrons; context chips per metric type; blood sugar Before/After Meal segmented toggle that switches metric type; sticky "Save Reading" button with top border
+  - blood_pressure_input_screen.dart: full rewrite — removed segment tabs + ruler + summary chips; hero card shows combined sys/dia display with heart icon + status badge; separate Systolic and Diastolic stepper cards with +/− buttons; date/time card with icon tiles; context chips; sticky "Save Reading" button
+
+- Add Today's Entry Sheet Redesign (branch: feature/ui-polish, 2026-05-16):
+  - home_screen.dart: replaced simple 2-row ListTile bottom sheet with modern design — grab handle, "Add Today's Entry" title + date, "What would you like to log?" subtitle, QUICK MEASUREMENT 3×2 grid of colored icon chips (Sugar, BP, Heart, Weight, Steps, Temp), divider, OTHER section with Medication + Appointment rows
+  - Quick chips navigate directly to specific measurement screens (skip Add Reading List page): Sugar→bloodSugarBefore, BP→BloodPressureInputScreen, Heart→heartRate, Weight→weight, Steps→walking, Temp→temperature
+  - New _navigateToMetric() method handles direct routing + success snackbar
+  - Removed unused _showMeasurementSheet(), _showMedTasks, _showReadingTasks, AddReadingListScreen import
+  - Added imports: AddReadingInputScreen, BloodPressureInputScreen, AddAppointmentScreen
+
+- Walking / Steps Feature (branch: feature/ui-polish, 2026-05-16):
+  - home_screen.dart: steps config changed from "Daily Steps / steps / 0–100,000" to "Walking / min / 0–300"
+  - add_reading_input_screen.dart: full walking support — purple icon (#7B1FA2), "WALKING MINUTES" kicker, status (Great ≥30min / Good ≥15min / Low activity), range hint "Aim for at least 30 minutes daily", context chips (Walking, Jogging, Errands, Exercise), default 30 min
+  - health_history_provider.dart: steps unit changed from "steps" to "min"
+  - doctor_patient_detail_screen.dart: added Walking card (metricType 'steps', unit 'min') to singleMetrics list — doctors see patient walking data
+  - Firebase: saved to /users/{uid}/readings as metricType: "steps", unit: "min" — same readings pipeline, no new rules needed
+
 ## Modifications List — Do Later
 - (none — all modifications complete)
 
@@ -327,9 +372,9 @@ lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider
 lib/features/health/models/ — health_reading, metric_config
-lib/features/health/screens/ — add_reading_list_screen, add_reading_input_screen, blood_pressure_input_screen
+lib/features/health/screens/ — add_reading_list_screen (legacy — no longer wired to home), add_reading_input_screen, blood_pressure_input_screen
 lib/features/health/services/ — health_reading_service, health_log_service (legacy)
-lib/features/health/widgets/ — ruler_picker
+lib/features/health/widgets/ — ruler_picker (legacy — replaced by stepper buttons)
 lib/features/lifestyle/models/ — lifestyle_suggestion
 lib/features/lifestyle/services/ — lifestyle_engine
 lib/features/lifestyle/widgets/ — suggestion_card

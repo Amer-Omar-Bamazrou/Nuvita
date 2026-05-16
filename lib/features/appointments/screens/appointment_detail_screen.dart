@@ -112,13 +112,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFF00695C).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
               Icons.calendar_month_rounded,
               size: 28,
-              color: AppColors.primary,
+              color: Color(0xFF00695C),
             ),
           ),
           const SizedBox(width: 16),
@@ -146,11 +146,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.4)),
               ),
               child: const Text(
                 'Confirmed',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: AppColors.success,
                 ),

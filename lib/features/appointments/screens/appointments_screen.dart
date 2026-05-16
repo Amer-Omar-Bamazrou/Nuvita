@@ -208,9 +208,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -365,13 +365,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: badgeColor,
+        color: badgeColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: badgeColor,
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -386,8 +387,16 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AppColors.secondary, size: 56),
-            const SizedBox(height: 16),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 48),
+            ),
+            const SizedBox(height: 24),
             Text(title,
                 style: AppTextStyles.heading3,
                 textAlign: TextAlign.center),

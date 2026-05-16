@@ -271,12 +271,25 @@ class _MedicationScreenState extends State<MedicationScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'fab_medications',
-        onPressed: _openAddScreen,
-        backgroundColor: AppColors.primary,
-        tooltip: 'Add medication',
-        child: const Icon(Icons.add_rounded, color: AppColors.white, size: 28),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.32),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          heroTag: 'fab_medications',
+          onPressed: _openAddScreen,
+          backgroundColor: AppColors.primary,
+          elevation: 0,
+          tooltip: 'Add medication',
+          child: const Icon(Icons.add_rounded, color: AppColors.white, size: 28),
+        ),
       ),
       body: _medications.isEmpty ? _buildEmptyState() : _buildContent(),
     );
@@ -292,15 +305,15 @@ class _MedicationScreenState extends State<MedicationScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 100,
-              height: 100,
+              width: 96,
+              height: 96,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.medication_rounded,
-                size: 52,
+                size: 48,
                 color: AppColors.primary,
               ),
             ),
@@ -406,35 +419,39 @@ class _MedicationScreenState extends State<MedicationScreen> {
   Widget _buildLowSupplyBanner() {
     final count = _lowSupplyMeds.length;
     final message = count == 1
-        ? '⚠️ ${_lowSupplyMeds[0].name} has ${_lowSupplyMeds[0].pillsRemaining} pills remaining'
-        : '⚠️ $count medications running low';
+        ? '${_lowSupplyMeds[0].name} is running low — only ${_lowSupplyMeds[0].pillsRemaining} pills left.'
+        : '$count medications running low';
 
     return GestureDetector(
       onTap: _showLowSupplyDialog,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: _orange,
-          borderRadius: BorderRadius.circular(12),
+          color: _orange.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _orange.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: _orange, size: 22),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 message,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textDark,
                   fontWeight: FontWeight.w600,
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
             ),
             GestureDetector(
               onTap: () => setState(() => _bannerDismissed = true),
               child: const Icon(Icons.close_rounded,
-                  color: Colors.white, size: 20),
+                  color: _orange, size: 20),
             ),
           ],
         ),
@@ -518,12 +535,6 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
   Widget _buildPeriodGroup(
       String period, List<_ScheduleEntry> entries) {
-    const periodIcons = {
-      'Morning': Icons.wb_sunny_outlined,
-      'Afternoon': Icons.wb_cloudy_outlined,
-      'Evening': Icons.nights_stay_outlined,
-    };
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -531,25 +542,20 @@ class _MedicationScreenState extends State<MedicationScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Row(
-              children: [
-                Icon(periodIcons[period], size: 14,
-                    color: AppColors.secondary),
-                const SizedBox(width: 6),
-                Text(
-                  period,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.secondary,
-                  ),
-                ),
-              ],
+            child: Text(
+              period.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+                color: Color(0xFF6E7A82),
+              ),
             ),
           ),
           Container(
             decoration: BoxDecoration(
               color: AppColors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.textDark.withValues(alpha: 0.06),
@@ -711,16 +717,18 @@ class _MedicationScreenState extends State<MedicationScreen> {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.error.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: AppColors.error.withValues(alpha: 0.4)),
                             ),
                             child: const Text(
                               'Missed',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.error,
                               ),
                             ),
@@ -730,16 +738,18 @@ class _MedicationScreenState extends State<MedicationScreen> {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.success.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: AppColors.success.withValues(alpha: 0.4)),
                             ),
                             child: const Text(
                               'Taken',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.success,
                               ),
                             ),
@@ -820,24 +830,23 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.textDark.withValues(alpha: 0.06),
-                    blurRadius: 8,
+                    blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
                 ],
               ),
               child: Row(
                 children: [
-                  // Pill icon — orange tint when supply is low
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       color: isLow
                           ? _orange.withValues(alpha: 0.12)
                           : med.isActive
-                              ? AppColors.primary.withValues(alpha: 0.1)
+                              ? const Color(0xFF1565C0).withValues(alpha: 0.12)
                               : AppColors.divider.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       Icons.medication_rounded,
@@ -845,7 +854,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                       color: isLow
                           ? _orange
                           : med.isActive
-                              ? AppColors.primary
+                              ? const Color(0xFF1565C0)
                               : AppColors.secondary,
                     ),
                   ),

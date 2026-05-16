@@ -53,9 +53,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final Set<String> _selectedServices = {};
 
   static const _genderOptions = [
-    _GenderOption(label: 'Male', icon: Icons.male),
-    _GenderOption(label: 'Female', icon: Icons.female),
-    _GenderOption(label: 'Prefer not to say', icon: Icons.person),
+    _GenderOption(label: 'Male', icon: Icons.person_rounded),
+    _GenderOption(label: 'Female', icon: Icons.person_rounded),
+    _GenderOption(label: 'Prefer not to say', icon: Icons.person_rounded),
   ];
 
   static const _services = [
@@ -131,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -309,9 +309,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.textDark.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: AppColors.textDark.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -614,7 +614,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           boxShadow: [
             BoxShadow(
               color: AppColors.textDark.withValues(alpha: 0.06),
-              blurRadius: 8,
+              blurRadius: 10,
               offset: const Offset(0, 3),
             ),
           ],
@@ -695,7 +695,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             BoxShadow(
               color: AppColors.textDark.withValues(alpha: 0.06),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -794,30 +794,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE8F4F4) : AppColors.white,
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.07)
+              : AppColors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 1.5 : 1.0,
+            width: isSelected ? 2.0 : 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textDark.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: AppColors.textDark.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: service.iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(service.icon, color: service.iconColor, size: 26),
+              child: Icon(service.icon, color: service.iconColor, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -826,7 +828,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   Text(
                     service.title,
-                    style: AppTextStyles.heading3.copyWith(fontSize: 15),
+                    style: AppTextStyles.heading3.copyWith(
+                      fontSize: 15,
+                      color: isSelected ? AppColors.primary : AppColors.textDark,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -870,16 +875,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           const Spacer(),
           Container(
-            width: 80,
-            height: 80,
+            width: 96,
+            height: 96,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
+              color: AppColors.primary.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.shield_rounded,
               color: AppColors.primary,
-              size: 42,
+              size: 48,
             ),
           ),
           const SizedBox(height: 28),

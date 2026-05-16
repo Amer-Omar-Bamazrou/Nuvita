@@ -376,6 +376,14 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
           ),
         ),
+        if (_searchResults.isEmpty && _searchController.text.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              'Or enter medication details manually below',
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+            ),
+          ),
         if (_searchResults.isNotEmpty) ...[
           const SizedBox(height: 8),
           Container(
@@ -511,16 +519,16 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
                 Icons.alarm_rounded,
                 color: AppColors.primary,
-                size: 22,
+                size: 20,
               ),
             ),
             const SizedBox(width: 14),
@@ -566,16 +574,16 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
                 Icons.calendar_today_rounded,
                 color: AppColors.primary,
-                size: 22,
+                size: 20,
               ),
             ),
             const SizedBox(width: 14),

@@ -365,8 +365,11 @@ class _ChartsScreenState extends State<ChartsScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
                 decoration: BoxDecoration(
-                  color: selected ? AppColors.primary : Colors.grey.shade200,
+                  color: selected ? AppColors.primary : AppColors.white,
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppColors.primary : AppColors.divider,
+                  ),
                 ),
                 child: Text(
                   _metricLabel(m),
@@ -389,40 +392,52 @@ class _ChartsScreenState extends State<ChartsScreen> {
   Widget _buildTimeRangeToggle() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Row(
-        children: _TimeRange.values.map((r) {
-          final selected = r == _range;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (r == _range) return;
-                setState(() => _range = r);
-                _loadChartData();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.primary : AppColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.divider,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: _TimeRange.values.map((r) {
+            final selected = r == _range;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  if (r == _range) return;
+                  setState(() => _range = r);
+                  _loadChartData();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(7),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
                   ),
-                ),
-                child: Text(
-                  _rangeLabel(r),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : AppColors.secondary,
+                  child: Text(
+                    _rangeLabel(r),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? AppColors.primary : AppColors.secondary,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -457,19 +472,19 @@ class _ChartsScreenState extends State<ChartsScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: AppColors.white,
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.show_chart_rounded,
-                  size: 40,
-                  color: AppColors.secondary,
+                  size: 48,
+                  color: AppColors.primary,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               const Text(
                 'Not enough data yet',
                 style: TextStyle(
@@ -500,7 +515,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   textStyle: const TextStyle(
                     fontSize: 15,
@@ -522,12 +537,20 @@ class _ChartsScreenState extends State<ChartsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.bar_chart_rounded,
-              size: 56,
-              color: AppColors.secondary,
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.bar_chart_rounded,
+                size: 48,
+                color: AppColors.primary,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               'No $label data for this period',
               style: const TextStyle(
@@ -588,7 +611,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.07),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -746,7 +769,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.07),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -835,7 +858,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.07),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -900,7 +923,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.07),
+            color: AppColors.textDark.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1030,20 +1053,19 @@ class _ChartsScreenState extends State<ChartsScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 80,
-                height: 80,
+                width: 96,
+                height: 96,
                 decoration: BoxDecoration(
-                  color: AppColors.white,
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.divider, width: 2),
                 ),
                 child: const Icon(
                   Icons.lock_outline_rounded,
-                  size: 38,
-                  color: AppColors.secondary,
+                  size: 48,
+                  color: AppColors.primary,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               const Text(
                 'Charts available for registered users',
                 style: TextStyle(
@@ -1077,7 +1099,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
                     vertical: 14,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   textStyle: const TextStyle(
                     fontSize: 15,

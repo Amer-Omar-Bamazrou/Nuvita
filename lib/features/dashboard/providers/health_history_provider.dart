@@ -180,7 +180,7 @@ class HealthHistoryProvider extends ChangeNotifier {
       case HealthMetric.weight:
         return 'kg';
       case HealthMetric.steps:
-        return 'steps';
+        return 'min';
       case HealthMetric.temperature:
         return '°C';
     }

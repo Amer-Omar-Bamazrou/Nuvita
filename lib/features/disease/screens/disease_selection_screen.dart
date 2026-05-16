@@ -69,7 +69,7 @@ class _DiseaseSelectionScreenState extends State<DiseaseSelectionScreen> {
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -192,7 +192,7 @@ class DiseaseCard extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: AppColors.textDark.withValues(alpha: 0.06),
-              blurRadius: 8,
+              blurRadius: 10,
               offset: const Offset(0, 3),
             ),
           ],

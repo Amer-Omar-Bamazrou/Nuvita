@@ -280,18 +280,19 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
           ),
         );
       },
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 240,
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEEEEEE)),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
+              color: Color(0x0A000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
             ),
           ],
         ),
@@ -305,16 +306,16 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                   width: 44,
                   height: 44,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF004346),
+                    color: Color(0xFFE0F0F0),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF004346),
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -376,7 +377,7 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFFE0F0F0),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 diseaseLabel,

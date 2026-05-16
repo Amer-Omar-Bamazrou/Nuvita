@@ -683,7 +683,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       onPressed: _onLoadMore,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
+                        side: const BorderSide(color: AppColors.primary, width: 1.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -779,9 +779,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: AppColors.textDark.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -816,7 +816,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Text(
                         reading.status,
@@ -841,8 +844,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ? reading.value.toInt().toString()
                               : reading.value.toStringAsFixed(1),
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
                             color: AppColors.textDark,
                           ),
                         ),
@@ -1042,11 +1045,11 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
               suffixStyle:
                   const TextStyle(color: AppColors.secondary, fontSize: 14),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.divider),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide:
                     const BorderSide(color: AppColors.primary, width: 2),
               ),
@@ -1078,7 +1081,7 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 textStyle: const TextStyle(
                   fontSize: 16,
@@ -1101,11 +1104,11 @@ class _EditReadingSheetState extends State<_EditReadingSheet> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.divider),
         ),
         child: Row(

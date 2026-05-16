@@ -162,6 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!didPop) _goBackToOnboarding();
       },
       child: Scaffold(
+        backgroundColor: AppColors.white,
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),

@@ -36,7 +36,7 @@ class AppTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.divider),
+          borderSide: const BorderSide(color: AppColors.divider, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -61,8 +61,13 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          elevation: 2,
+          elevation: 0,
+          shadowColor: Colors.transparent,
           textStyle: AppTextStyles.buttonText,
+        ).copyWith(
+          overlayColor: WidgetStateProperty.all(
+            Colors.white.withValues(alpha: 0.08),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -73,8 +78,8 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.white,
-        elevation: 3,
-        shadowColor: AppColors.primary.withAlpha(40),
+        elevation: 2,
+        shadowColor: AppColors.textDark.withValues(alpha: 0.06),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),

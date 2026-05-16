@@ -244,22 +244,24 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
   Widget _buildStatCard(_StatCard s) {
     return InkWell(
       onTap: s.onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 200,
+        width: 240,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEEEEEE)),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
+              color: Color(0x0A000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 44,
@@ -270,27 +272,23 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
               ),
               child: Icon(s.icon, color: s.iconColor, size: 22),
             ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.value,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF172A3A),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  s.label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 14),
+            Text(
+              s.value,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF172A3A),
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF6E7A82),
+              ),
             ),
           ],
         ),
@@ -302,39 +300,21 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEEE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Row(
-              children: [
-                const Text(
-                  'Recent Activity',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF172A3A),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Last 10 readings',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
+            child: Text(
+              'Recent Patient Activity',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF172A3A),
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -367,8 +347,10 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
     final time = ts is Timestamp ? _timeAgo(ts.toDate()) : '';
 
     return Container(
-      color: index.isOdd ? const Color(0xFFF9F9F9) : Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: const Color(0xFFEEEEEE))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       child: Row(
         children: [
           Container(
@@ -404,7 +386,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
                 const SizedBox(height: 2),
                 Text(
                   '$metric  •  $value $unit',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF6E7A82)),
                 ),
               ],
             ),
@@ -413,7 +395,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
           const SizedBox(width: 12),
           Text(
             time,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF9AA3AB)),
           ),
         ],
       ),
@@ -436,39 +418,35 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
+    Color color;
     switch (status) {
       case 'Normal':
-        bg = const Color(0xFFE8F5E9);
-        fg = const Color(0xFF2E7D32);
+        color = const Color(0xFF2E7D32);
         break;
       case 'Warning':
-        bg = const Color(0xFFFFF3E0);
-        fg = const Color(0xFFFF6F00);
+        color = const Color(0xFFFF6F00);
         break;
       case 'Critical':
       case 'High':
       case 'Low':
-        bg = const Color(0xFFFFEBEE);
-        fg = const Color(0xFFD32F2F);
+        color = const Color(0xFFD32F2F);
         break;
       default:
-        bg = const Color(0xFFF5F5F5);
-        fg = Colors.grey;
+        color = const Color(0xFF6E7A82);
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         status,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: fg,
+          color: color,
         ),
       ),
     );

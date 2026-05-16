@@ -126,7 +126,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               validator: (v) =>
                   v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             NuvitaTextField(
               label: 'Current Password',
               hint: 'Enter your current password',
@@ -137,7 +137,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               validator: (v) =>
                   v == null || v.isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             NuvitaTextField(
               label: 'New Password',
               hint: 'At least 6 characters',
@@ -151,7 +151,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             NuvitaTextField(
               label: 'Confirm New Password',
               hint: 'Repeat new password',

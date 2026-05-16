@@ -104,14 +104,14 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90,
-              height: 90,
+              width: 96,
+              height: 96,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.calendar_month_rounded,
-                  size: 44, color: AppColors.primary),
+                  size: 48, color: AppColors.primary),
             ),
             const SizedBox(height: 24),
             Text('No history yet', style: AppTextStyles.heading3),
@@ -196,13 +196,35 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            '${day.taken}/${day.total} doses ($pct%)',
-            style: AppTextStyles.bodySmall.copyWith(
-              fontWeight: FontWeight.w600,
-              color: barColor,
-              fontSize: 13,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: barColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: barColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  '$pct%',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: barColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${day.taken}/${day.total} doses',
+                style: AppTextStyles.bodySmall.copyWith(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -159,7 +159,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
@@ -185,10 +185,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
   Widget _buildSectionLabel(String label) {
     return Text(
       label,
-      style: TextStyle(
+      style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        color: Colors.grey.shade600,
+        color: Color(0xFF6E7A82),
         letterSpacing: 1.2,
       ),
     );
@@ -317,16 +317,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFF1565C0).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.medication_rounded,
-              size: 18,
-              color: AppColors.primary,
+              size: 22,
+              color: Color(0xFF1565C0),
             ),
           ),
           const SizedBox(width: 12),
@@ -454,16 +454,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFF00695C).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
-              Icons.calendar_today_rounded,
-              size: 18,
-              color: AppColors.primary,
+              Icons.calendar_month_rounded,
+              size: 22,
+              color: Color(0xFF00695C),
             ),
           ),
           const SizedBox(width: 12),
@@ -568,15 +568,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
-                  Icons.bar_chart_rounded,
-                  size: 18,
+                  Icons.description_rounded,
+                  size: 22,
                   color: AppColors.primary,
                 ),
               ),

@@ -286,13 +286,13 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: AppColors.primary, size: 22),
+              child: Icon(icon, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 14),
             Column(

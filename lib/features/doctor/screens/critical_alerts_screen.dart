@@ -144,19 +144,12 @@ class _AlertCard extends StatelessWidget {
                 ),
               );
             },
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(12),
           border: Border(
             left: BorderSide(
               color: isManual
@@ -172,18 +165,15 @@ class _AlertCard extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFEBEE),
-                shape: BoxShape.circle,
+              decoration: BoxDecoration(
+                color: (isManual ? const Color(0xFFD32F2F) : const Color(0xFFFF6F00))
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              alignment: Alignment.center,
-              child: Text(
-                patientName.isNotEmpty ? patientName[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: Color(0xFFD32F2F),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 22,
+                color: isManual ? const Color(0xFFD32F2F) : const Color(0xFFFF6F00),
               ),
             ),
             const SizedBox(width: 14),
@@ -300,7 +290,8 @@ class _Chip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: textColor.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,

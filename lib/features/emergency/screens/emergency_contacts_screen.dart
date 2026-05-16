@@ -242,12 +242,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                       prefixIcon: const Icon(Icons.person_rounded,
                           color: AppColors.secondary),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
                             color: AppColors.primary, width: 2),
                       ),
@@ -266,12 +266,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                       prefixIcon: const Icon(Icons.phone_rounded,
                           color: AppColors.secondary),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide:
                             const BorderSide(color: AppColors.divider),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
                             color: AppColors.primary, width: 2),
                       ),
@@ -283,7 +283,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.divider),
                     ),
                     child: DropdownButtonHideUnderline(
@@ -363,10 +363,23 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         ),
         title: Text('Emergency Contacts', style: AppTextStyles.heading3),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddSheet,
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add_rounded, color: AppColors.white),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.32),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: _showAddSheet,
+          backgroundColor: AppColors.primary,
+          elevation: 0,
+          child: const Icon(Icons.add_rounded, color: AppColors.white),
+        ),
       ),
       body: _isLoading
           ? const Center(
@@ -384,12 +397,20 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.contact_phone_outlined,
-              size: 64,
-              color: AppColors.primary,
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.contact_phone_outlined,
+                size: 48,
+                color: AppColors.primary,
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Text(
               'No emergency contacts added',
               style:
@@ -411,8 +432,38 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   Widget _buildList() {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
-      itemCount: _contacts.length,
-      itemBuilder: (_, i) => _buildContactCard(_contacts[i]),
+      itemCount: _contacts.length + 1,
+      itemBuilder: (_, i) {
+        if (i == 0) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.emergency_rounded,
+                    color: AppColors.error, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'These contacts are notified automatically when you trigger SOS.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontSize: 13,
+                      color: AppColors.textDark,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return _buildContactCard(_contacts[i - 1]);
+      },
     );
   }
 
@@ -425,16 +476,16 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 22,
+            radius: 24,
             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
             child: Text(
               contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
@@ -471,8 +522,10 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.card.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     contact.relationship,

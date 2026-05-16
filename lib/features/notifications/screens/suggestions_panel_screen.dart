@@ -295,18 +295,18 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90,
-              height: 90,
+              width: 96,
+              height: 96,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.07),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 isError
                     ? Icons.wifi_off_rounded
                     : Icons.notifications_none_rounded,
-                size: 44,
-                color: AppColors.primary.withValues(alpha: 0.45),
+                size: 48,
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -337,16 +337,16 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90,
-              height: 90,
+              width: 96,
+              height: 96,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.07),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.notifications_none_rounded,
-                size: 44,
-                color: AppColors.primary.withValues(alpha: 0.45),
+                size: 48,
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 24),

@@ -197,10 +197,28 @@ void _showAlertSentDialog(BuildContext context) {
     builder: (dialogContext) => AlertDialog(
       backgroundColor: AppColors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(
-        'Alert Sent',
-        style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
-        textAlign: TextAlign.center,
+      title: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              color: AppColors.success,
+              size: 44,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Alert Sent',
+            style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
       content: Text(
         'Help has been notified (simulated).\nStay calm, assistance is on the way.',

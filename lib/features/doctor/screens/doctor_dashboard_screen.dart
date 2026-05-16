@@ -124,6 +124,18 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (widget.doctorName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.doctorEmail,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 InkWell(
                   onTap: _signOut,
@@ -266,12 +278,12 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
             ),
           ),
           const Spacer(),
-          Icon(Icons.person_outline_rounded,
-              size: 18, color: Colors.grey.shade500),
+          const Icon(Icons.person_outline_rounded,
+              size: 18, color: Color(0xFF9AA3AB)),
           const SizedBox(width: 6),
           Text(
             widget.doctorEmail,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF6E7A82)),
           ),
         ],
       ),

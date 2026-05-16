@@ -202,10 +202,10 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
                       fontWeight: FontWeight.w500,
                       color: Color(0xFF172A3A)),
                 ),
-                Text(
+                const Text(
                   'You will be returned to the login screen',
                   style: TextStyle(
-                      fontSize: 12, color: Colors.grey.shade500),
+                      fontSize: 12, color: Color(0xFF9AA3AB)),
                 ),
               ],
             ),
@@ -270,6 +270,7 @@ class _SettingsCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFEEEEEE)),
           boxShadow: const [
             BoxShadow(
               color: Color(0x14000000),
@@ -317,14 +318,14 @@ class _SettingsRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.grey.shade400),
+          Icon(icon, size: 18, color: const Color(0xFFB0B8BD)),
           const SizedBox(width: 14),
           SizedBox(
             width: 80,
             child: Text(
               label,
-              style: TextStyle(
-                  fontSize: 13, color: Colors.grey.shade500),
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF9AA3AB)),
             ),
           ),
           Text(

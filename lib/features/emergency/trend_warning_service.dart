@@ -57,7 +57,7 @@ class TrendWarningService {
         backgroundColor: AppColors.warning,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         duration: const Duration(seconds: 5),
       ),
     );

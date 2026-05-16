@@ -102,14 +102,8 @@ class _DoctorSuggestionsHistoryScreenState
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEEE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +168,7 @@ class _DoctorSuggestionsHistoryScreenState
               // Date
               Text(
                 date,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF9AA3AB)),
               ),
             ],
           ),
