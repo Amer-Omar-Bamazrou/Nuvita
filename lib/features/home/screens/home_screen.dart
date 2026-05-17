@@ -652,7 +652,6 @@ class _HomeBodyState extends State<_HomeBody> {
   Widget _buildTaskList() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    // Guest user — no tasks to show
     if (uid == null) return _buildGuestTaskPrompt();
 
     if (_isLoadingTasks) {
@@ -662,7 +661,8 @@ class _HomeBodyState extends State<_HomeBody> {
       );
     }
 
-    final remaining = _tasks.where((t) => !t.isCompleted).length;
+    // Only show pending tasks — completed ones disappear
+    final pending = _tasks.where((t) => !t.isCompleted).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,30 +672,25 @@ class _HomeBodyState extends State<_HomeBody> {
             Text("Today's Tasks", style: AppTextStyles.heading3),
             const Spacer(),
             Text(
-              '$remaining task${remaining == 1 ? '' : 's'} remaining',
+              '${pending.length} task${pending.length == 1 ? '' : 's'} remaining',
               style: AppTextStyles.bodySmall
                   .copyWith(color: AppColors.secondary, fontSize: 12),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        if (remaining == 0)
+        if (pending.isEmpty)
           _buildAllDoneState()
         else
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _tasks.length,
+            itemCount: pending.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (_, i) => _buildTaskCard(_tasks[i]),
+            itemBuilder: (_, i) => _buildPendingMedCard(pending[i]),
           ),
       ],
     );
-  }
-
-  Widget _buildTaskCard(DailyTask task) {
-    if (task.isCompleted) return _buildCompletedCard(task);
-    return _buildPendingMedCard(task);
   }
 
   Widget _buildPendingMedCard(DailyTask task) {
@@ -755,40 +750,6 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  Widget _buildCompletedCard(DailyTask task) {
-    return Opacity(
-      opacity: 0.6,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE0E0E0),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded,
-                color: Color(0xFF388E3C), size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.displayName,
-                    style: AppTextStyles.label.copyWith(
-                        color: Colors.grey.shade700, fontSize: 14),
-                  ),
-                  const Text('Taken', style: AppTextStyles.bodySmall),
-                ],
-              ),
-            ),
-            Text(task.timeOfDay, style: AppTextStyles.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildAllDoneState() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
@@ -796,15 +757,15 @@ class _HomeBodyState extends State<_HomeBody> {
         child: Column(
           children: [
             const Icon(
-              Icons.check_circle_outline_rounded,
+              Icons.emoji_events,
               size: 64,
-              color: Color(0xFF388E3C),
+              color: Color(0xFFFFD700),
             ),
             const SizedBox(height: 16),
             Text('All caught up!', style: AppTextStyles.heading3),
             const SizedBox(height: 8),
             Text(
-              'No medications scheduled for today.\nUse the + button to log a reading.',
+              'No outstanding tasks for today. Great job!',
               style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -867,6 +828,36 @@ class _HomeBodyState extends State<_HomeBody> {
         task.isCompleted = true;
         _sortTasks();
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${task.displayName} marked as taken'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Undo',
+            textColor: Colors.white,
+            onPressed: () async {
+              await prefs.remove(prefKey);
+              if (task.medicationId != null) {
+                MedicationService.removeDoseFromFirebase(
+                  medicationId: task.medicationId!,
+                  timeSlot: task.timeOfDay,
+                  date: todayStr,
+                );
+              }
+              if (mounted) {
+                setState(() {
+                  task.isCompleted = false;
+                  _sortTasks();
+                });
+              }
+            },
+          ),
+        ),
+      );
     }
   }
 
