@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -132,7 +133,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               hint: 'Enter your current password',
               controller: _currentCtrl,
               isPassword: true,
-              prefixIcon: Icons.lock_outline,
+              prefixIcon: IconlyLight.lock,
               textInputAction: TextInputAction.next,
               validator: (v) =>
                   v == null || v.isEmpty ? 'Required' : null,
@@ -143,7 +144,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               hint: 'At least 6 characters',
               controller: _newCtrl,
               isPassword: true,
-              prefixIcon: Icons.lock_rounded,
+              prefixIcon: IconlyLight.lock,
               textInputAction: TextInputAction.next,
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Required';
@@ -157,7 +158,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               hint: 'Repeat new password',
               controller: _confirmCtrl,
               isPassword: true,
-              prefixIcon: Icons.lock_rounded,
+              prefixIcon: IconlyLight.lock,
               textInputAction: TextInputAction.done,
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Required';

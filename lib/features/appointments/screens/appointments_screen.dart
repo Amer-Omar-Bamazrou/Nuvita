@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../models/appointment_model.dart';
@@ -182,7 +183,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
           color: AppColors.error.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Icon(Icons.delete_rounded,
+        child: const Icon(IconlyBold.delete,
             color: AppColors.error, size: 26),
       ),
       onDismissed: (_) => _delete(apt.id),

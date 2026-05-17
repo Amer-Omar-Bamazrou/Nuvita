@@ -1,6 +1,7 @@
 ﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -547,7 +548,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           ),
           IconButton(
             onPressed: () => _showDeleteDialog(contact),
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: const Icon(IconlyLight.delete),
             color: AppColors.error,
             tooltip: 'Delete',
           ),

@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -813,7 +814,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
             color: AppColors.error,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: const Icon(Icons.delete_rounded,
+          child: const Icon(IconlyBold.delete,
               color: Colors.white, size: 26),
         ),
         child: GestureDetector(

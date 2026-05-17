@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import 'doctor_login_screen.dart';
 import 'doctor_overview_screen.dart';
 import 'doctor_patients_screen.dart';
@@ -151,7 +152,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.logout_rounded,
+                        Icon(IconlyLight.logout,
                             color: Colors.white70, size: 16),
                         SizedBox(width: 8),
                         Text(

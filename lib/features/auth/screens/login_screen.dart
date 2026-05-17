@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:iconly/iconly.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -196,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     hint: 'Enter your password',
                     controller: _passwordController,
                     isPassword: true,
-                    prefixIcon: Icons.lock_outline,
+                    prefixIcon: IconlyLight.lock,
                     textInputAction: TextInputAction.done,
                     validator: _validatePassword,
                   ),

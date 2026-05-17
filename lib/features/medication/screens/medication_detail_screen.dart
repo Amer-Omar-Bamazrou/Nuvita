@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -233,7 +234,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             tooltip: 'Edit',
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded,
+            icon: const Icon(IconlyLight.delete,
                 color: AppColors.error),
             onPressed: _onDelete,
             tooltip: 'Delete',
@@ -546,7 +547,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _onDelete,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            icon: const Icon(IconlyLight.delete, size: 18),
             label: const Text('Delete'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.error,

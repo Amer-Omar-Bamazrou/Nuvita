@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -766,7 +767,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           borderRadius: BorderRadius.circular(14),
         ),
         child:
-            const Icon(Icons.delete_rounded, color: Colors.white, size: 26),
+            const Icon(IconlyBold.delete, color: Colors.white, size: 26),
       ),
       child: GestureDetector(
         onLongPress: () => _showEditSheet(reading),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 
 class DoctorSettingsScreen extends StatefulWidget {
   final String doctorEmail;
@@ -188,7 +189,7 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
       title: 'Session',
       child: Row(
         children: [
-          const Icon(Icons.logout_rounded,
+          const Icon(IconlyLight.logout,
               size: 18, color: Color(0xFFD32F2F)),
           const SizedBox(width: 12),
           Expanded(

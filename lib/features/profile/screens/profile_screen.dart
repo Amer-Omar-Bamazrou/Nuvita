@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
@@ -683,7 +684,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   _divider(),
                   _tile(
-                    leading: Icons.delete_outline_rounded,
+                    leading: IconlyLight.delete,
                     title: 'Delete My Data',
                     subtitle: 'Remove all your health data',
                     titleColor: AppColors.error,
@@ -793,7 +794,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           )
                         : const Icon(
-                            Icons.logout_rounded,
+                            IconlyLight.logout,
                             color: AppColors.error,
                             size: 20,
                           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
@@ -55,7 +56,7 @@ class _NuvitaTextFieldState extends State<NuvitaTextField> {
         suffixIcon: widget.isPassword
             ? IconButton(
                 icon: Icon(
-                  _obscureText ? Icons.visibility_off : Icons.visibility,
+                  _obscureText ? IconlyLight.hide : IconlyLight.show,
                   color: AppColors.secondary,
                   size: 22,
                 ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import '../../../core/theme/app_colors.dart';
 import 'home_screen.dart';
 import '../../tracking/screens/tracking_screen.dart';
@@ -55,19 +56,19 @@ class _MainShellState extends State<MainShell> {
           unselectedLabelStyle: const TextStyle(fontSize: 12),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
+              icon: Icon(IconlyBold.home),
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.track_changes_rounded),
+              icon: Icon(IconlyBold.chart),
               label: 'Tracking',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded),
+              icon: Icon(IconlyBold.activity),
               label: 'History',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person_rounded),
+              icon: Icon(IconlyBold.profile),
               label: 'Profile',
             ),
           ],

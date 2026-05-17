@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
@@ -204,7 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hint: 'At least 6 characters',
                     controller: _passwordController,
                     isPassword: true,
-                    prefixIcon: Icons.lock_outline,
+                    prefixIcon: IconlyLight.lock,
                     textInputAction: TextInputAction.next,
                     validator: _validatePassword,
                   ),
@@ -214,7 +215,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hint: 'Repeat your password',
                     controller: _confirmPasswordController,
                     isPassword: true,
-                    prefixIcon: Icons.lock_outline,
+                    prefixIcon: IconlyLight.lock,
                     textInputAction: TextInputAction.done,
                     validator: _validateConfirmPassword,
                   ),

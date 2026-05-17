@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:iconly/iconly.dart';
 import '../services/doctor_service.dart';
 import 'doctor_dashboard_screen.dart';
 
@@ -200,12 +201,12 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
                         obscureText: _obscure,
                         decoration: _inputDecoration(
                           'Password',
-                          Icons.lock_outline,
+                          IconlyLight.lock,
                           suffix: IconButton(
                             icon: Icon(
                               _obscure
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
+                                  ? IconlyLight.hide
+                                  : IconlyLight.show,
                               size: 20,
                               color: Colors.grey.shade500,
                             ),
