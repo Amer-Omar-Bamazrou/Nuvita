@@ -610,7 +610,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 }
 
-// ── Scroll wheel time picker ──
+// ── Three-wheel time picker (Hour / Minute / AM·PM) ──
 
 class _TimeScrollPicker extends StatefulWidget {
   final TimeOfDay initialTime;
@@ -622,50 +622,84 @@ class _TimeScrollPicker extends StatefulWidget {
 
 class _TimeScrollPickerState extends State<_TimeScrollPicker> {
   static const _itemExtent = 52.0;
+  static const _visibleItems = 5;
 
-  // 96 slots: 24 hours × 4 (15-min intervals)
-  static final _slots = List.generate(96, (i) {
-    final hour = i ~/ 4;
-    final minute = (i % 4) * 15;
-    return TimeOfDay(hour: hour, minute: minute);
-  });
+  late FixedExtentScrollController _hourCtrl;
+  late FixedExtentScrollController _minuteCtrl;
+  late FixedExtentScrollController _periodCtrl;
 
-  late final FixedExtentScrollController _controller;
-  late int _selectedIndex;
+  late int _hour;   // 1–12 index (0-based: 0 = 1, 11 = 12)
+  late int _minute;  // 0–59
+  late int _period;  // 0 = AM, 1 = PM
 
   @override
   void initState() {
     super.initState();
-    _selectedIndex = _closestIndex(widget.initialTime);
-    _controller = FixedExtentScrollController(initialItem: _selectedIndex);
+    final h12 = widget.initialTime.hourOfPeriod;
+    _hour = (h12 == 0 ? 11 : h12 - 1);
+    _minute = widget.initialTime.minute;
+    _period = widget.initialTime.period == DayPeriod.am ? 0 : 1;
+
+    _hourCtrl = FixedExtentScrollController(initialItem: _hour);
+    _minuteCtrl = FixedExtentScrollController(initialItem: _minute);
+    _periodCtrl = FixedExtentScrollController(initialItem: _period);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _hourCtrl.dispose();
+    _minuteCtrl.dispose();
+    _periodCtrl.dispose();
     super.dispose();
   }
 
-  int _closestIndex(TimeOfDay time) {
-    final totalMinutes = time.hour * 60 + time.minute;
-    int best = 0;
-    int bestDiff = 9999;
-    for (int i = 0; i < _slots.length; i++) {
-      final slotMin = _slots[i].hour * 60 + _slots[i].minute;
-      final diff = (slotMin - totalMinutes).abs();
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = i;
-      }
+  TimeOfDay _buildResult() {
+    final displayHour = _hour + 1; // 1–12
+    int hour24;
+    if (_period == 0) {
+      hour24 = displayHour == 12 ? 0 : displayHour;
+    } else {
+      hour24 = displayHour == 12 ? 12 : displayHour + 12;
     }
-    return best;
+    return TimeOfDay(hour: hour24, minute: _minute);
   }
 
-  String _formatSlot(TimeOfDay t) {
-    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-    final m = t.minute.toString().padLeft(2, '0');
-    final p = t.period == DayPeriod.am ? 'AM' : 'PM';
-    return '${h.toString().padLeft(2, '0')} : $m  $p';
+  Widget _buildWheel({
+    required FixedExtentScrollController controller,
+    required int itemCount,
+    required String Function(int index) labelBuilder,
+    required ValueChanged<int> onChanged,
+    required int selected,
+    double width = 70,
+  }) {
+    return SizedBox(
+      width: width,
+      height: _itemExtent * _visibleItems,
+      child: ListWheelScrollView.useDelegate(
+        controller: controller,
+        itemExtent: _itemExtent,
+        physics: const FixedExtentScrollPhysics(),
+        diameterRatio: 6,
+        perspective: 0.003,
+        onSelectedItemChanged: onChanged,
+        childDelegate: ListWheelChildBuilderDelegate(
+          childCount: itemCount,
+          builder: (context, i) {
+            final isSelected = i == selected;
+            return Center(
+              child: Text(
+                labelBuilder(i),
+                style: TextStyle(
+                  fontSize: isSelected ? 26 : 18,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
+                  color: isSelected ? Colors.white : Colors.white38,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -681,58 +715,55 @@ class _TimeScrollPickerState extends State<_TimeScrollPicker> {
         children: [
           const SizedBox(height: 12),
           SizedBox(
-            height: _itemExtent * 5,
+            height: _itemExtent * _visibleItems,
             child: Stack(
               children: [
-                // Selection highlight lines
                 Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        height: 1,
-                        margin: const EdgeInsets.symmetric(horizontal: 32),
-                        color: Colors.white24,
+                  child: Container(
+                    height: _itemExtent,
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    decoration: BoxDecoration(
+                      border: Border.symmetric(
+                        horizontal: BorderSide(color: Colors.white24, width: 1),
                       ),
-                      SizedBox(height: _itemExtent - 2),
-                      Container(
-                        height: 1,
-                        margin: const EdgeInsets.symmetric(horizontal: 32),
-                        color: Colors.white24,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                // Scroll wheel
-                ListWheelScrollView.useDelegate(
-                  controller: _controller,
-                  itemExtent: _itemExtent,
-                  physics: const FixedExtentScrollPhysics(),
-                  diameterRatio: 6,
-                  perspective: 0.003,
-                  onSelectedItemChanged: (i) {
-                    setState(() => _selectedIndex = i);
-                  },
-                  childDelegate: ListWheelChildBuilderDelegate(
-                    childCount: _slots.length,
-                    builder: (context, i) {
-                      final isSelected = i == _selectedIndex;
-                      return Center(
-                        child: Text(
-                          _formatSlot(_slots[i]),
-                          style: TextStyle(
-                            fontSize: isSelected ? 26 : 18,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.w400,
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white38,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildWheel(
+                      controller: _hourCtrl,
+                      itemCount: 12,
+                      labelBuilder: (i) => (i + 1).toString().padLeft(2, '0'),
+                      onChanged: (i) => setState(() => _hour = i),
+                      selected: _hour,
+                    ),
+                    Text(
+                      ':',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    _buildWheel(
+                      controller: _minuteCtrl,
+                      itemCount: 60,
+                      labelBuilder: (i) => i.toString().padLeft(2, '0'),
+                      onChanged: (i) => setState(() => _minute = i),
+                      selected: _minute,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildWheel(
+                      controller: _periodCtrl,
+                      itemCount: 2,
+                      labelBuilder: (i) => i == 0 ? 'AM' : 'PM',
+                      onChanged: (i) => setState(() => _period = i),
+                      selected: _period,
+                      width: 60,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -743,8 +774,7 @@ class _TimeScrollPickerState extends State<_TimeScrollPicker> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: () =>
-                    Navigator.pop(context, _slots[_selectedIndex]),
+                onPressed: () => Navigator.pop(context, _buildResult()),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,

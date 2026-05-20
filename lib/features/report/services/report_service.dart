@@ -16,29 +16,19 @@ class ReportService {
 
   // Chart colours
   static final _chartLine = PdfColor.fromHex('004346');
-  static final _chartLineSecondary = PdfColor.fromHex('508991');
   static final _chartGrid = PdfColor.fromHex('DDDDDD');
   static final _chartAxisText = PdfColor.fromHex('666666');
   static const _zoneNormal = PdfColor(0.3, 0.69, 0.31, 0.12);
   static const _zoneWarning = PdfColor(1.0, 0.6, 0.0, 0.10);
-
-  static const _diseaseLabels = {
-    'diabetes': 'Diabetes',
-    'blood_pressure': 'Blood Pressure',
-    'heart': 'Heart Condition',
-    'other': 'General Monitoring',
-  };
 
   static Future<Uint8List> generateReport(
     String uid,
     String name,
     String diseaseType,
   ) async {
-    final readingsFuture = HealthReadingService.getReadingsLastDays(uid, 30);
-    final medsFuture = MedicationService.loadAll();
-
-    final readings = await readingsFuture;
-    final medications = await medsFuture;
+    final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
+    final medications = await MedicationService.loadAll();
+    final adherence = await MedicationService.getAdherenceHistory(uid, 30);
 
     final doc = pw.Document();
 
@@ -49,11 +39,13 @@ class ReportService {
         build: (context) => [
           _buildHeader(),
           pw.SizedBox(height: 20),
-          _buildPatientSummary(name, diseaseType),
+          _buildPatientSummary(name),
           pw.SizedBox(height: 24),
-          _buildReadingsSection(readings),
+          _buildVitalsSnapshot(readings),
           pw.SizedBox(height: 24),
-          _buildMedicationsSection(medications),
+          ..._buildReadingsWidgets(readings),
+          pw.SizedBox(height: 24),
+          ..._buildMedicationsWidgets(medications, adherence),
           pw.SizedBox(height: 24),
           _buildDisclaimer(),
         ],
@@ -62,6 +54,8 @@ class ReportService {
 
     return doc.save();
   }
+
+  // ── Header ──────────────────────────────────────────────────────────────
 
   static pw.Widget _buildHeader() {
     return pw.Column(
@@ -73,14 +67,14 @@ class ReportService {
             pw.Text(
               'Nuvita',
               style: pw.TextStyle(
-                fontSize: 28,
+                fontSize: 32,
                 fontWeight: pw.FontWeight.bold,
                 color: _primary,
               ),
             ),
             pw.Text(
               'Health Report',
-              style: pw.TextStyle(fontSize: 16, color: _textDark),
+              style: pw.TextStyle(fontSize: 20, color: _textDark),
             ),
           ],
         ),
@@ -90,11 +84,12 @@ class ReportService {
     );
   }
 
-  static pw.Widget _buildPatientSummary(String name, String diseaseType) {
-    final condition = _diseaseLabels[diseaseType] ?? 'General Monitoring';
+  // ── Patient summary (no condition) ─────────────────────────────────────
+
+  static pw.Widget _buildPatientSummary(String name) {
     final now = DateTime.now();
     final period =
-        '${_fmt(now.subtract(const Duration(days: 30)))} — ${_fmt(now)}';
+        '${_fmt(now.subtract(const Duration(days: 30)))} - ${_fmt(now)}';
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -107,8 +102,6 @@ class ReportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           _summaryRow('Patient Name', name.isEmpty ? 'Unknown' : name),
-          pw.SizedBox(height: 6),
-          _summaryRow('Condition', condition),
           pw.SizedBox(height: 6),
           _summaryRow('Report Period', period),
           pw.SizedBox(height: 6),
@@ -126,36 +119,149 @@ class ReportService {
           style: pw.TextStyle(
             fontWeight: pw.FontWeight.bold,
             color: _textDark,
-            fontSize: 10,
+            fontSize: 13,
           ),
         ),
-        pw.Text(value, style: pw.TextStyle(color: _textDark, fontSize: 10)),
+        pw.Text(value, style: pw.TextStyle(color: _textDark, fontSize: 13)),
       ],
     );
   }
 
-  static pw.Widget _buildReadingsSection(List<HealthReading> readings) {
-    final widgets = <pw.Widget>[
-      pw.Text(
-        'Health Readings',
-        style: pw.TextStyle(
-          fontSize: 14,
-          fontWeight: pw.FontWeight.bold,
-          color: _primary,
+  // ── Vitals snapshot (latest values at a glance) ────────────────────────
+
+  static pw.Widget _buildVitalsSnapshot(List<HealthReading> readings) {
+    final grouped = <String, List<HealthReading>>{};
+    for (final r in readings) {
+      grouped.putIfAbsent(r.metricType, () => []).add(r);
+    }
+    for (final list in grouped.values) {
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
+
+    String latest(String type) {
+      final list = grouped[type];
+      if (list == null || list.isEmpty) return '--';
+      return list.first.value.toStringAsFixed(1);
+    }
+
+    String latestUnit(String type) {
+      final list = grouped[type];
+      if (list == null || list.isEmpty) return '';
+      return list.first.unit;
+    }
+
+    final sys = latest('systolic');
+    final dia = latest('diastolic');
+    final hr = latest('heartRate');
+    final hrUnit = latestUnit('heartRate');
+    final bs = latest('bloodSugar');
+    final bsUnit = latestUnit('bloodSugar');
+    final temp = latest('temperature');
+    final tempUnit = latestUnit('temperature');
+    final weight = latest('weight');
+    final weightUnit = latestUnit('weight');
+    final steps = latest('steps');
+
+    final labelStyle = pw.TextStyle(
+      fontSize: 12,
+      color: _textDark,
+    );
+    final valueStyle = pw.TextStyle(
+      fontSize: 13,
+      fontWeight: pw.FontWeight.bold,
+      color: _primary,
+    );
+
+    pw.Widget vitalRow(String label, String value) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 6),
+        child: pw.Row(
+          children: [
+            pw.SizedBox(
+              width: 130,
+              child: pw.Text(label, style: labelStyle),
+            ),
+            pw.Text(value, style: valueStyle),
+          ],
         ),
+      );
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Latest Vitals',
+          style: pw.TextStyle(
+            fontSize: 18,
+            fontWeight: pw.FontWeight.bold,
+            color: _primary,
+          ),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Container(
+          padding: const pw.EdgeInsets.all(14),
+          decoration: pw.BoxDecoration(
+            color: _cardBg,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+            border: pw.Border.all(color: _dividerColor),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              vitalRow('SYS / DIA', '$sys / $dia${sys != '--' ? ' mmHg' : ''}'),
+              vitalRow('Heart Rate', hr != '--' ? '$hr $hrUnit' : '--'),
+              vitalRow('Blood Sugar', bs != '--' ? '$bs $bsUnit' : '--'),
+              vitalRow('Temperature', temp != '--' ? '$temp $tempUnit' : '--'),
+              vitalRow('Weight', weight != '--' ? '$weight $weightUnit' : '--'),
+              pw.Padding(
+                padding: pw.EdgeInsets.zero,
+                child: pw.Row(
+                  children: [
+                    pw.SizedBox(
+                      width: 130,
+                      child: pw.Text('Steps', style: labelStyle),
+                    ),
+                    pw.Text(
+                      steps != '--' ? '${double.parse(steps).toInt()}' : '--',
+                      style: valueStyle,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Readings section (no systolic/diastolic standalone) ────────────────
+
+  static List<pw.Widget> _buildReadingsWidgets(List<HealthReading> readings) {
+    final sectionTitle = pw.Text(
+      'Health Readings',
+      style: pw.TextStyle(
+        fontSize: 18,
+        fontWeight: pw.FontWeight.bold,
+        color: _primary,
       ),
-      pw.SizedBox(height: 10),
-    ];
+    );
 
     if (readings.isEmpty) {
-      widgets.add(pw.Text(
-        'No readings recorded in the last 30 days.',
-        style: pw.TextStyle(color: _textDark, fontSize: 10),
-      ));
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: widgets,
-      );
+      return [
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            sectionTitle,
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'No readings recorded in the last 30 days.',
+              style: pw.TextStyle(color: _textDark, fontSize: 13),
+            ),
+          ],
+        ),
+      ];
     }
 
     final grouped = <String, List<HealthReading>>{};
@@ -163,19 +269,25 @@ class ReportService {
       grouped.putIfAbsent(r.metricType, () => []).add(r);
     }
 
-    // Collect diastolic data for BP dual chart
-    final diastolicReadings = grouped['diastolic'];
+    for (final list in grouped.values) {
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
+
+    const skipMetrics = {'systolic', 'diastolic'};
+
+    final result = <pw.Widget>[sectionTitle, pw.SizedBox(height: 10)];
 
     for (final entry in grouped.entries) {
-      final metricType = entry.key;
+      if (skipMetrics.contains(entry.key)) continue;
 
-      widgets.add(pw.Column(
+      // Each metric is its own widget so MultiPage can break between them
+      result.add(pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            _readableName(metricType),
+            _readableName(entry.key),
             style: pw.TextStyle(
-              fontSize: 12,
+              fontSize: 15,
               fontWeight: pw.FontWeight.bold,
               color: _textDark,
             ),
@@ -187,20 +299,15 @@ class ReportService {
           pw.SizedBox(height: 8),
           _buildMetricChart(
             entry.value,
-            _readableName(metricType),
-            metricType,
-            secondaryReadings:
-                metricType == 'systolic' ? diastolicReadings : null,
+            _readableName(entry.key),
+            entry.key,
           ),
           pw.SizedBox(height: 16),
         ],
       ));
     }
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: widgets,
-    );
+    return result;
   }
 
   // ── Chart drawing ─────────────────────────────────────────────────────────
@@ -208,32 +315,18 @@ class ReportService {
   static pw.Widget _buildMetricChart(
     List<HealthReading> data,
     String metricName,
-    String metricType, {
-    List<HealthReading>? secondaryReadings,
-  }) {
+    String metricType,
+  ) {
     if (data.length < 2) {
       return pw.SizedBox.shrink();
     }
 
-    // Sort ascending by timestamp
     final sorted = List<HealthReading>.from(data)
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    List<HealthReading>? sortedSecondary;
-    if (secondaryReadings != null && secondaryReadings.isNotEmpty) {
-      sortedSecondary = List<HealthReading>.from(secondaryReadings)
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    }
-
-    // Y range
     var minY = sorted.map((r) => r.value).reduce(min);
     var maxY = sorted.map((r) => r.value).reduce(max);
-    if (sortedSecondary != null) {
-      minY = min(minY, sortedSecondary.map((r) => r.value).reduce(min));
-      maxY = max(maxY, sortedSecondary.map((r) => r.value).reduce(max));
-    }
 
-    // Thresholds
     final (normalMin, normalMax) = MetricThresholds.getNormalRange(metricType);
     final (_, warningMax) = MetricThresholds.getWarningRange(metricType);
     final hasZones = normalMin > 0 || normalMax > 0;
@@ -242,22 +335,17 @@ class ReportService {
       maxY = max(maxY, warningMax);
     }
 
-    // Padding
     final yPad = (maxY - minY) * 0.1;
     minY = (minY - yPad).clamp(0, double.infinity);
     maxY = maxY + yPad;
-
-    final title = sortedSecondary != null
-        ? '$metricName — Last 30 Days'
-        : '$metricName — Last 30 Days';
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          title,
+          '$metricName — Last 30 Days',
           style: pw.TextStyle(
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: pw.FontWeight.bold,
             color: _primary,
           ),
@@ -278,34 +366,8 @@ class ReportService {
               normalMax,
               warningMax,
               hasZones,
-              secondary: sortedSecondary,
             ),
           ),
-        ),
-        if (sortedSecondary != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 4),
-            child: pw.Row(
-              children: [
-                _chartLegendItem(_chartLine, 'Systolic'),
-                pw.SizedBox(width: 16),
-                _chartLegendItem(_chartLineSecondary, 'Diastolic'),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  static pw.Widget _chartLegendItem(PdfColor color, String label) {
-    return pw.Row(
-      mainAxisSize: pw.MainAxisSize.min,
-      children: [
-        pw.Container(width: 14, height: 2, color: color),
-        pw.SizedBox(width: 4),
-        pw.Text(
-          label,
-          style: pw.TextStyle(fontSize: 7, color: _chartAxisText),
         ),
       ],
     );
@@ -321,11 +383,10 @@ class ReportService {
     double normalMin,
     double normalMax,
     double warningMax,
-    bool hasZones, {
-    List<HealthReading>? secondary,
-  }) {
-    const leftPad = 32.0;
-    const bottomPad = 16.0;
+    bool hasZones,
+  ) {
+    const leftPad = 38.0;
+    const bottomPad = 20.0;
     const topPad = 4.0;
     const rightPad = 8.0;
 
@@ -338,9 +399,7 @@ class ReportService {
     double yPos(double val) =>
         bottomPad + ((val - minY) / yRange) * chartH;
 
-    // Zone bands
     if (hasZones) {
-      // Normal zone
       final nLo = yPos(normalMin).clamp(bottomPad, bottomPad + chartH);
       final nHi = yPos(normalMax).clamp(bottomPad, bottomPad + chartH);
       if (nHi > nLo) {
@@ -349,7 +408,6 @@ class ReportService {
           ..drawRect(leftPad, nLo, chartW, nHi - nLo)
           ..fillPath();
       }
-      // Warning zone
       final wLo = yPos(normalMax).clamp(bottomPad, bottomPad + chartH);
       final wHi = yPos(warningMax).clamp(bottomPad, bottomPad + chartH);
       if (wHi > wLo) {
@@ -360,7 +418,6 @@ class ReportService {
       }
     }
 
-    // Horizontal grid lines (5 lines)
     canvas.setStrokeColor(_chartGrid);
     canvas.setLineWidth(0.3);
     for (int i = 0; i <= 4; i++) {
@@ -369,23 +426,20 @@ class ReportService {
     }
     canvas.strokePath();
 
-    // Chart border
     canvas
       ..setStrokeColor(_chartGrid)
       ..setLineWidth(0.5)
       ..drawRect(leftPad, bottomPad, chartW, chartH)
       ..strokePath();
 
-    // Y axis labels
     for (int i = 0; i <= 4; i++) {
       final val = minY + (i / 4) * yRange;
       final y = bottomPad + (i / 4) * chartH;
-      _drawText(canvas, val.toStringAsFixed(0), leftPad - 4, y - 3,
-          _chartAxisText, 6,
+      _drawText(canvas, val.toStringAsFixed(0), leftPad - 4, y - 4,
+          _chartAxisText, 8,
           align: 'right');
     }
 
-    // X axis date labels (show ~5 evenly spaced)
     final xLabelCount = min(5, data.length);
     for (int i = 0; i < xLabelCount; i++) {
       final idx =
@@ -393,65 +447,13 @@ class ReportService {
       final x = xPos(idx);
       final dt = data[idx].timestamp;
       final label = '${dt.day}/${dt.month}';
-      _drawText(canvas, label, x, bottomPad - 10, _chartAxisText, 6);
+      _drawText(canvas, label, x, bottomPad - 14, _chartAxisText, 8);
     }
 
-    // Primary line + dots
-    _drawDataLine(canvas, data, xPos, yPos, _chartLine, 1.5);
-    _drawDataDots(canvas, data, xPos, yPos, _chartLine, 2.0);
-
-    // Secondary line + dots (BP diastolic)
-    if (secondary != null && secondary.isNotEmpty) {
-      // Map secondary points to primary x-axis by date matching
-      final secMapped = <int, double>{};
-      for (final s in secondary) {
-        for (int i = 0; i < data.length; i++) {
-          if (_sameDay(data[i].timestamp, s.timestamp)) {
-            secMapped[i] = s.value;
-            break;
-          }
-        }
-      }
-      if (secMapped.isNotEmpty) {
-        final indices = secMapped.keys.toList()..sort();
-        // Draw line
-        canvas
-          ..setStrokeColor(_chartLineSecondary)
-          ..setLineWidth(1.2);
-        for (int j = 0; j < indices.length; j++) {
-          final x = xPos(indices[j]);
-          final y = yPos(secMapped[indices[j]]!);
-          if (j == 0) {
-            canvas.moveTo(x, y);
-          } else {
-            canvas.lineTo(x, y);
-          }
-        }
-        canvas.strokePath();
-        // Draw dots
-        for (final idx in indices) {
-          final x = xPos(idx);
-          final y = yPos(secMapped[idx]!);
-          canvas
-            ..setFillColor(_chartLineSecondary)
-            ..drawEllipse(x, y, 1.5, 1.5)
-            ..fillPath();
-        }
-      }
-    }
-  }
-
-  static void _drawDataLine(
-    PdfGraphics canvas,
-    List<HealthReading> data,
-    double Function(int) xPos,
-    double Function(double) yPos,
-    PdfColor color,
-    double width,
-  ) {
+    // Line + dots
     canvas
-      ..setStrokeColor(color)
-      ..setLineWidth(width);
+      ..setStrokeColor(_chartLine)
+      ..setLineWidth(1.5);
     for (int i = 0; i < data.length; i++) {
       final x = xPos(i);
       final y = yPos(data[i].value);
@@ -462,21 +464,12 @@ class ReportService {
       }
     }
     canvas.strokePath();
-  }
 
-  static void _drawDataDots(
-    PdfGraphics canvas,
-    List<HealthReading> data,
-    double Function(int) xPos,
-    double Function(double) yPos,
-    PdfColor color,
-    double radius,
-  ) {
-    canvas.setFillColor(color);
+    canvas.setFillColor(_chartLine);
     for (int i = 0; i < data.length; i++) {
       final x = xPos(i);
       final y = yPos(data[i].value);
-      canvas.drawEllipse(x, y, radius, radius);
+      canvas.drawEllipse(x, y, 2.0, 2.0);
     }
     canvas.fillPath();
   }
@@ -508,46 +501,57 @@ class ReportService {
       ..drawString(font, fontSize, text, dx, y);
   }
 
-  static bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
   // ── Tables ──────────────────────────────────────────────────────────────
 
   static pw.Widget _buildTable(List<HealthReading> readings) {
+    final hasNotes = readings.any((r) => r.note != null && r.note!.isNotEmpty);
+
     final headerStyle = pw.TextStyle(
       color: PdfColors.white,
       fontWeight: pw.FontWeight.bold,
-      fontSize: 9,
+      fontSize: 12,
     );
-    final cellStyle = pw.TextStyle(color: _textDark, fontSize: 9);
+    final cellStyle = pw.TextStyle(color: _textDark, fontSize: 12);
 
     pw.Widget cell(String text, pw.TextStyle style) => pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: pw.Text(text, style: style),
         );
 
+    final headers = ['Date', 'Value', 'Unit', 'Status'];
+    if (hasNotes) headers.add('Note');
+
+    final columnWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FlexColumnWidth(2.2),
+      1: const pw.FlexColumnWidth(1.5),
+      2: const pw.FlexColumnWidth(1.2),
+      3: const pw.FlexColumnWidth(1.5),
+    };
+    if (hasNotes) {
+      columnWidths[4] = const pw.FlexColumnWidth(2.5);
+    }
+
     return pw.Table(
       border: pw.TableBorder.all(color: _dividerColor, width: 0.5),
-      columnWidths: const {
-        0: pw.FlexColumnWidth(2.2),
-        1: pw.FlexColumnWidth(1.5),
-        2: pw.FlexColumnWidth(1.2),
-        3: pw.FlexColumnWidth(1.5),
-      },
+      columnWidths: columnWidths,
       children: [
         pw.TableRow(
           decoration: pw.BoxDecoration(color: _primary),
-          children: ['Date', 'Value', 'Unit', 'Status']
-              .map((h) => cell(h, headerStyle))
-              .toList(),
+          children: headers.map((h) => cell(h, headerStyle)).toList(),
         ),
         ...readings.map(
-          (r) => pw.TableRow(children: [
-            cell(_fmt(r.timestamp), cellStyle),
-            cell(r.value.toStringAsFixed(1), cellStyle),
-            cell(r.unit, cellStyle),
-            cell(r.status, cellStyle),
-          ]),
+          (r) {
+            final cells = [
+              cell(_fmt(r.timestamp), cellStyle),
+              cell(r.value.toStringAsFixed(1), cellStyle),
+              cell(r.unit, cellStyle),
+              cell(r.status, cellStyle),
+            ];
+            if (hasNotes) {
+              cells.add(cell(r.note ?? '', cellStyle));
+            }
+            return pw.TableRow(children: cells);
+          },
         ),
       ],
     );
@@ -581,11 +585,11 @@ class ReportService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(label, style: pw.TextStyle(fontSize: 8, color: _textDark)),
+        pw.Text(label, style: pw.TextStyle(fontSize: 11, color: _textDark)),
         pw.Text(
           value,
           style: pw.TextStyle(
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: pw.FontWeight.bold,
             color: _primary,
           ),
@@ -594,46 +598,155 @@ class ReportService {
     );
   }
 
-  static pw.Widget _buildMedicationsSection(List<MedicationModel> medications) {
-    final widgets = <pw.Widget>[
-      pw.Text(
-        'Medications',
-        style: pw.TextStyle(
-          fontSize: 14,
-          fontWeight: pw.FontWeight.bold,
-          color: _primary,
-        ),
+  // ── Medications + Adherence + Supply ───────────────────────────────────
+
+  static List<pw.Widget> _buildMedicationsWidgets(
+    List<MedicationModel> medications,
+    Map<String, bool> adherence,
+  ) {
+    final sectionTitle = pw.Text(
+      'Medications',
+      style: pw.TextStyle(
+        fontSize: 18,
+        fontWeight: pw.FontWeight.bold,
+        color: _primary,
       ),
-      pw.SizedBox(height: 10),
-    ];
+    );
 
     if (medications.isEmpty) {
-      widgets.add(pw.Text(
-        'No medications recorded.',
-        style: pw.TextStyle(color: _textDark, fontSize: 10),
+      return [
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            sectionTitle,
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'No medications recorded.',
+              style: pw.TextStyle(color: _textDark, fontSize: 13),
+            ),
+          ],
+        ),
+      ];
+    }
+
+    final headerStyle = pw.TextStyle(
+      color: PdfColors.white,
+      fontWeight: pw.FontWeight.bold,
+      fontSize: 12,
+    );
+    final cellStyle = pw.TextStyle(color: _textDark, fontSize: 12);
+
+    pw.Widget cell(String text, pw.TextStyle style) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(text, style: style),
+        );
+
+    // Title + table kept together
+    final medTable = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        sectionTitle,
+        pw.SizedBox(height: 10),
+        pw.Table(
+          border: pw.TableBorder.all(color: _dividerColor, width: 0.5),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(2.5),
+            1: pw.FlexColumnWidth(1.5),
+            2: pw.FlexColumnWidth(1.5),
+            3: pw.FlexColumnWidth(1.8),
+            4: pw.FlexColumnWidth(1.5),
+          },
+          children: [
+            pw.TableRow(
+              decoration: pw.BoxDecoration(color: _primary),
+              children: ['Name', 'Dosage', 'Frequency', 'Times', 'Pills Left']
+                  .map((h) => cell(h, headerStyle))
+                  .toList(),
+            ),
+            ...medications.map(
+              (med) => pw.TableRow(children: [
+                cell(med.name, cellStyle),
+                cell(med.dosage, cellStyle),
+                cell(med.frequency, cellStyle),
+                cell(med.times.join(', '), cellStyle),
+                cell(
+                  med.pillsRemaining != null
+                      ? '${med.pillsRemaining}'
+                      : '--',
+                  cellStyle,
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final result = <pw.Widget>[medTable];
+
+    // Adherence summary
+    if (adherence.isNotEmpty) {
+      final taken = adherence.values.where((v) => v).length;
+      final total = adherence.length;
+      final pct = total > 0 ? (taken / total * 100).toStringAsFixed(0) : '0';
+
+      result.add(pw.SizedBox(height: 12));
+      result.add(pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          color: _cardBg,
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+          border: pw.Border.all(color: _dividerColor),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _statChip('Doses Taken', '$taken / $total'),
+            _statChip('Adherence Rate', '$pct%'),
+            _statChip('Missed', '${total - taken} doses'),
+          ],
+        ),
       ));
-    } else {
-      for (final med in medications) {
-        widgets.add(pw.Container(
-          margin: const pw.EdgeInsets.only(bottom: 6),
-          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _dividerColor, width: 0.5),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-          ),
-          child: pw.Text(
-            '${med.name}  —  ${med.dosage}  —  ${med.frequency}',
-            style: pw.TextStyle(color: _textDark, fontSize: 10),
+    }
+
+    // Medication notes
+    final medsWithNotes =
+        medications.where((m) => m.notes.isNotEmpty).toList();
+    if (medsWithNotes.isNotEmpty) {
+      result.add(pw.SizedBox(height: 8));
+      for (final med in medsWithNotes) {
+        result.add(pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.RichText(
+            text: pw.TextSpan(
+              children: [
+                pw.TextSpan(
+                  text: '${med.name}: ',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _textDark,
+                  ),
+                ),
+                pw.TextSpan(
+                  text: med.notes,
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontStyle: pw.FontStyle.italic,
+                    color: _textDark,
+                  ),
+                ),
+              ],
+            ),
           ),
         ));
       }
     }
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: widgets,
-    );
+    return result;
   }
+
+  // ── Disclaimer ─────────────────────────────────────────────────────────
 
   static pw.Widget _buildDisclaimer() {
     return pw.Container(
@@ -647,7 +760,7 @@ class ReportService {
         'This report is generated by Nuvita and is not a substitute for professional medical advice. '
         'Always consult your doctor.',
         style: pw.TextStyle(
-          fontSize: 8,
+          fontSize: 10,
           fontStyle: pw.FontStyle.italic,
           color: PdfColor(0.5, 0.5, 0.5),
         ),
@@ -656,13 +769,19 @@ class ReportService {
     );
   }
 
+  // ── Helpers ────────────────────────────────────────────────────────────
+
   static String _readableName(String metricType) {
     final spaced = metricType.replaceAllMapped(
       RegExp(r'([A-Z])'),
       (m) => ' ${m.group(0)!}',
     );
     if (spaced.isEmpty) return metricType;
-    return spaced[0].toUpperCase() + spaced.substring(1);
+    return spaced
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join(' ');
   }
 
   static String _fmt(DateTime dt) {

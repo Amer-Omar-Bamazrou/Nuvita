@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/dashboard/providers/health_provider.dart';
 import '../../../shared/widgets/nuvita_button.dart';
+import '../../../shared/widgets/nuvita_time_picker.dart';
 
 class BloodPressureInputScreen extends StatefulWidget {
   final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
@@ -79,15 +80,9 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
+    final picked = await showNuvitaTimePicker(
+      context,
       initialTime: _selectedTime,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(primary: AppColors.primary),
-        ),
-        child: child!,
-      ),
     );
     if (picked != null) setState(() => _selectedTime = picked);
   }

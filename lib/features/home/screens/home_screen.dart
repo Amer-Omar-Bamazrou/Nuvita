@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -47,6 +48,8 @@ class DailyTask {
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  static final refreshNotifier = ValueNotifier<int>(0);
+
   @override
   Widget build(BuildContext context) {
     // Provider scoped to this screen — readings are local session state
@@ -73,14 +76,11 @@ class _HomeBodyState extends State<_HomeBody> {
   int _medScheduleCount = 0;
   List<DailyTask> _tasks = [];
   bool _isLoadingTasks = false;
+  int _streakDays = 0;
+  Map<String, double> _completionMap = {};
+  Map<String, List<Map<String, dynamic>>> _adherenceByDate = {};
   final _suggestionService = PatientSuggestionService();
-
-  static const _diseaseLabels = {
-    'diabetes': 'Diabetes',
-    'blood_pressure': 'Blood Pressure',
-    'heart': 'Heart Condition',
-    'other': 'General Monitoring',
-  };
+  StreamSubscription<QuerySnapshot>? _medsSub;
 
   // Metric config used for reading task validation and units
   static const _configs = <HealthMetric, MetricConfig>{
@@ -154,11 +154,47 @@ class _HomeBodyState extends State<_HomeBody> {
     super.initState();
     _loadUserProfile();
     _loadMedSummary();
+    _listenForMedicationChanges();
+    HomeScreen.refreshNotifier.addListener(_onRefreshRequested);
   }
 
   @override
   void dispose() {
+    _medsSub?.cancel();
+    HomeScreen.refreshNotifier.removeListener(_onRefreshRequested);
     super.dispose();
+  }
+
+  void _listenForMedicationChanges() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _medsSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('medications')
+        .snapshots()
+        .listen((snapshot) async {
+      if (!mounted) return;
+      try {
+        final remoteMeds = snapshot.docs
+            .map((d) => MedicationService.fromFirestoreDoc(d.data()))
+            .toList();
+        final localMeds = await MedicationService.loadAll();
+        final remoteIds = remoteMeds.map((m) => m.id).toSet();
+        final localOnly =
+            localMeds.where((m) => !remoteIds.contains(m.id)).toList();
+        await MedicationService.saveAll([...remoteMeds, ...localOnly]);
+        _loadMedSummary();
+        _loadTasks();
+      } catch (e) {
+        debugPrint('HomeScreen med stream: $e');
+      }
+    });
+  }
+
+  void _onRefreshRequested() {
+    _loadMedSummary();
+    _loadTasks();
   }
 
   Future<void> _loadUserProfile() async {
@@ -232,12 +268,8 @@ class _HomeBodyState extends State<_HomeBody> {
     final todayStr =
         '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
-    final services = await PreferencesService.getSelectedServices();
-    final showMeds =
-        services.isEmpty || services.contains('medications');
-
-    // Medication tasks only
-    if (uid != null && showMeds) {
+    // Always show medication tasks if the user has active medications
+    if (uid != null) {
       final meds = await MedicationService.loadAll();
       final prefs = await SharedPreferences.getInstance();
       for (final med in meds) {
@@ -271,6 +303,7 @@ class _HomeBodyState extends State<_HomeBody> {
         _tasks = tasks;
         _isLoadingTasks = false;
       });
+      _loadStreakData();
     }
   }
 
@@ -279,6 +312,94 @@ class _HomeBodyState extends State<_HomeBody> {
       if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
       return a.timeOfDay.compareTo(b.timeOfDay);
     });
+  }
+
+  String _dateStr(DateTime d) {
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _loadStreakData() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final now = DateTime.now();
+      final startStr = _dateStr(now.subtract(const Duration(days: 60)));
+
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('adherence')
+          .where('date', isGreaterThanOrEqualTo: startStr)
+          .get();
+
+      final Map<String, List<Map<String, dynamic>>> byDate = {};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final date = data['date'] as String?;
+        if (date == null) continue;
+        byDate.putIfAbsent(date, () => []);
+        byDate[date]!.add(data);
+      }
+
+      final Map<String, double> cMap = {};
+      for (final entry in byDate.entries) {
+        final takenCount =
+            entry.value.where((d) => d['taken'] == true).length;
+        cMap[entry.key] =
+            entry.value.isEmpty ? 0.0 : takenCount / entry.value.length;
+      }
+
+      final todayStr = _dateStr(now);
+      if (_tasks.isNotEmpty) {
+        final completed = _tasks.where((t) => t.isCompleted).length;
+        cMap[todayStr] = completed / _tasks.length;
+      }
+
+      int streak = 0;
+      if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
+
+      for (int i = 1; i <= 60; i++) {
+        final dayStr = _dateStr(now.subtract(Duration(days: i)));
+        if (cMap.containsKey(dayStr) && cMap[dayStr]! >= 1.0) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _streakDays = streak;
+          _completionMap = cMap;
+          _adherenceByDate = byDate;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _updateTodayStreak() {
+    final now = DateTime.now();
+    final todayStr = _dateStr(now);
+
+    if (_tasks.isNotEmpty) {
+      final completed = _tasks.where((t) => t.isCompleted).length;
+      _completionMap[todayStr] = completed / _tasks.length;
+    }
+
+    int streak = 0;
+    if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
+
+    for (int i = 1; i <= 60; i++) {
+      final dayStr = _dateStr(now.subtract(Duration(days: i)));
+      if (_completionMap.containsKey(dayStr) && _completionMap[dayStr]! >= 1.0) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    setState(() => _streakDays = streak);
   }
 
   String get _greeting {
@@ -564,65 +685,485 @@ class _HomeBodyState extends State<_HomeBody> {
     return false;
   }
 
-  // ── Summary banner: "Managing: Blood Pressure" ───────────────────────────
+  // ── Streak widget ─────────────────────────────────────────────────────
 
   Widget _buildSummaryBanner() {
-    final label = _diseaseLabels[_diseaseType] ?? 'General Monitoring';
-    final emoji = switch (_diseaseType) {
-      'diabetes' => '🩸',
-      'blood_pressure' => '💉',
-      'heart' => '❤️',
-      _ => '➕',
-    };
+    final completed = _tasks.where((t) => t.isCompleted).length;
+    final total = _tasks.length;
+    final progress = total > 0 ? completed / total : 0.0;
+    final allDone = total > 0 && completed == total;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.25),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 30)),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: _showStreakCalendar,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
               children: [
-                Text(
-                  'Managing',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.white.withValues(alpha: 0.7),
-                    fontSize: 13,
+                Icon(
+                  Icons.local_fire_department_rounded,
+                  color: _streakDays > 0
+                      ? const Color(0xFFFF9800)
+                      : AppColors.white.withValues(alpha: 0.4),
+                  size: 28,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Today's Task Streak",
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.white.withValues(alpha: 0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _streakDays > 0
+                            ? '$_streakDays day${_streakDays == 1 ? '' : 's'} streak'
+                            : 'Start your streak!',
+                        style: AppTextStyles.heading3
+                            .copyWith(color: AppColors.white),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style:
-                      AppTextStyles.heading3.copyWith(color: AppColors.white),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$completed/$total',
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () => EmergencyService.showEmergencyFlow(context),
+                  child: const Icon(
+                    Icons.warning_rounded,
+                    color: Colors.red,
+                    size: 22,
+                  ),
                 ),
               ],
             ),
-          ),
-          // SOS button — tap to start emergency countdown
-          GestureDetector(
-            onTap: () => EmergencyService.showEmergencyFlow(context),
-            child: const Icon(
-              Icons.warning_rounded,
-              color: Colors.red,
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: AppColors.white.withValues(alpha: 0.15),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  allDone
+                      ? const Color(0xFF4CAF50)
+                      : const Color(0xFF74B3CE),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Streak calendar sheet ───────────────────────────────────────────────
+
+  void _showStreakCalendar() {
+    final now = DateTime.now();
+    var displayMonth = DateTime(now.year, now.month);
+    String selectedDate = _dateStr(now);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            final year = displayMonth.year;
+            final month = displayMonth.month;
+            final daysInMonth = DateTime(year, month + 1, 0).day;
+            final firstWeekday = DateTime(year, month, 1).weekday;
+            final isCurrentMonth = year == now.year && month == now.month;
+
+            const monthNames = [
+              'January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December',
+            ];
+
+            final isToday = selectedDate == _dateStr(now);
+            final List<Widget> taskWidgets = [];
+            if (isToday) {
+              for (final task in _tasks) {
+                taskWidgets.add(_buildCalendarTaskRow(
+                  name: task.displayName,
+                  time: task.timeOfDay,
+                  dosage: task.subtitle ?? '',
+                  taken: task.isCompleted,
+                ));
+              }
+            } else if (_adherenceByDate.containsKey(selectedDate)) {
+              for (final rec in _adherenceByDate[selectedDate]!) {
+                taskWidgets.add(_buildCalendarTaskRow(
+                  name: rec['medicationName'] as String? ?? 'Medication',
+                  time: rec['timeSlot'] as String? ?? '',
+                  dosage: rec['dosage'] as String? ?? '',
+                  taken: rec['taken'] as bool? ?? false,
+                ));
+              }
+            }
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.85,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.divider,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Task Completion Calendar',
+                        style: AppTextStyles.heading3,
+                      ),
+                      const SizedBox(height: 16),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              setSheetState(() {
+                                displayMonth = DateTime(year, month - 1);
+                              });
+                            },
+                            icon: const Icon(Icons.chevron_left_rounded,
+                                color: AppColors.primary),
+                          ),
+                          Text(
+                            '${monthNames[month - 1]} $year',
+                            style: AppTextStyles.label.copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: isCurrentMonth
+                                ? null
+                                : () {
+                                    setSheetState(() {
+                                      displayMonth =
+                                          DateTime(year, month + 1);
+                                    });
+                                  },
+                            icon: Icon(Icons.chevron_right_rounded,
+                                color: isCurrentMonth
+                                    ? AppColors.divider
+                                    : AppColors.primary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      Row(
+                        children: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+                            .map((d) => Expanded(
+                                  child: Center(
+                                    child: Text(
+                                      d,
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 8),
+
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          childAspectRatio: 0.85,
+                        ),
+                        itemCount: daysInMonth + firstWeekday - 1,
+                        itemBuilder: (_, index) {
+                          if (index < firstWeekday - 1) {
+                            return const SizedBox();
+                          }
+                          final day = index - firstWeekday + 2;
+                          final dateStr =
+                              _dateStr(DateTime(year, month, day));
+                          final completion = _completionMap[dateStr];
+                          final isSelectedDay = dateStr == selectedDate;
+                          final isTodayCell = dateStr == _dateStr(now);
+                          final isFuture =
+                              DateTime(year, month, day).isAfter(now);
+
+                          Color? dotColor;
+                          if (!isFuture && completion != null) {
+                            if (completion >= 1.0) {
+                              dotColor = const Color(0xFF4CAF50);
+                            } else if (completion > 0) {
+                              dotColor = const Color(0xFFFF9800);
+                            }
+                          }
+
+                          return GestureDetector(
+                            onTap: isFuture
+                                ? null
+                                : () {
+                                    setSheetState(() {
+                                      selectedDate = dateStr;
+                                    });
+                                  },
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isSelectedDay
+                                        ? AppColors.primary
+                                        : isTodayCell
+                                            ? AppColors.primary
+                                                .withValues(alpha: 0.1)
+                                            : null,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '$day',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight:
+                                          isTodayCell || isSelectedDay
+                                              ? FontWeight.w700
+                                              : FontWeight.w400,
+                                      color: isSelectedDay
+                                          ? AppColors.white
+                                          : isFuture
+                                              ? AppColors.secondary
+                                                  .withValues(alpha: 0.4)
+                                              : AppColors.textDark,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color:
+                                        dotColor ?? Colors.transparent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildLegendDot(
+                              const Color(0xFF4CAF50), 'All done'),
+                          const SizedBox(width: 20),
+                          _buildLegendDot(
+                              const Color(0xFFFF9800), 'Partial'),
+                          const SizedBox(width: 20),
+                          _buildLegendDot(AppColors.divider, 'No tasks'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.local_fire_department_rounded,
+                              color: _streakDays > 0
+                                  ? const Color(0xFFFF9800)
+                                  : AppColors.secondary,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _streakDays > 0
+                                        ? '$_streakDays day${_streakDays == 1 ? '' : 's'} streak'
+                                        : 'No streak yet',
+                                    style: AppTextStyles.heading3,
+                                  ),
+                                  Text(
+                                    _streakDays > 0
+                                        ? 'Keep going! Consistency is key.'
+                                        : 'Complete all tasks to start!',
+                                    style: AppTextStyles.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      if (taskWidgets.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            Text(
+                              isToday ? "Today's Tasks" : 'Tasks',
+                              style: AppTextStyles.label.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              selectedDate,
+                              style: AppTextStyles.bodySmall
+                                  .copyWith(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ...taskWidgets,
+                      ] else ...[
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            'No tasks recorded for this date',
+                            style: AppTextStyles.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCalendarTaskRow({
+    required String name,
+    required String time,
+    required String dosage,
+    required bool taken,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              taken
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: taken ? const Color(0xFF4CAF50) : AppColors.secondary,
               size: 22,
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: AppTextStyles.label.copyWith(fontSize: 14)),
+                  if (dosage.isNotEmpty)
+                    Text(dosage,
+                        style:
+                            AppTextStyles.bodySmall.copyWith(fontSize: 12)),
+                ],
+              ),
+            ),
+            Text(time, style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildLegendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 11)),
+      ],
     );
   }
 
@@ -828,6 +1369,7 @@ class _HomeBodyState extends State<_HomeBody> {
         task.isCompleted = true;
         _sortTasks();
       });
+      _updateTodayStreak();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -853,6 +1395,7 @@ class _HomeBodyState extends State<_HomeBody> {
                   task.isCompleted = false;
                   _sortTasks();
                 });
+                _updateTodayStreak();
               }
             },
           ),
@@ -1023,7 +1566,10 @@ class _HomeBodyState extends State<_HomeBody> {
                       context,
                       MaterialPageRoute(
                           builder: (_) => const AddMedicationScreen()),
-                    ).then((_) => _loadMedSummary());
+                    ).then((_) {
+                      _loadMedSummary();
+                      _loadTasks();
+                    });
                   },
                 ),
                 const SizedBox(height: 8),
