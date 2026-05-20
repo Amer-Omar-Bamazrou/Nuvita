@@ -32,6 +32,8 @@ class HealthChartWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (dataPoints.isEmpty) return const SizedBox.shrink();
 
+    final useCurve = dataPoints.length > 3;
+
     final spots = dataPoints.asMap().entries.map((e) {
       return FlSpot(e.key.toDouble(), e.value.value);
     }).toList();
@@ -157,7 +159,7 @@ class HealthChartWidget extends StatelessWidget {
               // Primary line
               LineChartBarData(
                 spots: spots,
-                isCurved: true,
+                isCurved: useCurve,
                 curveSmoothness: 0.3,
                 color: AppColors.primary,
                 barWidth: 2.5,
@@ -195,7 +197,7 @@ class HealthChartWidget extends StatelessWidget {
               if (_isDualLine && secondarySpots != null)
                 LineChartBarData(
                   spots: secondarySpots,
-                  isCurved: true,
+                  isCurved: useCurve,
                   curveSmoothness: 0.3,
                   color: secondaryColor ?? AppColors.secondary,
                   barWidth: 2,

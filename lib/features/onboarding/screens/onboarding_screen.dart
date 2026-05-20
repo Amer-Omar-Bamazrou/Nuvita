@@ -445,7 +445,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Your smart health companion for chronic disease management',
+            'Your health in focus with Nuvita, tracks your daily progress and stay on top of your medications on a daily basis.',
             style: TextStyle(
               fontSize: 16,
               color: AppColors.secondary,
@@ -520,11 +520,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("What's your name?", style: AppTextStyles.heading1),
+                const Text("Your Name", style: AppTextStyles.heading1),
                 const SizedBox(height: 28),
                 NuvitaTextField(
                   label: 'First Name',
-                  hint: 'Enter your first name',
+                  hint: 'Insert your first name',
                   controller: _firstNameController,
                   keyboardType: TextInputType.name,
                   prefixIcon: Icons.person_outline_rounded,
@@ -533,7 +533,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 16),
                 NuvitaTextField(
                   label: 'Last Name',
-                  hint: 'Enter your last name',
+                  hint: 'Insert your last name',
                   controller: _lastNameController,
                   keyboardType: TextInputType.name,
                   prefixIcon: Icons.person_outline_rounded,
@@ -576,7 +576,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("What's your gender?", style: AppTextStyles.heading1),
+                const Text("Your gender?", style: AppTextStyles.heading1),
                 const SizedBox(height: 28),
                 ..._genderOptions.map(_buildGenderCard),
               ],
@@ -661,7 +661,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('When were you born?', style: AppTextStyles.heading1),
+                const Text('Date of Birth?', style: AppTextStyles.heading1),
                 const SizedBox(height: 28),
                 _buildDobCard(),
               ],
@@ -754,9 +754,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
-              Text("Let's set up your routine!", style: AppTextStyles.heading1),
+              Text("Set up preferences!", style: AppTextStyles.heading1),
               SizedBox(height: 6),
-              Text('Select the services you want', style: AppTextStyles.bodySmall),
+              Text('Select desired services to get started', style: AppTextStyles.bodySmall),
             ],
           ),
         ),

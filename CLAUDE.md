@@ -49,6 +49,21 @@ Two providers, intentionally scoped differently:
 
 Notification taps are routed via a global `navigatorKey` wired in `main.dart`. The appointment tap handler is set there (not in `NotificationService`) to avoid a circular import.
 
+### Home screen task refresh
+
+The home screen task list refreshes via four mechanisms:
+- **initState** — loads tasks when the screen first mounts
+- **Pull-to-refresh** — `RefreshIndicator` reloads tasks and med summary
+- **Tab switch** — `MainShell` fires `HomeScreen.refreshNotifier` when switching to the Home tab, so tasks added from other tabs (e.g. Tracking) appear immediately
+- **Firestore listener** — `_listenForMedicationChanges()` streams `/users/{uid}/medications` so doctor-assigned medications appear in real-time without manual refresh
+- **Add medication callback** — returning from `AddMedicationScreen` calls both `_loadMedSummary()` and `_loadTasks()`
+
+Medication tasks always show regardless of onboarding service selection — the service filter was removed from `_loadTasks()`.
+
+### Chart rendering
+
+`HealthChartWidget` uses `fl_chart` with `isCurved` enabled only when there are more than 3 data points. With fewer points, straight lines are used to avoid curve-smoothing distortion.
+
 ### Firestore conventions
 
 - Patient data lives under `/users/{uid}/` with sub-collections: `readings`, `medications`, `alerts`, `suggestions`, `messages`, `appointments`, `emergency_contacts`, `adherence`

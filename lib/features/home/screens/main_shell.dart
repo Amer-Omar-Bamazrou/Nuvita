@@ -43,7 +43,10 @@ class _MainShellState extends State<MainShell> {
         const Divider(height: 1, thickness: 1, color: AppColors.divider),
         BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
+          onTap: (i) {
+            setState(() => _currentIndex = i);
+            if (i == 0) HomeScreen.refreshNotifier.value++;
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: AppColors.white,
           selectedItemColor: AppColors.primary,

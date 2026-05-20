@@ -23,19 +23,11 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _isGuest = false;
 
   String _name = '';
-  String _diseaseType = 'other';
   int _readingsCount = 0;
   int _medsCount = 0;
 
   // Cached bytes so Preview and Share don't both trigger generation
   Uint8List? _cachedBytes;
-
-  static const _diseaseLabels = {
-    'diabetes': 'Diabetes',
-    'blood_pressure': 'Blood Pressure',
-    'heart': 'Heart Condition',
-    'other': 'General Monitoring',
-  };
 
   @override
   void initState() {
@@ -72,7 +64,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
       setState(() {
         _name = profile?['name'] as String? ?? '';
-        _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _readingsCount = readings.length;
         _medsCount = meds.length;
         _isLoading = false;
@@ -89,7 +80,7 @@ class _ReportScreenState extends State<ReportScreen> {
     if (uid == null) return null;
 
     final bytes =
-        await ReportService.generateReport(uid, _name, _diseaseType);
+        await ReportService.generateReport(uid, _name, '');
     _cachedBytes = bytes;
     return bytes;
   }
@@ -196,8 +187,6 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildContent() {
-    final condition = _diseaseLabels[_diseaseType] ?? 'General Monitoring';
-
     return Stack(
       children: [
         Column(
@@ -205,7 +194,7 @@ class _ReportScreenState extends State<ReportScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
-                child: _buildSummaryCard(condition),
+                child: _buildSummaryCard(),
               ),
             ),
             Padding(
@@ -253,7 +242,7 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String condition) {
+  Widget _buildSummaryCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -277,7 +266,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
           const SizedBox(height: 16),
           _summaryRow(Icons.person_outline, 'Patient', _name.isEmpty ? 'Unknown' : _name),
-          _summaryRow(Icons.monitor_heart_outlined, 'Condition', condition),
           _summaryRow(Icons.date_range_outlined, 'Period', 'Last 30 days'),
           _summaryRow(
             Icons.bar_chart_outlined,

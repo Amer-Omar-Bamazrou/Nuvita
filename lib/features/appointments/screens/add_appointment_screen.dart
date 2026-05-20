@@ -3,6 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
+import '../../../shared/widgets/nuvita_time_picker.dart';
 import '../models/appointment_model.dart';
 import '../services/appointment_service.dart';
 
@@ -83,19 +84,9 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
+    final picked = await showNuvitaTimePicker(
+      context,
       initialTime: _selectedTime,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: AppColors.primary,
-            onPrimary: AppColors.white,
-            surface: AppColors.white,
-          ),
-        ),
-        child: child!,
-      ),
     );
     if (picked != null && mounted) {
       setState(() => _selectedTime = picked);
