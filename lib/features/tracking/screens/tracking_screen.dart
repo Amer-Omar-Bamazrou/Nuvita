@@ -68,7 +68,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
       try {
         final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
         readingsCount = readings.length;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('TrackingScreen: readings count failed: $e');
+      }
     }
 
     if (!mounted) return;

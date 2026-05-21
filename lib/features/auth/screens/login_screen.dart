@@ -71,7 +71,9 @@ class _LoginScreenState extends State<LoginScreen> {
             _showDeactivatedDialog();
             return;
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('LoginScreen: active-status check failed: $e');
+        }
       }
 
       if (!mounted) return;

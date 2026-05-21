@@ -206,7 +206,9 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                     duration: Duration(seconds: 2),
                   ),
                 );
-              } catch (_) {}
+              } catch (e) {
+                debugPrint('DoctorDashboard: session refresh failed: $e');
+              }
             },
             borderRadius: BorderRadius.circular(4),
             child: const Padding(

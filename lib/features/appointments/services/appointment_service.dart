@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -142,20 +143,26 @@ class AppointmentService {
       String uid, AppointmentModel appointment) async {
     try {
       await _col(uid).doc(appointment.id).set(_toFirestoreMap(appointment));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AppointmentService: save failed: $e');
+    }
   }
 
   static Future<void> _updateInFirebase(
       String uid, AppointmentModel appointment) async {
     try {
       await _col(uid).doc(appointment.id).update(_toFirestoreMap(appointment));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AppointmentService: update failed: $e');
+    }
   }
 
   static Future<void> _deleteFromFirebase(String uid, String id) async {
     try {
       await _col(uid).doc(id).delete();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AppointmentService: delete failed: $e');
+    }
   }
 
   static Future<void> syncFromFirebase(String uid) async {
@@ -175,7 +182,9 @@ class AppointmentService {
       }
 
       await _saveAll(merged);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AppointmentService: syncFromFirebase failed: $e');
+    }
   }
 
   static Map<String, dynamic> _toFirestoreMap(AppointmentModel a) => {

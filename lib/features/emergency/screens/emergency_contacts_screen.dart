@@ -103,7 +103,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         _prefsKey,
         jsonEncode(merged.map((c) => c.toMap()).toList()),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('EmergencyContacts: sync failed: $e');
+    }
   }
 
   Future<void> _saveToFirebase(EmergencyContact contact) async {
@@ -111,7 +113,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     if (uid == null) return;
     try {
       await _col(uid).doc(contact.id).set(contact.toMap());
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('EmergencyContacts: saveToFirebase failed: $e');
+    }
   }
 
   Future<void> _deleteFromFirebase(String id) async {
@@ -119,7 +123,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     if (uid == null) return;
     try {
       await _col(uid).doc(id).delete();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('EmergencyContacts: deleteFromFirebase failed: $e');
+    }
   }
 
   // ── Actions ──
