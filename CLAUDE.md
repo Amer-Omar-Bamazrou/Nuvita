@@ -60,6 +60,10 @@ The home screen task list refreshes via four mechanisms:
 
 Medication tasks always show regardless of onboarding service selection — the service filter was removed from `_loadTasks()`.
 
+### History screen — Blood Pressure merging
+
+Systolic and diastolic readings are stored as separate Firestore documents but displayed as a single "Blood Pressure" card (e.g. "125/82 mmHg") in the history list. `_mergeReadingsInGroup` pairs them by matching minute-level timestamps. Edit and delete actions on a merged card apply to both documents. The summary card's "Last entry" label shows date context ("Yest 8:41 PM", "May 19") when the most recent reading is not from today.
+
 ### Chart rendering
 
 `HealthChartWidget` uses `fl_chart` with `isCurved` enabled only when there are more than 3 data points. With fewer points, straight lines are used to avoid curve-smoothing distortion.
@@ -156,7 +160,7 @@ Medication tasks always show regardless of onboarding service selection — the 
 lib/core/theme/ — app_colors, app_text_styles, app_theme
 lib/core/services/ — preferences_service, notification_service
 lib/features/auth/ — login_screen, register_screen, change_password_screen, forgot_password_sent_screen, auth_service
-lib/features/onboarding/ — onboarding_screen, welcome_splash (dormant)
+lib/features/onboarding/ — onboarding_screen
 lib/features/disease/ — disease_selection (dormant)
 lib/features/home/ — home_screen, main_shell
 lib/features/medication/ — medication_screen, add_medication, medication_detail_screen, medication_history_screen, model, service
@@ -168,10 +172,6 @@ lib/features/health/models/ — health_reading, metric_config
 lib/features/health/screens/ — add_reading_list_screen (legacy), add_reading_input_screen, blood_pressure_input_screen
 lib/features/health/services/ — health_reading_service, health_log_service (legacy)
 lib/features/health/widgets/ — ruler_picker (legacy — replaced by stepper buttons)
-lib/features/lifestyle/models/ — lifestyle_suggestion
-lib/features/lifestyle/services/ — lifestyle_engine
-lib/features/lifestyle/widgets/ — suggestion_card
-lib/features/lifestyle/screens/ — lifestyle_screen (dormant — built, not wired to nav)
 lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service, models/emergency_contact
 lib/features/emergency/screens/ — emergency_contacts_screen
@@ -183,7 +183,7 @@ lib/features/report/ — report_service, report_screen
 lib/features/doctor/data/ — medicine_library
 lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen, doctor_messages_screen, doctor_suggestions_history_screen, critical_alerts_screen, deleted_patients_screen
 lib/features/doctor/services/ — doctor_service, patient_suggestion_service
-lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card
+lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card, nuvita_time_picker
 
 ## Coding Rules — ALWAYS FOLLOW
 - Natural developer style comments only

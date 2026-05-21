@@ -55,7 +55,9 @@ void main() async {
           await FirebaseAuth.instance.signOut();
           deactivated = true;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('main: active-status check failed: $e');
+      }
 
       if (deactivated) {
         home = const LoginScreen();
@@ -75,7 +77,9 @@ void main() async {
     try {
       await NotificationService.scheduleDailyWellnessReminder();
       await NotificationService.scheduleWeeklyHealthSummary();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('main: wellness schedule failed: $e');
+    }
   }
 
   // Appointment tap handler

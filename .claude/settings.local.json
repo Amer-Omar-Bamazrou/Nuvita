@@ -4,7 +4,8 @@
       "PowerShell(& \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" kill-server; & \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" start-server)",
       "PowerShell(flutter analyze *)",
       "Bash(flutter analyze *)",
-      "Bash(flutter run *)"
+      "Bash(flutter run *)",
+      "Bash(git log *)"
     ]
   }
 }

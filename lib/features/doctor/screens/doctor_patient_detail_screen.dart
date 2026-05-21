@@ -141,7 +141,9 @@ class _DoctorPatientDetailScreenState
         _suggestions =
             snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('DoctorPatientDetail: loadSuggestions failed: $e');
+    }
   }
 
   Future<void> _loadAdherence() async {

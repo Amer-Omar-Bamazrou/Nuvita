@@ -178,7 +178,9 @@ class NotificationService {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('NotificationService: Firebase init failed: $e');
+    }
 
     tz_data.initializeTimeZones();
 

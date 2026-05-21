@@ -375,7 +375,9 @@ class _HomeBodyState extends State<_HomeBody> {
           _adherenceByDate = byDate;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('HomeScreen: loadAdherence failed: $e');
+    }
   }
 
   void _updateTodayStreak() {

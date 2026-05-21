@@ -38,7 +38,9 @@ class HealthHistoryProvider extends ChangeNotifier {
       _hasMore = list.length >= 30;
       _loaded = true;
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('HealthHistoryProvider: loadReadings failed: $e');
+    }
   }
 
   Future<void> forceReload(String uid) async {
@@ -58,7 +60,9 @@ class HealthHistoryProvider extends ChangeNotifier {
       _readings.addAll(list);
       _hasMore = list.length >= 30;
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('HealthHistoryProvider: loadMore failed: $e');
+    }
   }
 
   // Adds a reading to the in-memory list for instant UI update.

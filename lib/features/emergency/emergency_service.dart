@@ -66,7 +66,9 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         final profile = data['profile'] as Map<String, dynamic>?;
         _diseaseType = profile?['diseaseType'] as String? ?? 'other';
         _patientId = data['patientId'] as String? ?? '';
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('EmergencyService: profile fetch failed: $e');
+      }
     }
   }
 

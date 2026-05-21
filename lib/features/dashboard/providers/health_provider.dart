@@ -145,7 +145,9 @@ class HealthProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('HealthProvider: loadLatestValues failed: $e');
+    }
   }
 
   // Persists a single reading to Firestore after the local state has been updated.
@@ -166,7 +168,9 @@ class HealthProvider extends ChangeNotifier {
         timestamp: DateTime.now(),
       );
       await HealthReadingService.saveReading(uid, reading);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('HealthProvider: saveReading failed: $e');
+    }
   }
 
   String _statusString(MetricStatus? status) {
