@@ -32,6 +32,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Start notification init in parallel with home screen determination
+  final notificationFuture =
+      NotificationService.initialize(navigatorKey: navigatorKey);
+
   Widget home;
   bool scheduleWellness = false;
   String? loggedInUid;
@@ -71,18 +75,10 @@ void main() async {
     }
   }
 
-  await NotificationService.initialize(navigatorKey: navigatorKey);
+  // Ensure notification init is done before setting tap handlers
+  await notificationFuture;
 
-  if (scheduleWellness) {
-    try {
-      await NotificationService.scheduleDailyWellnessReminder();
-      await NotificationService.scheduleWeeklyHealthSummary();
-    } catch (e) {
-      debugPrint('main: wellness schedule failed: $e');
-    }
-  }
-
-  // Appointment tap handler
+  // Tap handlers are synchronous — register before runApp
   NotificationService.setAppointmentTapHandler((appointmentId) async {
     await Future.delayed(const Duration(milliseconds: 500));
     final apt = await AppointmentService.getAppointmentById(appointmentId);
@@ -99,7 +95,6 @@ void main() async {
     );
   });
 
-  // Medication detail tap handler (for missed dose / doctor assigned)
   NotificationService.setMedicationDetailHandler((medicationId) async {
     await Future.delayed(const Duration(milliseconds: 500));
     final med = await MedicationService.getById(medicationId);
@@ -113,7 +108,6 @@ void main() async {
     );
   });
 
-  // Suggestions panel tap handler (for doctor suggestion / weekly summary)
   NotificationService.setSuggestionsPanelHandler(() async {
     await Future.delayed(const Duration(milliseconds: 500));
     final context = navigatorKey.currentContext;
@@ -128,12 +122,23 @@ void main() async {
     );
   });
 
-  // Start Firestore listeners for logged-in patient
+  // Show UI immediately
+  runApp(NuvitaApp(home: home));
+
+  // Defer non-critical work to after first frame
+  if (scheduleWellness) {
+    Future.wait([
+      NotificationService.scheduleDailyWellnessReminder(),
+      NotificationService.scheduleWeeklyHealthSummary(),
+    ]).catchError((e) {
+      debugPrint('main: wellness schedule failed: $e');
+      return <void>[];
+    });
+  }
+
   if (loggedInUid != null) {
     _startDoctorNotificationListeners(loggedInUid);
   }
-
-  runApp(NuvitaApp(home: home));
 }
 
 // Listens for doctor-assigned medications and doctor-sent suggestions.

@@ -201,16 +201,21 @@ class _HomeBodyState extends State<_HomeBody> {
     final savedFirstName = await PreferencesService.getFirstName();
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+
+    // Show UI immediately with local data
+    if (mounted) {
       setState(() {
         _userName = savedFirstName ?? '';
         _isLoading = false;
       });
-      // Still build guest task prompt
+    }
+
+    if (uid == null) {
       _loadTasks();
       return;
     }
 
+    // Fetch Firestore profile in the background and update when ready
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
@@ -218,26 +223,23 @@ class _HomeBodyState extends State<_HomeBody> {
           .get();
 
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
-      setState(() {
-        final firestoreName = profile?['name'] as String? ?? '';
-        _userName =
-            firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
-        _diseaseType = profile?['diseaseType'] as String? ?? 'other';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          final firestoreName = profile?['name'] as String? ?? '';
+          _userName =
+              firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
+          _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+        });
+      }
       if (mounted) {
         context.read<HealthProvider>().loadReadingsFromFirebase(uid);
         context.read<HealthHistoryProvider>().loadReadings(uid);
         TrendWarningService.checkBPTrend(context, uid);
       }
     } catch (_) {
-      setState(() {
-        _userName = savedFirstName ?? '';
-        _isLoading = false;
-      });
+      // Already showing UI with local name — nothing to update
     }
 
-    // Load tasks after disease type is known
     _loadTasks();
   }
 
