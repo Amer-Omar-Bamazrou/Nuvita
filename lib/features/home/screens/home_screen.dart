@@ -28,6 +28,7 @@ import '../../doctor/services/patient_suggestion_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/health/conditions.dart';
 import '../../disease/services/conditions_service.dart';
+import '../../charts/screens/charts_screen.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
 
@@ -583,12 +584,39 @@ class _HomeBodyState extends State<_HomeBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Today's Summary",
-            style: AppTextStyles.label.copyWith(
-              fontSize: 13,
-              color: AppColors.primary,
-            ),
+          Row(
+            children: [
+              Text(
+                "Today's Summary",
+                style: AppTextStyles.label.copyWith(
+                  fontSize: 13,
+                  color: AppColors.primary,
+                ),
+              ),
+              const Spacer(),
+              if (_measurementsOn)
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ChartsScreen()),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.show_chart_rounded,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'View trends',
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           Row(

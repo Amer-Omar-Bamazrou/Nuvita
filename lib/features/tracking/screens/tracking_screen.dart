@@ -15,6 +15,7 @@ import '../../appointments/screens/appointments_screen.dart';
 import '../../appointments/screens/add_appointment_screen.dart';
 import '../../report/screens/report_screen.dart';
 import '../../health/services/health_reading_service.dart';
+import '../../charts/screens/charts_screen.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -166,6 +167,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   _buildSectionLabel('APPOINTMENTS'),
                   const SizedBox(height: 8),
                   _buildAppointmentsCard(),
+                  const SizedBox(height: 20),
+                ],
+
+                // Charts (logged-in only)
+                if (!_isGuest &&
+                    _services.contains(CareServices.measurements)) ...[
+                  _buildSectionLabel('HEALTH TRENDS'),
+                  const SizedBox(height: 8),
+                  _buildTrendsCard(),
                   const SizedBox(height: 20),
                 ],
 
@@ -574,6 +584,80 @@ class _TrackingScreenState extends State<TrackingScreen> {
     final amPm = dt.hour >= 12 ? 'PM' : 'AM';
     final min = dt.minute.toString().padLeft(2, '0');
     return '${dt.day} ${months[dt.month - 1]} · $hour:$min $amPm';
+  }
+
+  // ── Trends card ───────────────────────────────────────────────────────────
+
+  Widget _buildTrendsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.show_chart_rounded,
+                  size: 22,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Charts',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'See how your readings change over time, with your 7-day '
+            'average and how it compares with the week before',
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChartsScreen()),
+                );
+              },
+              child: const Text(
+                'View Charts →',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Report card ───────────────────────────────────────────────────────────

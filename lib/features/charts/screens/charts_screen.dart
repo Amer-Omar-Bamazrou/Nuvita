@@ -45,6 +45,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
   Map<String, dynamic>? _weeklySummary;
   String? _comparisonInsight;
 
+  // Last 7 days regardless of the selected range; null when nothing logged
+  double? _weekAverage;
+  double? _weekDiastolicAverage;
+
   @override
   void initState() {
     super.initState();
@@ -169,10 +173,13 @@ class _ChartsScreenState extends State<ChartsScreen> {
       final best = ChartDataService.getPersonalBest(metricType, points);
       final summary = ChartDataService.getWeeklySummary(points);
 
-      String? comparison;
-      if (_range != _TimeRange.days7 && points.length >= 2) {
-        comparison = _computeComparison(points, metricType);
-      }
+      // This week's average and how it compares with the week before
+      final weekly = await Future.wait([
+        ChartDataService.getWeeklyAverage(uid, metricType),
+        if (_isBP) ChartDataService.getWeeklyAverage(uid, 'diastolic'),
+      ]);
+      final comparison =
+          await ChartDataService.getComparisonInsight(uid, metricType);
 
       if (!mounted) return;
       setState(() {
@@ -184,6 +191,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
         _personalBest = best;
         _weeklySummary = summary;
         _comparisonInsight = comparison;
+        // getWeeklyAverage returns 0 when there were no readings
+        _weekAverage = weekly[0] > 0 ? weekly[0] : null;
+        _weekDiastolicAverage =
+            _isBP && weekly.length > 1 && weekly[1] > 0 ? weekly[1] : null;
         _loadingChart = false;
       });
     } catch (_) {
@@ -206,34 +217,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
         );
       }
     }
-  }
-
-  // Compares last 7 days vs the 7 days before that, using already-fetched data.
-  String? _computeComparison(List<ChartDataPoint> points, String metricType) {
-    final sevenAgo = DateTime.now().subtract(const Duration(days: 7));
-    final fourteenAgo = DateTime.now().subtract(const Duration(days: 14));
-
-    final last7 = points.where((p) => p.date.isAfter(sevenAgo)).toList();
-    final prev7 = points
-        .where((p) =>
-            p.date.isAfter(fourteenAgo) && p.date.isBefore(sevenAgo))
-        .toList();
-
-    if (last7.isEmpty || prev7.isEmpty) return null;
-
-    final lastAvg =
-        last7.map((p) => p.value).reduce((a, b) => a + b) / last7.length;
-    final prevAvg =
-        prev7.map((p) => p.value).reduce((a, b) => a + b) / prev7.length;
-
-    if (prevAvg == 0) return null;
-
-    final pct = ((lastAvg - prevAvg) / prevAvg * 100).abs().toStringAsFixed(1);
-    final label = ChartDataService.metricLabel(metricType);
-
-    return lastAvg < prevAvg
-        ? 'This period your average $label was $pct% lower than the previous 7 days.'
-        : 'This period your average $label was $pct% higher than the previous 7 days.';
   }
 
   String _getBPInsight() {
@@ -575,6 +558,8 @@ class _ChartsScreenState extends State<ChartsScreen> {
         children: [
           _buildTrendHeaderCard(),
           const SizedBox(height: 12),
+          _buildWeekAverageCard(),
+          const SizedBox(height: 12),
           _buildChartCard(),
           const SizedBox(height: 12),
           _buildInsightCard(),
@@ -751,6 +736,73 @@ class _ChartsScreenState extends State<ChartsScreen> {
           ],
         );
     }
+  }
+
+  // ── 7-day average ─────────────────────────────────────────────────────────
+
+  Widget _buildWeekAverageCard() {
+    final unit = _metricUnit(_metric);
+    String value;
+    if (_weekAverage == null) {
+      value = 'No readings this week';
+    } else if (_isBP && _weekDiastolicAverage != null) {
+      value = '${_weekAverage!.toStringAsFixed(0)} / '
+          '${_weekDiastolicAverage!.toStringAsFixed(0)} $unit';
+    } else {
+      value = '${_weekAverage!.toStringAsFixed(1)} $unit';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.date_range_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '7-day average',
+                  style: TextStyle(fontSize: 13, color: AppColors.secondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Chart card ────────────────────────────────────────────────────────────
