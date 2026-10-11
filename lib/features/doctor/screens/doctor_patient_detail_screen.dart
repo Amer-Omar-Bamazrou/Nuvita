@@ -5,6 +5,7 @@ import '../data/medicine_library.dart';
 import '../../charts/models/chart_data_point.dart';
 import '../../charts/services/chart_data_service.dart';
 import '../../charts/widgets/health_chart_widget.dart';
+import '../widgets/status_badge.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -630,7 +631,7 @@ class _DoctorPatientDetailScreenState
                       ],
                     ),
                   ),
-                  if (status != '—') _StatusBadge(status: status),
+                  if (status != '—') StatusBadge(status: status),
                 ],
               ),
             ),
@@ -1074,7 +1075,7 @@ class _DoctorPatientDetailScreenState
                   style: const TextStyle(fontSize: 12))),
           Expanded(
               flex: 2,
-              child: _StatusBadge(status: status)),
+              child: StatusBadge(status: status)),
         ],
       ),
     );
@@ -1287,47 +1288,6 @@ class _TableHeader extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color fg;
-    switch (status) {
-      case 'Normal':
-        fg = const Color(0xFF2E7D32);
-        break;
-      case 'Warning':
-        fg = const Color(0xFFFF6F00);
-        break;
-      case 'Critical':
-      case 'High':
-      case 'Low':
-        fg = const Color(0xFFD32F2F);
-        break;
-      default:
-        fg = const Color(0xFF9AA3AB);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: fg.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
-  }
-}
-
 class _MetricDef {
   final String metricType;
   final String label;
@@ -1373,7 +1333,7 @@ class _BPSubValue extends StatelessWidget {
           ],
           if (status != '—') ...[
             const SizedBox(height: 4),
-            _StatusBadge(status: status),
+            StatusBadge(status: status),
           ],
         ],
       ),
