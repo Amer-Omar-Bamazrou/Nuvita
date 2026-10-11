@@ -65,12 +65,19 @@ class NotificationService {
   // ── Tap handlers (set from main.dart to avoid circular imports) ───────────
 
   static Future<void> Function(String appointmentId)? _appointmentTapHandler;
+  static Future<void> Function(String appointmentId)?
+      _appointmentRescheduleHandler;
   static VoidCallback? _suggestionsPanelHandler;
   static Future<void> Function(String medicationId)? _medicationDetailHandler;
 
   static void setAppointmentTapHandler(
       Future<void> Function(String appointmentId) handler) {
     _appointmentTapHandler = handler;
+  }
+
+  static void setAppointmentRescheduleHandler(
+      Future<void> Function(String appointmentId) handler) {
+    _appointmentRescheduleHandler = handler;
   }
 
   static void setSuggestionsPanelHandler(VoidCallback handler) {
@@ -126,6 +133,20 @@ class NotificationService {
   static tz.TZDateTime _at(DateTime local) =>
       _forPlugin(tz.TZDateTime.from(local, _zone));
 
+  // When a notification (or one of its buttons) started the app from closed,
+  // the tap isn't delivered to the callback; route it once the UI is up.
+  static Future<void> handleLaunchFromNotification() async {
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      final response = details?.notificationResponse;
+      if (details?.didNotificationLaunchApp == true && response != null) {
+        _onNotificationTap(response);
+      }
+    } catch (e) {
+      debugPrint('NotificationService: launch details failed: $e');
+    }
+  }
+
   static Future<void> requestPermissions() async {
     final android = _plugin
         .resolvePlatformSpecificImplementation<
@@ -140,10 +161,10 @@ class NotificationService {
     final payload = response.payload;
     if (payload == null) return;
 
-    // Reschedule action opens app to appointment detail
+    // Reschedule action opens the appointment's edit form
     if (response.actionId == 'appt_reschedule') {
       final apptId = payload.replaceFirst('appt:', '');
-      _appointmentTapHandler?.call(apptId);
+      (_appointmentRescheduleHandler ?? _appointmentTapHandler)?.call(apptId);
       return;
     }
 

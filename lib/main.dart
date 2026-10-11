@@ -99,6 +99,22 @@ void main() async {
     );
   });
 
+  NotificationService.setAppointmentRescheduleHandler((appointmentId) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final apt = await AppointmentService.getAppointmentById(appointmentId);
+    if (apt == null) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AppointmentDetailScreen(
+          appointment: apt,
+          openReschedule: true,
+        ),
+      ),
+    );
+  });
+
   NotificationService.setMedicationDetailHandler((medicationId) async {
     await Future.delayed(const Duration(milliseconds: 500));
     final med = await MedicationService.getById(medicationId);
@@ -128,6 +144,11 @@ void main() async {
 
   // Show UI immediately
   runApp(NuvitaApp(home: home));
+
+  // A notification tap that launched the app from closed
+  if (!kIsWeb && loggedInUid != null) {
+    NotificationService.handleLaunchFromNotification();
+  }
 
   // Defer non-critical work to after first frame
   if (scheduleWellness) {

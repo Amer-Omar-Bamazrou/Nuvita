@@ -6,6 +6,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../models/appointment_model.dart';
 import '../services/appointment_service.dart';
 import 'add_appointment_screen.dart';
+import 'appointment_detail_screen.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -73,8 +74,28 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
   }
 
   Future<void> _delete(String id) async {
-    await AppointmentService.deleteAppointment(id);
+    try {
+      await AppointmentService.deleteAppointment(id);
+    } catch (e) {
+      debugPrint('AppointmentsScreen: delete failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete. Please try again.')),
+        );
+      }
+    }
     _loadData();
+  }
+
+  Future<void> _confirmAndDelete(AppointmentModel apt) async {
+    if (await showDeleteAppointmentDialog(context, apt)) _delete(apt.id);
+  }
+
+  Future<void> _openDetail(AppointmentModel apt) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AppointmentDetailScreen(appointment: apt)),
+    );
+    if (mounted) _loadData();
   }
 
   Future<void> _markDone(String id) async {
@@ -143,9 +164,11 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
         final apt = _upcoming[i];
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: apt.isCompleted
-              ? _buildCard(apt, isCompleted: true, isPast: false)
-              : _buildDismissibleCard(apt),
+          child: _buildDismissibleCard(
+            apt,
+            isCompleted: apt.isCompleted,
+            isPast: false,
+          ),
         );
       },
     );
@@ -165,17 +188,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
       itemBuilder: (context, i) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: _buildCard(_past[i], isCompleted: true, isPast: true),
+          child: _buildDismissibleCard(_past[i], isCompleted: true, isPast: true),
         );
       },
     );
   }
 
-  // Wraps a pending upcoming card with swipe-to-delete
-  Widget _buildDismissibleCard(AppointmentModel apt) {
+  // Wraps a card with swipe-to-delete; every delete asks first
+  Widget _buildDismissibleCard(
+    AppointmentModel apt, {
+    required bool isCompleted,
+    required bool isPast,
+  }) {
     return Dismissible(
       key: Key(apt.id),
       direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => showDeleteAppointmentDialog(context, apt),
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
@@ -187,7 +215,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
             color: AppColors.error, size: 26),
       ),
       onDismissed: (_) => _delete(apt.id),
-      child: _buildCard(apt, isCompleted: false, isPast: false),
+      child: GestureDetector(
+        onTap: () => _openDetail(apt),
+        child: _buildCard(apt, isCompleted: isCompleted, isPast: isPast),
+      ),
     );
   }
 
@@ -298,6 +329,31 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
               ],
             ],
           ),
+          // Completed and past appointments can be removed from the list
+          if (isPast || isCompleted) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _confirmAndDelete(apt),
+                icon: const Icon(IconlyLight.delete,
+                    size: 16, color: AppColors.error),
+                label: Text(
+                  'Delete',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
           if (!isPast && !isCompleted) ...[
             const SizedBox(height: 10),
             Row(

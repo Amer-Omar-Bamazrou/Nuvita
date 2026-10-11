@@ -62,10 +62,14 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   }
 
   Future<void> _pickDate() async {
+    // The picker needs initialDate >= firstDate; today's (or an overdue)
+    // appointment would otherwise fail to open it
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
+      initialDate: _selectedDate.isBefore(today) ? today : _selectedDate,
+      firstDate: today,
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
@@ -104,17 +108,27 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
       _selectedTime.hour,
       _selectedTime.minute,
     );
+    if (!appointmentDateTime.isAfter(DateTime.now())) {
+      setState(() => _isSaving = false);
+      _showError('Choose a date and time in the future.');
+      return;
+    }
 
     final AppointmentModel appointment;
     try {
       if (_isEditMode) {
-        appointment = widget.existing!.copyWith(
+        final existing = widget.existing!;
+        appointment = existing.copyWith(
           doctorName: _doctorController.text.trim(),
           speciality: _specialityController.text.trim(),
           location: _locationController.text.trim(),
           dateTime: appointmentDateTime,
           notes: _notesController.text.trim(),
           reminderMinutes: _reminderMinutes,
+          // A moved appointment needs confirming again
+          isConfirmed: existing.dateTime == appointmentDateTime
+              ? existing.isConfirmed
+              : false,
         );
         await AppointmentService.updateAppointment(appointment);
       } else {

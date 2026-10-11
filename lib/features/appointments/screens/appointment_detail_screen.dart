@@ -1,19 +1,24 @@
 ﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../shared/widgets/nuvita_button.dart';
 import '../models/appointment_model.dart';
 import '../services/appointment_service.dart';
+import 'add_appointment_screen.dart';
 
 class AppointmentDetailScreen extends StatefulWidget {
   const AppointmentDetailScreen({
     super.key,
     required this.appointment,
     this.showConfirmDialog = false,
+    this.openReschedule = false,
   });
 
   final AppointmentModel appointment;
   // When true, auto-shows the confirmation dialog on first frame (used by notification tap)
   final bool showConfirmDialog;
+  // When true, opens the edit form straight away (notification Reschedule)
+  final bool openReschedule;
 
   @override
   State<AppointmentDetailScreen> createState() =>
@@ -27,9 +32,45 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
   void initState() {
     super.initState();
     _apt = widget.appointment;
-    if (widget.showConfirmDialog && !_apt.isCompleted && !_apt.isConfirmed) {
+    if (widget.openReschedule && !_apt.isCompleted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reschedule());
+    } else if (widget.showConfirmDialog &&
+        !_apt.isCompleted &&
+        !_apt.isConfirmed) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showConfirmDialog());
     }
+  }
+
+  // Opens the edit form. Saving there stores the new date and time, cancels
+  // the old reminders and schedules new ones.
+  Future<void> _reschedule() async {
+    if (!mounted) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AddAppointmentScreen(existing: _apt)),
+    );
+    if (saved != true || !mounted) return;
+    final updated = await AppointmentService.getAppointmentById(_apt.id);
+    if (!mounted || updated == null) return;
+    setState(() => _apt = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Appointment updated')),
+    );
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDeleteAppointmentDialog(context, _apt);
+    if (!confirmed || !mounted) return;
+    try {
+      await AppointmentService.deleteAppointment(_apt.id);
+    } catch (e) {
+      debugPrint('AppointmentDetailScreen: delete failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete. Please try again.')),
+      );
+      return;
+    }
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _showConfirmDialog() async {
@@ -59,8 +100,9 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
 
     if (result == 'confirm') {
       await _confirmAttendance();
+    } else if (result == 'reschedule') {
+      await _reschedule();
     }
-    // 'reschedule' or barrier dismiss: dialog closes, user stays on this screen
   }
 
   Future<void> _confirmAttendance() async {
@@ -95,6 +137,20 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             _buildHeaderCard(),
             const SizedBox(height: 16),
             _buildInfoCard(),
+            const SizedBox(height: 24),
+            if (!_apt.isCompleted && _apt.dateTime.isAfter(DateTime.now())) ...[
+              NuvitaButton(
+                label: 'Reschedule',
+                icon: Icons.edit_calendar_rounded,
+                onPressed: _reschedule,
+              ),
+              const SizedBox(height: 12),
+            ],
+            NuvitaButton(
+              label: 'Delete Appointment',
+              isOutlined: true,
+              onPressed: _confirmDelete,
+            ),
           ],
         ),
       ),
@@ -262,4 +318,32 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
     if (minutes == 2880) return '2 days before';
     return '${minutes ~/ 60} hours before';
   }
+}
+
+// Shared by the detail screen and the appointments list
+Future<bool> showDeleteAppointmentDialog(
+    BuildContext context, AppointmentModel apt) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Delete appointment?'),
+      content: Text(
+        'Delete your appointment with ${apt.doctorName}? '
+        'Its reminders will be cancelled.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return result == true;
 }
