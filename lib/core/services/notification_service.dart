@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_10y.dart' as tz_data;
 import 'package:firebase_core/firebase_core.dart';
@@ -8,11 +9,17 @@ import '../../firebase_options.dart';
 import '../../features/medication/models/medication_model.dart';
 import '../../features/medication/services/medication_service.dart';
 import '../../features/appointments/services/appointment_service.dart';
+import 'reminder_time.dart';
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static GlobalKey<NavigatorState>? _navigatorKey;
+
+  // The device's zone. When it can't be resolved this is a fixed-offset
+  // stand-in and _zoneResolved is false.
+  static tz.Location _zone = tz.UTC;
+  static bool _zoneResolved = false;
 
   // ── Channels ──────────────────────────────────────────────────────────────
 
@@ -79,7 +86,7 @@ class NotificationService {
   static Future<void> initialize({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (_initialized) return;
     _navigatorKey = navigatorKey;
-    tz_data.initializeTimeZones();
+    await _configureLocalTimeZone();
 
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -91,6 +98,32 @@ class NotificationService {
     );
     _initialized = true;
   }
+
+  // Points tz.local at the device's zone so repeating reminders are scheduled
+  // in local time and keep their wall-clock time across daylight-saving
+  // changes. Every isolate that schedules notifications must call this.
+  static Future<void> _configureLocalTimeZone() async {
+    tz_data.initializeTimeZones();
+    try {
+      final info = await FlutterTimezone.getLocalTimezone();
+      _zone = tz.getLocation(info.identifier);
+      tz.setLocalLocation(_zone);
+      _zoneResolved = true;
+    } catch (e) {
+      debugPrint('NotificationService: device timezone unavailable: $e');
+      _zone = fixedOffsetLocation(DateTime.now().timeZoneOffset);
+      _zoneResolved = false;
+    }
+  }
+
+  // The fixed-offset stand-in has no name Android recognises, so in that
+  // case hand the plugin the same instant in UTC (the old behaviour).
+  static tz.TZDateTime _forPlugin(tz.TZDateTime time) =>
+      _zoneResolved ? time : tz.TZDateTime.from(time, tz.UTC);
+
+  // A one-off local DateTime as a zoned time for the plugin
+  static tz.TZDateTime _at(DateTime local) =>
+      _forPlugin(tz.TZDateTime.from(local, _zone));
 
   static Future<void> requestPermissions() async {
     final android = _plugin
@@ -182,7 +215,8 @@ class NotificationService {
       debugPrint('NotificationService: Firebase init failed: $e');
     }
 
-    tz_data.initializeTimeZones();
+    // Background isolates start without the zone set up
+    await _configureLocalTimeZone();
 
     // Plugin needs init in background isolate to schedule/show notifications
     const settings = InitializationSettings(
@@ -274,7 +308,7 @@ class NotificationService {
       _snoozedMedNotificationId(medId),
       'Medication Reminder',
       'Time to take ${med.name}\n${med.dosage} — Take ${med.pillsPerDose} pill${med.pillsPerDose > 1 ? 's' : ''}',
-      tz.TZDateTime.from(snoozeTime.toUtc(), tz.UTC),
+      _at(snoozeTime),
       NotificationDetails(android: androidDetails),
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -326,7 +360,7 @@ class NotificationService {
       _lowSupplyNotificationId(medId),
       'Low Pill Supply',
       '${med.name} is running low.\n${med.pillsRemaining ?? 0} pills remaining.',
-      tz.TZDateTime.from(remindTime.toUtc(), tz.UTC),
+      _at(remindTime),
       NotificationDetails(android: androidDetails),
       payload: 'supply:$medId',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -520,7 +554,7 @@ class NotificationService {
       _appointmentNotificationId(id),
       'Appointment Reminder',
       'Dr. $doctorName — $speciality\nAppointment at $hour:$minute',
-      tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC),
+      _at(scheduledDate),
       NotificationDetails(android: androidDetails),
       payload: 'appt:$id',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -745,7 +779,7 @@ class NotificationService {
       _appointmentTomorrowNotificationId(id),
       'Appointment Tomorrow',
       'Reminder: Dr. $doctorName — $speciality\ntomorrow at $hour:$minute',
-      tz.TZDateTime.from(reminderDate.toUtc(), tz.UTC),
+      _at(reminderDate),
       NotificationDetails(android: androidDetails),
       payload: 'tomorrow:$id',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -858,7 +892,7 @@ class NotificationService {
       id.hashCode.abs() % 999990,
       title,
       body,
-      tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC),
+      _at(scheduledDate),
       details,
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -873,26 +907,12 @@ class NotificationService {
 
   // ── Time helpers ──────────────────────────────────────────────────────────
 
-  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
-    final now = DateTime.now();
-    var local = DateTime(now.year, now.month, now.day, hour, minute);
-    if (local.isBefore(now)) {
-      local = local.add(const Duration(days: 1));
-    }
-    return tz.TZDateTime.from(local.toUtc(), tz.UTC);
-  }
+  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) =>
+      _forPlugin(nextInstanceOfTime(_zone, hour, minute));
 
   static tz.TZDateTime _nextInstanceOfDayAndTime(
-      int weekday, int hour, int minute) {
-    final now = DateTime.now();
-    var local = DateTime(now.year, now.month, now.day, hour, minute);
-
-    // Advance to the next matching weekday
-    while (local.weekday != weekday || local.isBefore(now)) {
-      local = local.add(const Duration(days: 1));
-    }
-    return tz.TZDateTime.from(local.toUtc(), tz.UTC);
-  }
+          int weekday, int hour, int minute) =>
+      _forPlugin(nextInstanceOfDayAndTime(_zone, weekday, hour, minute));
 
   // ── ID helpers ────────────────────────────────────────────────────────────
 
