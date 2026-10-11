@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/health/health_metrics.dart';
+import '../../../core/services/care_services.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../notifications/screens/suggestions_panel_screen.dart';
@@ -85,20 +86,37 @@ class _HomeBodyState extends State<_HomeBody> {
   final _suggestionService = PatientSuggestionService();
   StreamSubscription<QuerySnapshot>? _medsSub;
 
+  // Services chosen in onboarding / Profile decide which sections show
+  Set<String> _services = {...CareServices.all};
+
+  bool get _medsOn => _services.contains(CareServices.medications);
+  bool get _measurementsOn => _services.contains(CareServices.measurements);
+  bool get _activitiesOn => _services.contains(CareServices.activities);
+  bool get _appointmentsOn => _services.contains(CareServices.appointments);
+  bool get _readingsOn => _measurementsOn || _activitiesOn;
+
   @override
   void initState() {
     super.initState();
+    _loadServices();
     _loadUserProfile();
     _loadMedSummary();
     _listenForMedicationChanges();
     HomeScreen.refreshNotifier.addListener(_onRefreshRequested);
+    CareServices.changes.addListener(_loadServices);
   }
 
   @override
   void dispose() {
     _medsSub?.cancel();
     HomeScreen.refreshNotifier.removeListener(_onRefreshRequested);
+    CareServices.changes.removeListener(_loadServices);
     super.dispose();
+  }
+
+  Future<void> _loadServices() async {
+    final services = await CareServices.load();
+    if (mounted) setState(() => _services = services);
   }
 
   void _listenForMedicationChanges() {
@@ -405,11 +423,16 @@ class _HomeBodyState extends State<_HomeBody> {
                   children: [
                     _buildHeader(provider),
                     const SizedBox(height: 16),
-                    _buildDailySummaryCard(historyProvider),
-                    const SizedBox(height: 16),
-                    _buildSummaryBanner(),
-                    const SizedBox(height: 20),
-                    _buildTaskList(),
+                    if (_medsOn || _readingsOn) ...[
+                      _buildDailySummaryCard(historyProvider),
+                      const SizedBox(height: 16),
+                    ],
+                    // Streak and dose tasks belong to the Medications service
+                    if (_medsOn) ...[
+                      _buildSummaryBanner(),
+                      const SizedBox(height: 20),
+                      _buildTaskList(),
+                    ],
                   ],
                 ),
               ),
@@ -452,6 +475,25 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
         const SizedBox(width: 12),
+        // SOS normally sits on the streak banner; without the Medications
+        // service that banner is hidden, so it moves up here
+        if (!_medsOn) ...[
+          GestureDetector(
+            onTap: () => EmergencyService.showEmergencyFlow(context),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.warning_rounded,
+                  color: Colors.red, size: 26),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -547,26 +589,32 @@ class _HomeBodyState extends State<_HomeBody> {
           const SizedBox(height: 10),
           Row(
             children: [
-              _buildSummaryItem(
-                Icons.monitor_heart_rounded,
-                '$todayCount',
-                'readings today',
-                AppColors.success,
-              ),
-              const SizedBox(width: 8),
-              _buildSummaryItem(
-                Icons.medication_rounded,
-                '$_medScheduleCount',
-                'meds scheduled',
-                const Color(0xFF1565C0),
-              ),
-              const SizedBox(width: 8),
-              _buildSummaryItem(
-                Icons.access_time_rounded,
-                lastText,
-                'last reading',
-                AppColors.secondary,
-              ),
+              for (final item in [
+                if (_readingsOn)
+                  _buildSummaryItem(
+                    Icons.monitor_heart_rounded,
+                    '$todayCount',
+                    'readings today',
+                    AppColors.success,
+                  ),
+                if (_medsOn)
+                  _buildSummaryItem(
+                    Icons.medication_rounded,
+                    '$_medScheduleCount',
+                    'meds scheduled',
+                    const Color(0xFF1565C0),
+                  ),
+                if (_readingsOn)
+                  _buildSummaryItem(
+                    Icons.access_time_rounded,
+                    lastText,
+                    'last reading',
+                    AppColors.secondary,
+                  ),
+              ].indexed) ...[
+                if (item.$1 > 0) const SizedBox(width: 8),
+                item.$2,
+              ],
             ],
           ),
         ],
@@ -1360,6 +1408,7 @@ class _HomeBodyState extends State<_HomeBody> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
+        final quickChips = _quickMeasurementChips(sheetCtx);
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -1418,46 +1467,46 @@ class _HomeBodyState extends State<_HomeBody> {
                     color: AppColors.secondary,
                   ),
                 ),
-                const SizedBox(height: 18),
-                Text(
-                  'QUICK MEASUREMENT',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: const Color(0xFF6E7A82),
+                if (quickChips.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'QUICK MEASUREMENT',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF6E7A82),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GridView.count(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.15,
-                  children: [
-                    _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar),
-                    _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
-                    _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
-                    _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
-                    _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes),
-                    _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Divider(height: 1, color: AppColors.divider),
-                const SizedBox(height: 16),
-                Text(
-                  'OTHER',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: const Color(0xFF6E7A82),
+                  const SizedBox(height: 10),
+                  GridView.count(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.15,
+                    children: quickChips,
                   ),
-                ),
-                const SizedBox(height: 10),
+                ],
+                if (quickChips.isNotEmpty && (_medsOn || _appointmentsOn)) ...[
+                  const SizedBox(height: 20),
+                  Divider(height: 1, color: AppColors.divider),
+                ],
+                if (_medsOn || _appointmentsOn) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'OTHER',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF6E7A82),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (_medsOn)
                 _buildOtherRow(
                   icon: Icons.medication_rounded,
                   color: AppColors.card,
@@ -1475,7 +1524,8 @@ class _HomeBodyState extends State<_HomeBody> {
                     });
                   },
                 ),
-                const SizedBox(height: 8),
+                if (_medsOn && _appointmentsOn) const SizedBox(height: 8),
+                if (_appointmentsOn)
                 _buildOtherRow(
                   icon: Icons.calendar_month_rounded,
                   color: const Color(0xFF00695C),
@@ -1496,6 +1546,22 @@ class _HomeBodyState extends State<_HomeBody> {
         );
       },
     );
+  }
+
+  // Measurements offer the vital signs, Activities offers walking
+  List<Widget> _quickMeasurementChips(BuildContext sheetCtx) {
+    return [
+      if (_measurementsOn) ...[
+        _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar),
+        _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
+        _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
+        _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
+      ],
+      if (_activitiesOn)
+        _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes),
+      if (_measurementsOn)
+        _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
+    ];
   }
 
   void _navigateToMetric(HealthMetric? metric) async {

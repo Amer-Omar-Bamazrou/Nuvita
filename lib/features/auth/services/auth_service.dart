@@ -66,6 +66,7 @@ class AuthService {
     required String lastName,
     required String gender,
     required String dobIso,
+    List<String> services = const [],
   }) async {
     await _firestore.collection('users').doc(uid).set({
       'profile': {
@@ -73,6 +74,7 @@ class AuthService {
         'gender': gender,
         'dob': dobIso,
         'diseaseType': 'other',
+        'services': services,
       },
     }, SetOptions(merge: true));
   }

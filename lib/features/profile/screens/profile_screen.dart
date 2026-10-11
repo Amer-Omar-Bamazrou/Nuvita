@@ -13,6 +13,7 @@ import '../../onboarding/screens/onboarding_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../emergency/screens/emergency_contacts_screen.dart';
 import '../services/account_service.dart';
+import 'my_services_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -657,6 +658,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'View Profile',
                     subtitle: 'Name, gender, date of birth',
                     onTap: _showPersonalInfoSheet,
+                  ),
+                  _divider(),
+                  _tile(
+                    leading: Icons.tune_rounded,
+                    title: 'My Services',
+                    subtitle: 'What Nuvita shows and reminds you about',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MyServicesScreen()),
+                    ),
                   ),
                 ],
               ),

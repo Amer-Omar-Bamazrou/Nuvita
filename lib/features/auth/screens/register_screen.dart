@@ -59,12 +59,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final lastName  = await PreferencesService.getLastName()  ?? '';
         final gender    = await PreferencesService.getGender()    ?? '';
         final dob       = await PreferencesService.getDateOfBirth();
+        final services  = await PreferencesService.getSelectedServices();
         await _authService.saveOnboardingProfile(
           uid: uid,
           firstName: firstName,
           lastName: lastName,
           gender: gender,
           dobIso: dob?.toIso8601String() ?? '',
+          services: services,
         );
       }
 

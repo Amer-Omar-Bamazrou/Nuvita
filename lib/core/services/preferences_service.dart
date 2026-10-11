@@ -62,6 +62,11 @@ class PreferencesService {
     return DateTime.tryParse(raw);
   }
 
+  static Future<void> saveSelectedServices(List<String> services) async {
+    final prefs = await _getInstance();
+    await prefs.setString(_keyServices, services.join(','));
+  }
+
   static Future<List<String>> getSelectedServices() async {
     final prefs = await _getInstance();
     final raw = prefs.getString(_keyServices);

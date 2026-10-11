@@ -9,6 +9,7 @@ import '../../features/medication/models/medication_model.dart';
 import '../../features/medication/services/medication_service.dart';
 import '../../features/medication/services/dose_service.dart';
 import '../../features/appointments/services/appointment_service.dart';
+import 'care_services.dart';
 import 'reminder_time.dart';
 
 class NotificationService {
@@ -474,6 +475,8 @@ class NotificationService {
     List<String> times, {
     int pillsPerDose = 1,
   }) async {
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -522,6 +525,8 @@ class NotificationService {
 
   static Future<void> scheduleLowSupplyAlert(
       String id, String name, int remaining) async {
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _lowSupplyChannelId,
       _lowSupplyChannelName,
@@ -556,6 +561,7 @@ class NotificationService {
     required DateTime appointmentDateTime,
   }) async {
     if (scheduledDate.isBefore(DateTime.now())) return;
+    if (!await CareServices.isEnabled(CareServices.appointments)) return;
 
     final hour = appointmentDateTime.hour.toString().padLeft(2, '0');
     final minute = appointmentDateTime.minute.toString().padLeft(2, '0');
@@ -666,6 +672,13 @@ class NotificationService {
   // ── 11. Weekly health summary ─────────────────────────────────────────────
 
   static Future<void> scheduleWeeklyHealthSummary() async {
+    // The summary is about readings and adherence
+    final services = await CareServices.load();
+    if (!services.contains(CareServices.measurements) &&
+        !services.contains(CareServices.medications)) {
+      return;
+    }
+
     final androidDetails = AndroidNotificationDetails(
       _weeklySummaryChannelId,
       _weeklySummaryChannelName,
@@ -772,6 +785,7 @@ class NotificationService {
 
     // Skip if appointment is today (main reminder handles it)
     if (!apptDate.isAfter(today)) return;
+    if (!await CareServices.isEnabled(CareServices.appointments)) return;
 
     final reminderDate = DateTime(
       apptDate.year,
@@ -814,7 +828,10 @@ class NotificationService {
 
   // ── Daily wellness reminder ───────────────────────────────────────────────
 
+  // The daily "stay on track" nudge is what the Activities service offers
   static Future<void> scheduleDailyWellnessReminder() async {
+    if (!await CareServices.isEnabled(CareServices.activities)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _wellnessChannelId,
       _wellnessChannelName,
@@ -846,6 +863,7 @@ class NotificationService {
 
   static Future<void> scheduleMedicationReminder(MedicationModel med) async {
     if (!med.isActive) return;
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
 
     final androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -885,6 +903,41 @@ class NotificationService {
 
   static Future<void> cancelAll() async {
     await _plugin.cancelAll();
+  }
+
+  // Cancels and re-creates every reminder from the stored medications and
+  // appointments. Used when the chosen services change and after sign-in
+  // (sign-out cancels everything). Each schedule call checks its service.
+  static Future<void> rescheduleAll() async {
+    await initialize();
+
+    final meds = await MedicationService.loadAll();
+    for (final med in meds) {
+      await cancelMedicationReminder(med.id, med.times.length);
+      await cancelDailyMedicationReminders(med.id, med.times);
+      if (!med.isActive) continue;
+      await scheduleMedicationReminder(med);
+      if (med.reminderEnabled) {
+        await scheduleDailyMedicationReminder(
+          med.id,
+          med.name,
+          med.dosage,
+          med.times,
+          pillsPerDose: med.pillsPerDose,
+        );
+      }
+    }
+
+    final appointments = await AppointmentService.getUpcomingAppointments();
+    for (final appt in appointments) {
+      await AppointmentService.cancelReminder(appt.id);
+      if (!appt.isCompleted) await AppointmentService.scheduleReminder(appt);
+    }
+
+    await cancelWellnessReminder();
+    await scheduleDailyWellnessReminder();
+    await cancelWeeklyHealthSummary();
+    await scheduleWeeklyHealthSummary();
   }
 
   // ── Legacy one-time notification (kept for non-appointment callers) ───────

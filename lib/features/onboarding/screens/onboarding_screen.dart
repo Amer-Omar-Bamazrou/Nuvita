@@ -6,6 +6,7 @@ import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../home/screens/main_shell.dart';
+import '../widgets/service_option_card.dart';
 
 // ─── Local data classes ───────────────────────────────────────────────────────
 
@@ -13,21 +14,6 @@ class _GenderOption {
   final String label;
   final IconData icon;
   const _GenderOption({required this.label, required this.icon});
-}
-
-class _ServiceDef {
-  final String id;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String description;
-  const _ServiceDef({
-    required this.id,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.description,
-  });
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -58,36 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _GenderOption(label: 'Prefer not to say', icon: Icons.person_rounded),
   ];
 
-  static const _services = [
-    _ServiceDef(
-      id: 'medications',
-      icon: Icons.medication_rounded,
-      iconColor: Color(0xFF1565C0),
-      title: 'Medications',
-      description: 'Get reminders and track your medication intakes',
-    ),
-    _ServiceDef(
-      id: 'measurements',
-      icon: Icons.monitor_heart_rounded,
-      iconColor: Color(0xFF2E7D32),
-      title: 'Measurements',
-      description: 'Log health readings like blood pressure and blood sugar',
-    ),
-    _ServiceDef(
-      id: 'activities',
-      icon: Icons.directions_walk_rounded,
-      iconColor: Color(0xFFE65100),
-      title: 'Activities',
-      description: 'Set reminders for walking, hydration and exercise',
-    ),
-    _ServiceDef(
-      id: 'appointments',
-      icon: Icons.calendar_month_rounded,
-      iconColor: Color(0xFF00695C),
-      title: 'Appointments',
-      description: 'Never miss a doctor appointment again',
-    ),
-  ];
+  static const _services = serviceOptions;
 
   @override
   void dispose() {
@@ -779,9 +736,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildServiceCard(_ServiceDef service) {
+  Widget _buildServiceCard(ServiceOption service) {
     final isSelected = _selectedServices.contains(service.id);
-    return GestureDetector(
+    return ServiceOptionCard(
+      service: service,
+      selected: isSelected,
       onTap: () => setState(() {
         if (isSelected) {
           _selectedServices.remove(service.id);
@@ -789,80 +748,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _selectedServices.add(service.id);
         }
       }),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.07)
-              : AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 2.0 : 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.textDark.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: service.iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(service.icon, color: service.iconColor, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    service.title,
-                    style: AppTextStyles.heading3.copyWith(
-                      fontSize: 15,
-                      color: isSelected ? AppColors.primary : AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    service.description,
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.divider,
-                  width: 2,
-                ),
-              ),
-              child: Icon(
-                isSelected ? Icons.check : Icons.add,
-                color: isSelected ? AppColors.white : AppColors.secondary,
-                size: 18,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

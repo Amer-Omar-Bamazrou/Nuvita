@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/care_services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../medication/models/medication_model.dart';
@@ -33,14 +34,25 @@ class _TrackingScreenState extends State<TrackingScreen> {
   // Medications with nothing left to take today
   Set<String> _takenKeys = {};
 
+  // Services chosen in onboarding / Profile decide which cards show
+  Set<String> _services = {...CareServices.all};
+
   @override
   void initState() {
     super.initState();
     _isGuest = FirebaseAuth.instance.currentUser == null;
     _loadData();
+    CareServices.changes.addListener(_loadData);
+  }
+
+  @override
+  void dispose() {
+    CareServices.changes.removeListener(_loadData);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
+    final services = await CareServices.load();
     final meds = await MedicationService.loadAll();
     final activeMeds = meds.where((m) => m.isActive).toList();
 
@@ -88,6 +100,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
     if (!mounted) return;
     setState(() {
+      _services = services;
       _medications = activeMeds;
       _appointments = upcoming;
       _readingsCount = readingsCount;
@@ -140,13 +153,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ],
 
                 // Medications card
-                _buildSectionLabel('MEDICATIONS'),
-                const SizedBox(height: 8),
-                _buildMedicationsCard(),
-                const SizedBox(height: 20),
+                if (_services.contains(CareServices.medications)) ...[
+                  _buildSectionLabel('MEDICATIONS'),
+                  const SizedBox(height: 8),
+                  _buildMedicationsCard(),
+                  const SizedBox(height: 20),
+                ],
 
                 // Appointments card (logged-in only)
-                if (!_isGuest) ...[
+                if (!_isGuest &&
+                    _services.contains(CareServices.appointments)) ...[
                   _buildSectionLabel('APPOINTMENTS'),
                   const SizedBox(height: 8),
                   _buildAppointmentsCard(),
