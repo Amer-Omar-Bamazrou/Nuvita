@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:iconly/iconly.dart';
@@ -14,6 +15,12 @@ import '../../dashboard/providers/health_history_provider.dart';
 import '../../emergency/screens/emergency_contacts_screen.dart';
 import '../services/account_service.dart';
 import 'my_services_screen.dart';
+import 'edit_profile_screen.dart';
+import '../services/data_export.dart';
+import '../../auth/screens/change_password_screen.dart';
+import '../../health/services/health_reading_service.dart';
+import '../../medication/services/medication_service.dart';
+import '../../appointments/services/appointment_service.dart';
 import '../../disease/screens/disease_selection_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -31,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _gender = '';
   String _dob = '';
   bool _signingOut = false;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -150,6 +158,196 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ── Edit profile ───────────────────────────────────────────────────────────
+
+  Future<void> _openEditProfile() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+    );
+    if (changed == true && mounted) _loadProfile();
+  }
+
+  // ── Export my data ─────────────────────────────────────────────────────────
+
+  // Shares readings, medications and appointments as three CSV files
+  Future<void> _exportData() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _exporting) return;
+    setState(() => _exporting = true);
+    _showSnack('Preparing your data…');
+
+    try {
+      await MedicationService.syncFromFirebase(uid);
+      await AppointmentService.syncFromFirebase(uid);
+      final readings = await HealthReadingService.getAllReadings(uid);
+      final meds = await MedicationService.loadAll();
+      final appointments = await AppointmentService.getAppointments();
+
+      final now = DateTime.now();
+      final stamp =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      XFile csv(String name, String content) => XFile.fromData(
+            utf8.encode(content),
+            mimeType: 'text/csv',
+            name: 'Nuvita_${name}_$stamp.csv',
+          );
+
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: 'My Nuvita data',
+          files: [
+            csv('readings', readingsCsv(readings)),
+            csv('medications', medicationsCsv(meds)),
+            csv('appointments', appointmentsCsv(appointments)),
+          ],
+          fileNameOverrides: [
+            'Nuvita_readings_$stamp.csv',
+            'Nuvita_medications_$stamp.csv',
+            'Nuvita_appointments_$stamp.csv',
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('ProfileScreen: export failed: $e');
+      if (mounted) {
+        _showSnack('Could not export your data. Please try again.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  void _showSnack(String text, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: error ? AppColors.error : AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+  }
+
+  // ── Delete my account ──────────────────────────────────────────────────────
+
+  void _confirmDeleteAccount() {
+    final passwordCtrl = TextEditingController();
+    final history = context.read<HealthHistoryProvider>();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        bool deleting = false;
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            Future<void> delete() async {
+              if (passwordCtrl.text.isEmpty) {
+                setDialogState(() => error = 'Enter your password');
+                return;
+              }
+              setDialogState(() {
+                deleting = true;
+                error = null;
+              });
+              try {
+                await AccountService.deleteAccount(
+                  password: passwordCtrl.text,
+                  history: history,
+                );
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                  (route) => false,
+                );
+              } on FirebaseAuthException catch (e) {
+                final wrongPassword = e.code == 'wrong-password' ||
+                    e.code == 'invalid-credential';
+                if (!wrongPassword && FirebaseAuth.instance.currentUser == null) {
+                  // Data was removed but the account deletion itself failed
+                  if (!mounted) return;
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                  return;
+                }
+                setDialogState(() {
+                  deleting = false;
+                  error = wrongPassword
+                      ? 'Incorrect password'
+                      : e.code == 'too-many-requests'
+                          ? 'Too many attempts. Please try again later.'
+                          : 'Could not delete your account. Please try again.';
+                });
+              } catch (e) {
+                debugPrint('ProfileScreen: delete account failed: $e');
+                setDialogState(() {
+                  deleting = false;
+                  error = 'Could not delete your account. Check your '
+                      'connection and try again.';
+                });
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Delete your account?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'This permanently deletes your readings, medications, '
+                    'appointments, messages and account. It cannot be undone.',
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: true,
+                    enabled: !deleting,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      errorText: error,
+                      errorMaxLines: 3,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: deleting ? null : () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: deleting ? null : delete,
+                  style:
+                      TextButton.styleFrom(foregroundColor: AppColors.error),
+                  child: deleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.error),
+                        )
+                      : const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((_) => passwordCtrl.dispose());
+  }
+
   // ── Bottom sheets ──────────────────────────────────────────────────────────
 
   void _showPersonalInfoSheet() {
@@ -159,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) {
+      builder: (sheetCtx) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
           child: Column(
@@ -216,28 +414,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
               const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.inputFill,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      size: 16,
-                      color: AppColors.secondary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Profile editing coming soon.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                  ],
-                ),
+              NuvitaButton(
+                label: 'Edit Profile',
+                icon: Icons.edit_outlined,
+                onPressed: () {
+                  Navigator.pop(sheetCtx);
+                  _openEditProfile();
+                },
               ),
             ],
           ),
@@ -695,55 +878,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _tile(
                     leading: Icons.download_outlined,
                     title: 'Export My Data',
-                    subtitle: 'Download your health records',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Export feature coming soon'),
-                          behavior: SnackBarBehavior.floating,
-                          margin: const EdgeInsets.all(16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      );
-                    },
+                    subtitle: _exporting
+                        ? 'Preparing your files…'
+                        : 'Readings, medications and appointments as CSV',
+                    onTap: _exportData,
+                  ),
+                  _divider(),
+                  _tile(
+                    leading: IconlyLight.lock,
+                    title: 'Change Password',
+                    subtitle: 'Update the password you sign in with',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ChangePasswordScreen()),
+                    ),
                   ),
                   _divider(),
                   _tile(
                     leading: IconlyLight.delete,
-                    title: 'Delete My Data',
-                    subtitle: 'Remove all your health data',
+                    title: 'Delete My Account',
+                    subtitle: 'Permanently remove your account and data',
                     titleColor: AppColors.error,
                     leadingColor: AppColors.error,
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          title: const Text('Delete Data?'),
-                          content: const Text(
-                            'For data deletion requests please contact support@nuvita.com',
-                          ),
-                          actions: [
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: AppColors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    onTap: _confirmDeleteAccount,
                   ),
                 ],
               ),

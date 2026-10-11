@@ -49,6 +49,15 @@ class HealthReadingService {
             .toList());
   }
 
+  // Every reading the user has, newest first (used by data export)
+  static Future<List<HealthReading>> getAllReadings(String uid) async {
+    final snap = await _col(uid).orderBy('timestamp', descending: true).get();
+    return snap.docs
+        .where((d) => d.data()['value'] is num)
+        .map((d) => HealthReading.fromMap(d.id, d.data()))
+        .toList();
+  }
+
   // Fetches readings from the last N days, newest first.
   // Filtering is done client-side to avoid needing a composite Firestore index.
   static Future<List<HealthReading>> getReadingsLastDays(

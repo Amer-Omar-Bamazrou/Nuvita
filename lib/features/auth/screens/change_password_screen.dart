@@ -24,6 +24,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _isLoading = false;
   String? _error;
 
+  // Opened from Profile the user is signed in, so we confirm it's them with
+  // their current password instead of asking which account
+  User? get _signedInUser {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.email == null ? null : user;
+  }
+
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -38,26 +45,42 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() { _isLoading = true; _error = null; });
 
     try {
-      // Resolve email if user entered a Patient ID
-      String email = _emailCtrl.text.trim();
-      if (!email.contains('@')) {
-        email = await _authService.resolveEmailFromPatientId(email);
-      }
+      final signedIn = _signedInUser;
+      if (signedIn != null) {
+        // Re-authenticate the current account, then change its password.
+        // The user stays signed in.
+        await signedIn.reauthenticateWithCredential(
+          EmailAuthProvider.credential(
+            email: signedIn.email!,
+            password: _currentCtrl.text,
+          ),
+        );
+        await signedIn.updatePassword(_newCtrl.text);
+      } else {
+        // Resolve email if user entered a Patient ID
+        String email = _emailCtrl.text.trim();
+        if (!email.contains('@')) {
+          email = await _authService.resolveEmailFromPatientId(email);
+        }
 
-      // Re-authenticate then update password
-      final cred = EmailAuthProvider.credential(
-        email: email,
-        password: _currentCtrl.text,
-      );
-      final userCred = await FirebaseAuth.instance.signInWithCredential(cred);
-      await userCred.user!.updatePassword(_newCtrl.text);
-      await FirebaseAuth.instance.signOut();
+        // Re-authenticate then update password
+        final cred = EmailAuthProvider.credential(
+          email: email,
+          password: _currentCtrl.text,
+        );
+        final userCred =
+            await FirebaseAuth.instance.signInWithCredential(cred);
+        await userCred.user!.updatePassword(_newCtrl.text);
+        await FirebaseAuth.instance.signOut();
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Password updated. Please sign in.'),
+          content: Text(signedIn != null
+              ? 'Password updated'
+              : 'Password updated. Please sign in.'),
           backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
@@ -71,7 +94,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             ? 'Current password is incorrect'
             : e.code == 'user-not-found'
                 ? 'No account found'
-                : 'Something went wrong. Please try again.';
+                : e.code == 'weak-password'
+                    ? 'Choose a stronger password'
+                    : e.code == 'too-many-requests'
+                        ? 'Too many attempts. Please try again later.'
+                        : 'Something went wrong. Please try again.';
         _isLoading = false;
       });
     } catch (e) {
@@ -113,21 +140,25 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             Text('Set a new password', style: AppTextStyles.heading1),
             const SizedBox(height: 8),
             Text(
-              'Enter your email and current password to confirm it\'s you.',
+              _signedInUser != null
+                  ? 'Enter your current password to confirm it\'s you.'
+                  : 'Enter your email and current password to confirm it\'s you.',
               style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 32),
-            NuvitaTextField(
-              label: 'Email or Patient ID',
-              hint: 'your@email.com or ABC123',
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              prefixIcon: Icons.person_outline_rounded,
-              textInputAction: TextInputAction.next,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Required' : null,
-            ),
-            const SizedBox(height: 18),
+            if (_signedInUser == null) ...[
+              NuvitaTextField(
+                label: 'Email or Patient ID',
+                hint: 'your@email.com or ABC123',
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.person_outline_rounded,
+                textInputAction: TextInputAction.next,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 18),
+            ],
             NuvitaTextField(
               label: 'Current Password',
               hint: 'Enter your current password',
