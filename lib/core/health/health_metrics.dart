@@ -251,6 +251,22 @@ class HealthMetrics {
     }
   }
 
+  // Reverse of statusLabel; 'Logged' and unknown strings give null
+  static MetricStatus? statusFromLabel(String? label) {
+    switch (label) {
+      case 'Normal':
+        return MetricStatus.normal;
+      case 'Warning':
+        return MetricStatus.warning;
+      case 'Low':
+        return MetricStatus.criticalLow;
+      case 'High':
+        return MetricStatus.criticalHigh;
+      default:
+        return null;
+    }
+  }
+
   // Status strings as stored on reading documents
   static String statusLabel(MetricStatus? status) {
     switch (status) {

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../core/health/health_metrics.dart';
+import '../../health/models/blood_pressure_pair.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../medication/models/medication_model.dart';
@@ -235,7 +236,7 @@ class ReportService {
     );
   }
 
-  // ── Readings section (no systolic/diastolic standalone) ────────────────
+  // ── Readings section (systolic/diastolic shown as one BP table) ────────
 
   static List<pw.Widget> _buildReadingsWidgets(List<HealthReading> readings) {
     final sectionTitle = pw.Text(
@@ -275,6 +276,30 @@ class ReportService {
     const skipMetrics = {'systolic', 'diastolic'};
 
     final result = <pw.Widget>[sectionTitle, pw.SizedBox(height: 10)];
+
+    final bpPairs = pairBloodPressure(
+      readings.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp)),
+    );
+    if (bpPairs.isNotEmpty) {
+      result.add(pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            HealthMetrics.bloodPressureLabel,
+            style: pw.TextStyle(
+              fontSize: 15,
+              fontWeight: pw.FontWeight.bold,
+              color: _textDark,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          _buildBPTable(bpPairs),
+          pw.SizedBox(height: 6),
+          _buildBPStats(bpPairs),
+          pw.SizedBox(height: 16),
+        ],
+      ));
+    }
 
     for (final entry in grouped.entries) {
       if (skipMetrics.contains(entry.key)) continue;
@@ -569,6 +594,92 @@ class ReportService {
           },
         ),
       ],
+    );
+  }
+
+  static pw.Widget _buildBPTable(List<BloodPressurePair> pairs) {
+    final hasNotes = pairs.any((p) => p.note != null && p.note!.isNotEmpty);
+    final unit = HealthMetrics.of(HealthMetric.systolic).unit;
+
+    final headerStyle = pw.TextStyle(
+      color: PdfColors.white,
+      fontWeight: pw.FontWeight.bold,
+      fontSize: 12,
+    );
+    final cellStyle = pw.TextStyle(color: _textDark, fontSize: 12);
+
+    pw.Widget cell(String text, pw.TextStyle style) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(text, style: style),
+        );
+
+    String value(HealthReading? r) =>
+        r == null ? '--' : r.value.toStringAsFixed(0);
+
+    final headers = ['Date', 'Systolic', 'Diastolic', 'Unit', 'Status'];
+    if (hasNotes) headers.add('Note');
+
+    final columnWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FlexColumnWidth(2.2),
+      1: const pw.FlexColumnWidth(1.4),
+      2: const pw.FlexColumnWidth(1.4),
+      3: const pw.FlexColumnWidth(1.2),
+      4: const pw.FlexColumnWidth(1.5),
+    };
+    if (hasNotes) columnWidths[5] = const pw.FlexColumnWidth(2.2);
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: _dividerColor, width: 0.5),
+      columnWidths: columnWidths,
+      children: [
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: _primary),
+          children: headers.map((h) => cell(h, headerStyle)).toList(),
+        ),
+        ...pairs.map((p) {
+          final cells = [
+            cell(_fmt(p.timestamp), cellStyle),
+            cell(value(p.systolic), cellStyle),
+            cell(value(p.diastolic), cellStyle),
+            cell(unit, cellStyle),
+            cell(p.status, cellStyle),
+          ];
+          if (hasNotes) cells.add(cell(p.note ?? '', cellStyle));
+          return pw.TableRow(children: cells);
+        }),
+      ],
+    );
+  }
+
+  static pw.Widget _buildBPStats(List<BloodPressurePair> pairs) {
+    final unit = HealthMetrics.of(HealthMetric.systolic).unit;
+    final sys =
+        pairs.map((p) => p.systolic?.value).whereType<double>().toList();
+    final dia =
+        pairs.map((p) => p.diastolic?.value).whereType<double>().toList();
+
+    String avg(List<double> v) => v.isEmpty
+        ? '--'
+        : (v.reduce((a, b) => a + b) / v.length).toStringAsFixed(0);
+    String top(List<double> v) =>
+        v.isEmpty ? '--' : v.reduce(max).toStringAsFixed(0);
+    String bottom(List<double> v) =>
+        v.isEmpty ? '--' : v.reduce(min).toStringAsFixed(0);
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: pw.BoxDecoration(
+        color: _cardBg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          _statChip('Average', '${avg(sys)}/${avg(dia)} $unit'),
+          _statChip('Highest', '${top(sys)}/${top(dia)} $unit'),
+          _statChip('Lowest', '${bottom(sys)}/${bottom(dia)} $unit'),
+        ],
+      ),
     );
   }
 

@@ -1752,6 +1752,18 @@ class _EditBPSheetState extends State<_EditBPSheet> {
       return;
     }
 
+    if (rawSys <= rawDia) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Systolic (upper number) must be higher than diastolic'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final combined = DateTime(
       _selectedDate.year,
       _selectedDate.month,
