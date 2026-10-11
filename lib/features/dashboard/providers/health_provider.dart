@@ -14,6 +14,9 @@ class HealthProvider extends ChangeNotifier {
   // Context of the latest blood sugar value, so its status uses the right bands
   final Map<HealthMetric, GlucoseContext?> _contexts = {};
 
+  // When each current value was taken, so a backdated entry doesn't replace it
+  final Map<HealthMetric, DateTime> _takenAt = {};
+
   // Holds the Firebase-loaded baseline so trend arrows can compare against it.
   // These are set once on load and not updated when the user enters new readings.
   final Map<HealthMetric, double?> _previousValues = {
@@ -30,6 +33,17 @@ class HealthProvider extends ChangeNotifier {
     _values[metric] = value;
     _contexts[metric] = context;
     notifyListeners();
+  }
+
+  // Takes a saved reading as the metric's current value unless a newer one
+  // is already known (the user may have backdated the entry).
+  void recordReading(HealthReading reading) {
+    final metric = reading.metric;
+    if (metric == null) return;
+    final current = _takenAt[metric];
+    if (current != null && reading.timestamp.isBefore(current)) return;
+    _takenAt[metric] = reading.timestamp;
+    updateValue(metric, reading.value, context: reading.context);
   }
 
   // Returns a short contextual tip when a reading is outside the healthy range.
@@ -104,6 +118,7 @@ class HealthProvider extends ChangeNotifier {
         if (reading != null) {
           _values[metric] = reading.value;
           _contexts[metric] = reading.context;
+          _takenAt[metric] = reading.timestamp;
           _previousValues[metric] = reading.value;
         }
       }

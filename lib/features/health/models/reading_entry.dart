@@ -15,6 +15,17 @@ class ReadingEntry {
   });
 }
 
-// Saves entries that were taken together and share one timestamp
+// Saves entries that were taken together and share one timestamp.
+// Throws ReadingSaveException when the save can't go ahead.
 typedef SaveReadings = Future<void> Function(
     List<ReadingEntry> entries, DateTime when);
+
+// A save that was refused for a reason the user can act on.
+// The message is shown as-is on the reading screen.
+class ReadingSaveException implements Exception {
+  final String message;
+  const ReadingSaveException(this.message);
+
+  @override
+  String toString() => message;
+}

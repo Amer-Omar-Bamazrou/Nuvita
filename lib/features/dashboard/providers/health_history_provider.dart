@@ -64,20 +64,23 @@ class HealthHistoryProvider extends ChangeNotifier {
     }
   }
 
-  // Adds a reading to the in-memory list for instant UI update.
-  // Firestore persistence is handled separately by HealthProvider.saveReadingToFirebase.
-  void addReading(HealthMetric metric, double value, {GlucoseContext? context}) {
-    final status = HealthMetrics.evaluate(metric, value, context: context);
-    final reading = HealthReading(
-      id: '',
-      metricType: metric.name,
-      value: value,
-      unit: HealthMetrics.of(metric).unit,
-      status: HealthMetrics.statusLabel(status),
-      timestamp: DateTime.now(),
-      context: context,
-    );
-    _readings.insert(0, reading); // insert at front to keep newest-first order
+  // Adds a just-saved reading (with its Firestore ID and chosen time) to the
+  // list so it shows on the right day and can be edited or deleted at once.
+  void addReading(HealthReading reading) {
+    // Older than everything loaded so far while more pages exist: it will
+    // arrive with "Load older readings", and inserting it now would make
+    // pagination skip the readings in between.
+    if (_hasMore &&
+        _readings.isNotEmpty &&
+        reading.timestamp.isBefore(_readings.last.timestamp)) {
+      return;
+    }
+    final i = _readings.indexWhere((r) => r.timestamp.isBefore(reading.timestamp));
+    if (i == -1) {
+      _readings.add(reading);
+    } else {
+      _readings.insert(i, reading);
+    }
     notifyListeners();
   }
 

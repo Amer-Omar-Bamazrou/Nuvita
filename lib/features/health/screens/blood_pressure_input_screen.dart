@@ -158,15 +158,20 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
       }
     }
 
+    final when = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+    if (when.isAfter(DateTime.now())) {
+      _showError("The reading time can't be in the future.");
+      return;
+    }
+
     setState(() => _saving = true);
     try {
-      final when = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
       final note = _contextIndex >= 0 ? _contextChips[_contextIndex] : null;
       await widget.onSave([
         ReadingEntry(metric: HealthMetric.systolic, value: _sys, note: note),
@@ -175,6 +180,8 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
           ReadingEntry(metric: HealthMetric.heartRate, value: pulse, note: note),
       ], when);
       if (mounted) Navigator.pop(context, true);
+    } on ReadingSaveException catch (e) {
+      if (mounted) _showError(e.message);
     } catch (_) {
       if (mounted) _showError('Failed to save reading. Please try again.');
     } finally {

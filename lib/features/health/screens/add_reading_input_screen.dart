@@ -7,6 +7,7 @@ import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
 import '../models/reading_entry.dart';
 import '../widgets/status_display.dart';
+import '../widgets/value_entry_dialog.dart';
 
 class AddReadingInputScreen extends StatefulWidget {
   final HealthMetric metric;
@@ -221,53 +222,40 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  void _showTypeValueDialog() {
-    final controller = TextEditingController(text: _displayValue());
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Enter value', style: AppTextStyles.heading3),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autofocus: true,
-          decoration: InputDecoration(
-            suffixText: _def.unit,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final v = double.tryParse(controller.text);
-              if (v != null && _def.isInRange(v)) {
-                setState(() => _value = v);
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _showTypeValueDialog() async {
+    final v = await showValueEntryDialog(context, def: _def, initial: _value);
+    if (v != null && mounted) setState(() => _value = v);
   }
 
   // ── Submit ──────────────────────────────────────────────────────
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    final when = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+    if (when.isAfter(DateTime.now())) {
+      _showError("The reading time can't be in the future.");
+      return;
+    }
+
     setState(() => _saving = true);
     try {
-      final when = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
       await widget.onSave([
         ReadingEntry(
           metric: _metric,
@@ -277,18 +265,10 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         ),
       ], when);
       if (mounted) Navigator.pop(context, true);
+    } on ReadingSaveException catch (e) {
+      if (mounted) _showError(e.message);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to save reading. Please try again.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        );
-      }
+      if (mounted) _showError('Failed to save reading. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

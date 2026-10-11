@@ -15,6 +15,30 @@ class HealthReadingService {
     return ref.id;
   }
 
+  // Saves readings taken together (e.g. systolic + diastolic) in one batch so
+  // either all of them are written or none. Returns them with their new IDs.
+  static Future<List<HealthReading>> saveReadings(
+      String uid, List<HealthReading> readings) async {
+    final batch = FirebaseFirestore.instance.batch();
+    final saved = <HealthReading>[];
+    for (final r in readings) {
+      final ref = _col(uid).doc();
+      batch.set(ref, r.toMap());
+      saved.add(HealthReading(
+        id: ref.id,
+        metricType: r.metricType,
+        value: r.value,
+        unit: r.unit,
+        status: r.status,
+        timestamp: r.timestamp,
+        note: r.note,
+        context: r.context,
+      ));
+    }
+    await batch.commit();
+    return saved;
+  }
+
   // Live stream of all readings, newest first
   static Stream<List<HealthReading>> getReadings(String uid) {
     return _col(uid)

@@ -1616,47 +1616,50 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // Saves the readings submitted from a reading screen; they share one time
+  // Saves the readings submitted from a reading screen. They share one time
+  // and are written together, then added to the session state with their
+  // real Firestore IDs.
   Future<void> _saveReadings(List<ReadingEntry> entries, DateTime when) async {
-    await Future.wait(entries.map((e) => _saveReading(e, when)));
-  }
-
-  Future<void> _saveReading(ReadingEntry entry, DateTime when) async {
-    final metric = entry.metric;
-    final value = entry.value;
-    final def = HealthMetrics.of(metric);
-
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      throw const ReadingSaveException(
+          'You need an account to save readings. Please sign in or register.');
+    }
+    if (when.isAfter(DateTime.now())) {
+      throw const ReadingSaveException("The reading time can't be in the future.");
+    }
 
     final provider = context.read<HealthProvider>();
     final historyProvider = context.read<HealthHistoryProvider>();
 
-    provider.updateValue(metric, value, context: entry.context);
-    final status = provider.getStatus(metric, value, context: entry.context);
-
-    final reading = HealthReading(
-      id: '',
-      metricType: metric.name,
-      value: value,
-      unit: def.unit,
-      status: HealthMetrics.statusLabel(status),
-      timestamp: when,
-      note: entry.note,
-      context: entry.context,
-    );
-    final readingId = await HealthReadingService.saveReading(uid, reading);
-    historyProvider.addReading(metric, value, context: entry.context);
-
-    // Fire critical reading notification
-    final statusStr = HealthMetrics.statusLabel(status);
-    if (statusStr == 'High' || statusStr == 'Low') {
-      NotificationService.showCriticalReadingNotification(
-        readingId: readingId,
-        metricName: HealthMetrics.readingLabel(metric, context: entry.context),
-        value: value,
-        unit: def.unit,
+    final drafts = entries.map((e) {
+      final status = HealthMetrics.evaluate(e.metric, e.value, context: e.context);
+      return HealthReading(
+        id: '',
+        metricType: e.metric.name,
+        value: e.value,
+        unit: HealthMetrics.of(e.metric).unit,
+        status: HealthMetrics.statusLabel(status),
+        timestamp: when,
+        note: e.note,
+        context: e.context,
       );
+    }).toList();
+
+    final saved = await HealthReadingService.saveReadings(uid, drafts);
+
+    for (final reading in saved) {
+      provider.recordReading(reading);
+      historyProvider.addReading(reading);
+
+      if (reading.status == 'High' || reading.status == 'Low') {
+        NotificationService.showCriticalReadingNotification(
+          readingId: reading.id,
+          metricName: reading.label,
+          value: reading.value,
+          unit: reading.unit,
+        );
+      }
     }
   }
 }
