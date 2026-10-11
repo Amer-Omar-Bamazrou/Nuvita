@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../charts/models/metric_thresholds.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../medication/models/medication_model.dart';
@@ -144,11 +144,7 @@ class ReportService {
       return list.first.value.toStringAsFixed(1);
     }
 
-    String latestUnit(String type) {
-      final list = grouped[type];
-      if (list == null || list.isEmpty) return '';
-      return list.first.unit;
-    }
+    String latestUnit(String type) => _unitFor(type);
 
     final sys = latest('systolic');
     final dia = latest('diastolic');
@@ -285,7 +281,7 @@ class ReportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            _readableName(entry.key),
+            HealthMetrics.labelForKey(entry.key),
             style: pw.TextStyle(
               fontSize: 15,
               fontWeight: pw.FontWeight.bold,
@@ -299,7 +295,7 @@ class ReportService {
           pw.SizedBox(height: 8),
           _buildMetricChart(
             entry.value,
-            _readableName(entry.key),
+            HealthMetrics.labelForKey(entry.key),
             entry.key,
           ),
           pw.SizedBox(height: 16),
@@ -327,9 +323,13 @@ class ReportService {
     var minY = sorted.map((r) => r.value).reduce(min);
     var maxY = sorted.map((r) => r.value).reduce(max);
 
-    final (normalMin, normalMax) = MetricThresholds.getNormalRange(metricType);
-    final (_, warningMax) = MetricThresholds.getWarningRange(metricType);
-    final hasZones = normalMin > 0 || normalMax > 0;
+    // Zones are drawn only for metrics that have status bands
+    final metric = HealthMetrics.metricForKey(metricType);
+    final bands = metric == null ? null : HealthMetrics.bandsFor(metric);
+    final hasZones = bands != null;
+    final normalMin = bands?.low ?? 0;
+    final normalMax = bands?.normalMax ?? 0;
+    final warningMax = bands?.warningMax ?? 0;
     if (hasZones) {
       minY = min(minY, normalMin);
       maxY = max(maxY, warningMax);
@@ -544,7 +544,7 @@ class ReportService {
             final cells = [
               cell(_fmt(r.timestamp), cellStyle),
               cell(r.value.toStringAsFixed(1), cellStyle),
-              cell(r.unit, cellStyle),
+              cell(_unitFor(r.metricType, fallback: r.unit), cellStyle),
               cell(r.status, cellStyle),
             ];
             if (hasNotes) {
@@ -562,7 +562,7 @@ class ReportService {
     final avg = values.reduce((a, b) => a + b) / values.length;
     final high = values.reduce((a, b) => a > b ? a : b);
     final low = values.reduce((a, b) => a < b ? a : b);
-    final unit = readings.first.unit;
+    final unit = _unitFor(readings.first.metricType, fallback: readings.first.unit);
 
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -771,17 +771,9 @@ class ReportService {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  static String _readableName(String metricType) {
-    final spaced = metricType.replaceAllMapped(
-      RegExp(r'([A-Z])'),
-      (m) => ' ${m.group(0)!}',
-    );
-    if (spaced.isEmpty) return metricType;
-    return spaced
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0].toUpperCase() + w.substring(1))
-        .join(' ');
+  static String _unitFor(String metricType, {String fallback = ''}) {
+    final unit = HealthMetrics.unitForKey(metricType);
+    return unit.isEmpty ? fallback : unit;
   }
 
   static String _fmt(DateTime dt) {

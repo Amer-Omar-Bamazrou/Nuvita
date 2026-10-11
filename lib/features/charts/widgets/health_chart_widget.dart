@@ -1,8 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/chart_data_point.dart';
-import '../models/metric_thresholds.dart';
 
 class HealthChartWidget extends StatelessWidget {
   final List<ChartDataPoint> dataPoints;
@@ -58,8 +58,8 @@ class HealthChartWidget extends StatelessWidget {
       }
     }
 
-    final (normalMin, normalMax) = MetricThresholds.getNormalRange(metricType);
-    final (_, warningMax) = MetricThresholds.getWarningRange(metricType);
+    final metric = HealthMetrics.metricForKey(metricType);
+    final bands = metric == null ? null : HealthMetrics.bandsFor(metric);
 
     final chartMinY = (minVal - 15).clamp(0.0, double.infinity);
     final chartMaxY = maxVal + 20;
@@ -71,9 +71,9 @@ class HealthChartWidget extends StatelessWidget {
         child: LineChart(
           LineChartData(
             rangeAnnotations: RangeAnnotations(
-              horizontalRangeAnnotations: _buildZones(
-                normalMin, normalMax, warningMax, chartMinY, chartMaxY,
-              ),
+              horizontalRangeAnnotations: bands == null
+                  ? const []
+                  : _buildZones(bands, chartMinY, chartMaxY),
             ),
             lineTouchData: LineTouchData(
               touchTooltipData: LineTouchTooltipData(
@@ -291,9 +291,7 @@ class HealthChartWidget extends StatelessWidget {
   }
 
   List<HorizontalRangeAnnotation> _buildZones(
-    double normalMin,
-    double normalMax,
-    double warningMax,
+    StatusBands bands,
     double chartMinY,
     double chartMaxY,
   ) {
@@ -305,10 +303,10 @@ class HealthChartWidget extends StatelessWidget {
       if (hi > lo) zones.add(HorizontalRangeAnnotation(y1: lo, y2: hi, color: color));
     }
 
-    addZone(chartMinY, normalMin, const Color(0x26F44336));
-    addZone(normalMin, normalMax, const Color(0x1A4CAF50));
-    addZone(normalMax, warningMax, const Color(0x1AFF9800));
-    addZone(warningMax, chartMaxY, const Color(0x26F44336));
+    addZone(chartMinY, bands.low, const Color(0x26F44336));
+    addZone(bands.low, bands.normalMax, const Color(0x1A4CAF50));
+    addZone(bands.normalMax, bands.warningMax, const Color(0x1AFF9800));
+    addZone(bands.warningMax, chartMaxY, const Color(0x26F44336));
 
     return zones;
   }

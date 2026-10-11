@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
 import '../models/chart_data_point.dart';
-import '../models/metric_thresholds.dart';
 
 class ChartDataService {
   ChartDataService._();
@@ -131,7 +131,7 @@ class ChartDataService {
     TrendDirection trend,
     double average,
   ) {
-    final status = MetricThresholds.getStatus(metricType, average);
+    final status = _insightStatus(metricType, average);
     final label = metricLabel(metricType);
 
     if (trend == TrendDirection.improving && status == 'Normal') {
@@ -243,18 +243,30 @@ class ChartDataService {
         : 'This period your average $label was $pct% higher than the previous 7 days.';
   }
 
-  /// Lowercase label used inside insight sentences.
-  static String metricLabel(String metricType) {
-    switch (metricType) {
-      case 'systolic':
-        return 'blood pressure';
-      case 'heartRate':
-        return 'heart rate';
-      case 'bloodSugar':
-        return 'blood sugar';
-      default:
-        return metricType;
+  // 'Normal', 'Warning', 'Critical' or 'Logged' for an average value
+  static String _insightStatus(String metricType, double value) {
+    final metric = HealthMetrics.metricForKey(metricType);
+    final status = metric == null ? null : HealthMetrics.evaluate(metric, value);
+    switch (status) {
+      case MetricStatus.normal:
+        return 'Normal';
+      case MetricStatus.warning:
+        return 'Warning';
+      case MetricStatus.criticalLow:
+      case MetricStatus.criticalHigh:
+        return 'Critical';
+      case null:
+        return 'Logged';
     }
+  }
+
+  /// Lowercase label used inside insight sentences.
+  /// The systolic chart is the combined blood pressure chart.
+  static String metricLabel(String metricType) {
+    if (metricType == HealthMetric.systolic.name) {
+      return HealthMetrics.bloodPressureLabel.toLowerCase();
+    }
+    return HealthMetrics.labelForKey(metricType).toLowerCase();
   }
 }
 

@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/screens/register_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
@@ -231,8 +232,11 @@ class _ChartsScreenState extends State<ChartsScreen> {
   }
 
   String _getBPInsight() {
-    final sysNormal = _average >= 90 && _average <= 120;
-    final diaNormal = _diastolicAverage >= 60 && _diastolicAverage <= 80;
+    final sysNormal = HealthMetrics.evaluate(HealthMetric.systolic, _average) ==
+        MetricStatus.normal;
+    final diaNormal =
+        HealthMetrics.evaluate(HealthMetric.diastolic, _diastolicAverage) ==
+            MetricStatus.normal;
 
     if (sysNormal && diaNormal) {
       if (_trend == TrendDirection.improving) {
@@ -266,26 +270,12 @@ class _ChartsScreenState extends State<ChartsScreen> {
   }
 
   String _metricLabel(_ChartMetric m) {
-    switch (m) {
-      case _ChartMetric.systolic:
-        return 'Blood Pressure';
-      case _ChartMetric.heartRate:
-        return 'Heart Rate';
-      case _ChartMetric.bloodSugar:
-        return 'Glucose';
-    }
+    if (m == _ChartMetric.systolic) return HealthMetrics.bloodPressureLabel;
+    return HealthMetrics.labelForKey(_metricTypeStr(m));
   }
 
-  String _metricUnit(_ChartMetric m) {
-    switch (m) {
-      case _ChartMetric.systolic:
-        return 'mmHg';
-      case _ChartMetric.heartRate:
-        return 'bpm';
-      case _ChartMetric.bloodSugar:
-        return 'mg/dL';
-    }
-  }
+  String _metricUnit(_ChartMetric m) =>
+      HealthMetrics.unitForKey(_metricTypeStr(m));
 
   String _rangeLabel(_TimeRange r) {
     switch (r) {

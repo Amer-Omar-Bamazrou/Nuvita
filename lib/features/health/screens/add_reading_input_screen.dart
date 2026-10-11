@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../features/dashboard/providers/health_provider.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
-import '../models/metric_config.dart';
+import '../widgets/status_display.dart';
 
 class AddReadingInputScreen extends StatefulWidget {
   final HealthMetric metric;
-  final MetricConfig config;
   final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
 
   const AddReadingInputScreen({
     super.key,
     required this.metric,
-    required this.config,
     required this.onSave,
   });
 
@@ -31,15 +29,9 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
   bool _saving = false;
   int _contextIndex = -1;
 
-  double get _step {
-    switch (_metric) {
-      case HealthMetric.weight:
-      case HealthMetric.temperature:
-        return 0.1;
-      default:
-        return 1.0;
-    }
-  }
+  MetricDefinition get _def => HealthMetrics.of(_metric);
+
+  double get _step => _def.step;
 
   double get _initialValue {
     switch (_metric) {
@@ -113,7 +105,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
       case HealthMetric.steps:
         return Icons.directions_walk_rounded;
       default:
-        return widget.config.icon;
+        return Icons.monitor_heart_rounded;
     }
   }
 
@@ -153,57 +145,16 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
       case HealthMetric.steps:
         return 'WALKING MINUTES';
       default:
-        return widget.config.title.toUpperCase();
+        return _def.label.toUpperCase();
     }
   }
 
-  (String label, Color color) get _status {
-    switch (_metric) {
-      case HealthMetric.temperature:
-        if (_value >= 36.1 && _value <= 37.2) return ('Normal range', AppColors.success);
-        if (_value < 36.1) return ('Low', AppColors.warning);
-        if (_value <= 38.0) return ('Slightly high', AppColors.warning);
-        return ('High', AppColors.error);
-      case HealthMetric.weight:
-        return ('Steady', AppColors.success);
-      case HealthMetric.heartRate:
-        if (_value >= 60 && _value <= 100) return ('Normal range', AppColors.success);
-        if (_value < 60) return ('Low', AppColors.warning);
-        return ('High', AppColors.warning);
-      case HealthMetric.bloodSugarBefore:
-        if (_value >= 70 && _value <= 100) return ('Normal', AppColors.success);
-        if (_value < 70) return ('Low', AppColors.warning);
-        if (_value <= 126) return ('Slightly high', AppColors.warning);
-        return ('High', AppColors.error);
-      case HealthMetric.bloodSugarAfter:
-      case HealthMetric.bloodSugar:
-        if (_value < 140) return ('Normal', AppColors.success);
-        if (_value <= 180) return ('Slightly high', AppColors.warning);
-        return ('High', AppColors.error);
-      case HealthMetric.steps:
-        if (_value >= 30) return ('Great', AppColors.success);
-        if (_value >= 15) return ('Good', AppColors.success);
-        return ('Low activity', AppColors.warning);
-      default:
-        return ('Recorded', AppColors.success);
-    }
-  }
+  (String label, Color color) get _status =>
+      statusDisplay(HealthMetrics.evaluate(_metric, _value));
 
   String? get _rangeHint {
-    switch (_metric) {
-      case HealthMetric.temperature:
-        return 'Healthy range: 36.1 – 37.2 °C';
-      case HealthMetric.heartRate:
-        return 'Healthy range: 60 – 100 BPM';
-      case HealthMetric.bloodSugarBefore:
-        return 'Aim for 70 – 100 mg/dL fasting';
-      case HealthMetric.bloodSugarAfter:
-        return 'Aim for under 180 mg/dL 2h after eating';
-      case HealthMetric.steps:
-        return 'Aim for at least 30 minutes daily';
-      default:
-        return null;
-    }
+    if (_metric == HealthMetric.steps) return 'Aim for at least 30 minutes daily';
+    return normalRangeHint(_def, HealthMetrics.bandsFor(_metric));
   }
 
   List<String> get _contextChips {
@@ -265,7 +216,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
           decoration: InputDecoration(
-            suffixText: widget.config.unit,
+            suffixText: _def.unit,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -277,7 +228,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
           TextButton(
             onPressed: () {
               final v = double.tryParse(controller.text);
-              if (v != null && v >= widget.config.min && v <= widget.config.max) {
+              if (v != null && _def.isInRange(v)) {
                 setState(() => _value = v);
               }
               Navigator.pop(ctx);
@@ -322,7 +273,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
 
   void _increment() {
     final next = _value + _step;
-    if (next <= widget.config.max) {
+    if (next <= _def.max) {
       HapticFeedback.selectionClick();
       setState(() => _value = double.parse(next.toStringAsFixed(1)));
     }
@@ -330,7 +281,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
 
   void _decrement() {
     final next = _value - _step;
-    if (next >= widget.config.min) {
+    if (next >= _def.min) {
       HapticFeedback.selectionClick();
       setState(() => _value = double.parse(next.toStringAsFixed(1)));
     }
@@ -352,7 +303,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.config.title, style: AppTextStyles.heading2.copyWith(fontSize: 18)),
+        title: Text(_def.label, style: AppTextStyles.heading2.copyWith(fontSize: 18)),
         centerTitle: true,
         actions: [
           IconButton(
@@ -531,7 +482,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
               ),
               const SizedBox(width: 6),
               Text(
-                widget.config.unit,
+                _def.unit,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -582,7 +533,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Text(
-                  '± ${_step >= 1 ? _step.toInt() : _step.toStringAsFixed(1)} ${widget.config.unit}',
+                  '± ${_step >= 1 ? _step.toInt() : _step.toStringAsFixed(1)} ${_def.unit}',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,

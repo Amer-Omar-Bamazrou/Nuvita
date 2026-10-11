@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../notifications/screens/suggestions_panel_screen.dart';
@@ -15,7 +16,6 @@ import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
-import '../../health/models/metric_config.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../health/screens/add_reading_input_screen.dart';
 import '../../health/screens/blood_pressure_input_screen.dart';
@@ -81,73 +81,6 @@ class _HomeBodyState extends State<_HomeBody> {
   Map<String, List<Map<String, dynamic>>> _adherenceByDate = {};
   final _suggestionService = PatientSuggestionService();
   StreamSubscription<QuerySnapshot>? _medsSub;
-
-  // Metric config used for reading task validation and units
-  static const _configs = <HealthMetric, MetricConfig>{
-    HealthMetric.bloodSugar: MetricConfig(
-      title: 'Blood Sugar',
-      icon: Icons.water_drop,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.bloodSugarBefore: MetricConfig(
-      title: 'Blood Sugar (Before Meal)',
-      icon: Icons.water_drop,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.bloodSugarAfter: MetricConfig(
-      title: 'Blood Sugar (After Meal)',
-      icon: Icons.water_drop_outlined,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.systolic: MetricConfig(
-      title: 'Systolic BP',
-      icon: Icons.favorite,
-      unit: 'mmHg',
-      min: 50,
-      max: 250,
-    ),
-    HealthMetric.diastolic: MetricConfig(
-      title: 'Diastolic BP',
-      icon: Icons.favorite_border,
-      unit: 'mmHg',
-      min: 30,
-      max: 150,
-    ),
-    HealthMetric.heartRate: MetricConfig(
-      title: 'Heart Rate',
-      icon: Icons.monitor_heart,
-      unit: 'BPM',
-      min: 20,
-      max: 250,
-    ),
-    HealthMetric.weight: MetricConfig(
-      title: 'Weight',
-      icon: Icons.scale,
-      unit: 'kg',
-      min: 20,
-      max: 300,
-    ),
-    HealthMetric.steps: MetricConfig(
-      title: 'Walking',
-      icon: Icons.directions_walk,
-      unit: 'min',
-      min: 0,
-      max: 300,
-    ),
-    HealthMetric.temperature: MetricConfig(
-      title: 'Temperature',
-      icon: Icons.thermostat,
-      unit: '°C',
-      min: 30,
-      max: 45,
-    ),
-  };
 
   @override
   void initState() {
@@ -1385,21 +1318,6 @@ class _HomeBodyState extends State<_HomeBody> {
     }
   }
 
-  String _statusToString(MetricStatus? status) {
-    switch (status) {
-      case MetricStatus.normal:
-        return 'Normal';
-      case MetricStatus.warning:
-        return 'Warning';
-      case MetricStatus.criticalLow:
-        return 'Low';
-      case MetricStatus.criticalHigh:
-        return 'High';
-      case null:
-        return 'Logged';
-    }
-  }
-
   // ── FAB ───────────────────────────────────────────────────────────────────
 
   Widget _buildFAB(BuildContext _) {
@@ -1581,10 +1499,8 @@ class _HomeBodyState extends State<_HomeBody> {
     if (metric == null) {
       screen = BloodPressureInputScreen(onSave: _saveReading);
     } else {
-      final config = _configs[metric]!;
       screen = AddReadingInputScreen(
         metric: metric,
-        config: config,
         onSave: _saveReading,
       );
     }
@@ -1702,7 +1618,7 @@ class _HomeBodyState extends State<_HomeBody> {
   // Saves a reading submitted via the new full-screen reading flow.
   // Also marks the matching task card as completed if one exists.
   Future<void> _saveReading(HealthMetric metric, double value, DateTime when) async {
-    final config = _configs[metric];
+    final def = HealthMetrics.of(metric);
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -1717,21 +1633,21 @@ class _HomeBodyState extends State<_HomeBody> {
       id: '',
       metricType: metric.name,
       value: value,
-      unit: config?.unit ?? '',
-      status: _statusToString(status),
+      unit: def.unit,
+      status: HealthMetrics.statusLabel(status),
       timestamp: when,
     );
     final readingId = await HealthReadingService.saveReading(uid, reading);
     historyProvider.addReading(metric, value);
 
     // Fire critical reading notification
-    final statusStr = _statusToString(status);
+    final statusStr = HealthMetrics.statusLabel(status);
     if (statusStr == 'High' || statusStr == 'Low') {
       NotificationService.showCriticalReadingNotification(
         readingId: readingId,
-        metricName: config?.title ?? metric.name,
+        metricName: def.label,
         value: value,
-        unit: config?.unit ?? '',
+        unit: def.unit,
       );
     }
   }

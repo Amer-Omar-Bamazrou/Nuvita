@@ -3,11 +3,11 @@ import 'package:iconly/iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../charts/screens/charts_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
-import '../../dashboard/providers/health_provider.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../home/screens/main_shell.dart';
@@ -85,42 +85,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   // ── Display helpers ──
 
-  String _metricLabel(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return 'Blood Sugar';
-      case 'systolic':
-        return 'Systolic BP';
-      case 'diastolic':
-        return 'Diastolic BP';
-      case 'heartRate':
-        return 'Heart Rate';
-      case 'weight':
-        return 'Weight';
-      case 'steps':
-        return 'Steps';
-      default:
-        return metricType;
-    }
-  }
+  String _metricLabel(String metricType) => HealthMetrics.labelForKey(metricType);
 
-  String _metricUnit(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return 'mg/dL';
-      case 'systolic':
-      case 'diastolic':
-        return 'mmHg';
-      case 'heartRate':
-        return 'bpm';
-      case 'weight':
-        return 'kg';
-      case 'steps':
-        return 'steps';
-      default:
-        return '';
-    }
-  }
+  String _metricUnit(String metricType) => HealthMetrics.unitForKey(metricType);
 
   IconData _metricIcon(String metricType) {
     switch (metricType) {
@@ -467,49 +434,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   String _statusForValue(String metricType, double value) {
-    switch (metricType) {
-      case 'bloodSugar':
-        if (value < 70) return 'Low';
-        if (value <= 180) return 'Normal';
-        if (value <= 300) return 'Warning';
-        return 'High';
-      case 'systolic':
-        if (value < 90) return 'Low';
-        if (value <= 120) return 'Normal';
-        if (value <= 140) return 'Warning';
-        return 'High';
-      case 'diastolic':
-        if (value < 60) return 'Low';
-        if (value <= 80) return 'Normal';
-        if (value <= 90) return 'Warning';
-        return 'High';
-      case 'heartRate':
-        if (value < 50) return 'Low';
-        if (value <= 100) return 'Normal';
-        if (value <= 120) return 'Warning';
-        return 'High';
-      default:
-        return 'Logged';
-    }
+    final metric = HealthMetrics.metricForKey(metricType);
+    if (metric == null) return 'Logged';
+    return HealthMetrics.statusLabel(HealthMetrics.evaluate(metric, value));
   }
 
   List<double> _validRange(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return [1, 600];
-      case 'systolic':
-        return [60, 250];
-      case 'diastolic':
-        return [40, 180];
-      case 'heartRate':
-        return [30, 250];
-      case 'weight':
-        return [10, 300];
-      case 'steps':
-        return [0, 100000];
-      default:
-        return [0, 99999];
-    }
+    final metric = HealthMetrics.metricForKey(metricType);
+    if (metric == null) return [0, 99999];
+    final def = HealthMetrics.of(metric);
+    return [def.min, def.max];
   }
 
   // ── Pull to refresh ──
@@ -1790,12 +1724,14 @@ class _EditBPSheetState extends State<_EditBPSheet> {
   void _onSave() {
     final rawSys = double.tryParse(_sysController.text.trim());
     final rawDia = double.tryParse(_diaController.text.trim());
+    final sysDef = HealthMetrics.of(HealthMetric.systolic);
+    final diaDef = HealthMetrics.of(HealthMetric.diastolic);
 
-    if (rawSys == null || rawSys < 60 || rawSys > 250) {
+    if (rawSys == null || !sysDef.isInRange(rawSys)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Enter systolic between 60 and 250 mmHg'),
+          content: Text(
+              'Enter systolic between ${sysDef.min.toInt()} and ${sysDef.max.toInt()} mmHg'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -1804,11 +1740,11 @@ class _EditBPSheetState extends State<_EditBPSheet> {
       return;
     }
 
-    if (rawDia == null || rawDia < 40 || rawDia > 180) {
+    if (rawDia == null || !diaDef.isInRange(rawDia)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Enter diastolic between 40 and 180 mmHg'),
+          content: Text(
+              'Enter diastolic between ${diaDef.min.toInt()} and ${diaDef.max.toInt()} mmHg'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../features/dashboard/providers/health_provider.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
+import '../widgets/status_display.dart';
 
 class BloodPressureInputScreen extends StatefulWidget {
   final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
@@ -26,6 +27,9 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
 
   static const _contextChips = ['Resting', 'After exercise', 'After meal', 'Stressed'];
 
+  static final _sysDef = HealthMetrics.of(HealthMetric.systolic);
+  static final _diaDef = HealthMetrics.of(HealthMetric.diastolic);
+
   @override
   void initState() {
     super.initState();
@@ -36,11 +40,17 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
 
   // ── Status ──────────────────────────────────────────────────────
 
-  (String, Color) get _status {
-    if (_sys < 120 && _dia < 80) return ('Normal', AppColors.success);
-    if (_sys <= 129 && _dia < 80) return ('Elevated', AppColors.warning);
-    if (_sys <= 139 || _dia <= 89) return ('High Stage 1', AppColors.warning);
-    return ('High Stage 2', AppColors.error);
+  // The pair shows whichever of systolic and diastolic is more concerning
+  (String, Color) get _status => statusDisplay(HealthMetrics.worseStatus(
+        HealthMetrics.evaluate(HealthMetric.systolic, _sys),
+        HealthMetrics.evaluate(HealthMetric.diastolic, _dia),
+      ));
+
+  String get _rangeHint {
+    final sys = _sysDef.bands!;
+    final dia = _diaDef.bands!;
+    return 'Normal range: ${sys.low.toInt()}–${sys.normalMax.toInt()} / '
+        '${dia.low.toInt()}–${dia.normalMax.toInt()} mmHg';
   }
 
   // ── Date / time ─────────────────────────────────────────────────
@@ -164,10 +174,10 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
                     sub: 'Upper number',
                     value: _sys.toInt(),
                     onInc: () {
-                      if (_sys < 250) { HapticFeedback.selectionClick(); setState(() => _sys++); }
+                      if (_sys < _sysDef.max) { HapticFeedback.selectionClick(); setState(() => _sys++); }
                     },
                     onDec: () {
-                      if (_sys > 50) { HapticFeedback.selectionClick(); setState(() => _sys--); }
+                      if (_sys > _sysDef.min) { HapticFeedback.selectionClick(); setState(() => _sys--); }
                     },
                   ),
                   const SizedBox(height: 10),
@@ -178,10 +188,10 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
                     sub: 'Lower number',
                     value: _dia.toInt(),
                     onInc: () {
-                      if (_dia < 150) { HapticFeedback.selectionClick(); setState(() => _dia++); }
+                      if (_dia < _diaDef.max) { HapticFeedback.selectionClick(); setState(() => _dia++); }
                     },
                     onDec: () {
-                      if (_dia > 30) { HapticFeedback.selectionClick(); setState(() => _dia--); }
+                      if (_dia > _diaDef.min) { HapticFeedback.selectionClick(); setState(() => _dia--); }
                     },
                   ),
                   const SizedBox(height: 14),
@@ -291,7 +301,7 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text('Healthy range: under 120 / 80 mmHg', style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+          Text(_rangeHint, style: TextStyle(fontSize: 11, color: AppColors.secondary)),
         ],
       ),
     );

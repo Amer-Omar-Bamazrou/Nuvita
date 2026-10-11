@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
 import '../../charts/models/chart_data_point.dart';
@@ -550,13 +551,16 @@ class _DoctorPatientDetailScreenState
     }
 
     // Single-value metrics shown in clinical order
-    const singleMetrics = [
-      _MetricDef('bloodSugarBefore', 'Blood Sugar (Before Meal)', 'mg/dL'),
-      _MetricDef('bloodSugarAfter', 'Blood Sugar (After Meal)', 'mg/dL'),
-      _MetricDef('weight', 'Weight', 'kg'),
-      _MetricDef('temperature', 'Temperature', '°C'),
-      _MetricDef('steps', 'Walking', 'min'),
-    ];
+    final singleMetrics = [
+      HealthMetric.bloodSugarBefore,
+      HealthMetric.bloodSugarAfter,
+      HealthMetric.weight,
+      HealthMetric.temperature,
+      HealthMetric.steps,
+    ].map((m) {
+      final def = HealthMetrics.of(m);
+      return _MetricDef(def.key, def.label, def.unit);
+    }).toList();
 
     String getVal(String key) => latest[key]?['value']?.toString() ?? '—';
     String getStatus(String key) => latest[key]?['status'] as String? ?? '—';
@@ -570,18 +574,21 @@ class _DoctorPatientDetailScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Blood Pressure',
+                Text(HealthMetrics.bloodPressureLabel,
                     style: TextStyle(fontSize: 12, color: const Color(0xFF6E7A82))),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _BPSubValue(label: 'Sys', value: getVal('systolic'), unit: 'mmHg',
+                    _BPSubValue(label: 'Sys', value: getVal('systolic'),
+                        unit: HealthMetrics.unitForKey('systolic'),
                         status: getStatus('systolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Dia', value: getVal('diastolic'), unit: 'mmHg',
+                    _BPSubValue(label: 'Dia', value: getVal('diastolic'),
+                        unit: HealthMetrics.unitForKey('diastolic'),
                         status: getStatus('diastolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Pulse', value: getVal('heartRate'), unit: 'bpm',
+                    _BPSubValue(label: 'Pulse', value: getVal('heartRate'),
+                        unit: HealthMetrics.unitForKey('heartRate'),
                         status: getStatus('heartRate')),
                   ],
                 ),
@@ -645,16 +652,6 @@ class _DoctorPatientDetailScreenState
 
   Widget _buildHealthTrendsSection() {
     final isBP = _chartMetric == 'systolic';
-    final metricLabels = {
-      'systolic': 'Blood Pressure',
-      'heartRate': 'Heart Rate',
-      'bloodSugar': 'Blood Sugar',
-    };
-    final metricUnits = {
-      'systolic': 'mmHg',
-      'heartRate': 'bpm',
-      'bloodSugar': 'mg/dL',
-    };
 
     return _Card(
       child: Column(
@@ -681,8 +678,7 @@ class _DoctorPatientDetailScreenState
                         const Color(0xFF508991), 'Diastolic'),
                   ] else
                     _chartLegendDot(
-                        _primary,
-                        metricLabels[_chartMetric] ?? _chartMetric),
+                        _primary, HealthMetrics.labelForKey(_chartMetric)),
                 ],
               ),
             ),
@@ -691,7 +687,7 @@ class _DoctorPatientDetailScreenState
               child: HealthChartWidget(
                 dataPoints: _chartPoints,
                 metricType: _chartMetric,
-                unit: metricUnits[_chartMetric] ?? '',
+                unit: HealthMetrics.unitForKey(_chartMetric),
                 secondaryData:
                     isBP && _chartDiaPoints.isNotEmpty ? _chartDiaPoints : null,
                 secondaryLabel: isBP ? 'Diastolic' : null,
@@ -1049,9 +1045,11 @@ class _DoctorPatientDetailScreenState
       date =
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
-    final metric = r['metricType'] as String? ?? '—';
+    final metricKey = r['metricType'] as String? ?? '—';
+    final metric = HealthMetrics.labelForKey(metricKey);
     final value = r['value']?.toString() ?? '—';
-    final unit = r['unit'] as String? ?? '';
+    final moduleUnit = HealthMetrics.unitForKey(metricKey);
+    final unit = moduleUnit.isNotEmpty ? moduleUnit : r['unit'] as String? ?? '';
     final status = r['status'] as String? ?? 'Logged';
 
     return Container(

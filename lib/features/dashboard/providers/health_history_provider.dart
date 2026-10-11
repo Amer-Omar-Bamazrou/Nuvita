@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'health_provider.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 
 class HealthHistoryProvider extends ChangeNotifier {
   final List<HealthReading> _readings = []; // maintained newest-first
-  final HealthProvider _evaluator = HealthProvider();
   bool _loaded = false;
   bool _hasMore = true;
 
@@ -68,13 +67,13 @@ class HealthHistoryProvider extends ChangeNotifier {
   // Adds a reading to the in-memory list for instant UI update.
   // Firestore persistence is handled separately by HealthProvider.saveReadingToFirebase.
   void addReading(HealthMetric metric, double value) {
-    final status = _evaluator.getStatus(metric, value);
+    final status = HealthMetrics.evaluate(metric, value);
     final reading = HealthReading(
       id: '',
       metricType: metric.name,
       value: value,
-      unit: _unitForMetric(metric),
-      status: _statusString(status),
+      unit: HealthMetrics.of(metric).unit,
+      status: HealthMetrics.statusLabel(status),
       timestamp: DateTime.now(),
     );
     _readings.insert(0, reading); // insert at front to keep newest-first order
@@ -153,40 +152,5 @@ class HealthHistoryProvider extends ChangeNotifier {
     if (metrics == null || metrics.isEmpty) return allReadings;
     final names = metrics.map((m) => m.name).toSet();
     return _readings.where((r) => names.contains(r.metricType)).toList();
-  }
-
-  String _statusString(MetricStatus? status) {
-    switch (status) {
-      case MetricStatus.normal:
-        return 'Normal';
-      case MetricStatus.warning:
-        return 'Warning';
-      case MetricStatus.criticalLow:
-        return 'Low';
-      case MetricStatus.criticalHigh:
-        return 'High';
-      case null:
-        return 'Logged';
-    }
-  }
-
-  String _unitForMetric(HealthMetric metric) {
-    switch (metric) {
-      case HealthMetric.bloodSugar:
-      case HealthMetric.bloodSugarBefore:
-      case HealthMetric.bloodSugarAfter:
-        return 'mg/dL';
-      case HealthMetric.systolic:
-      case HealthMetric.diastolic:
-        return 'mmHg';
-      case HealthMetric.heartRate:
-        return 'BPM';
-      case HealthMetric.weight:
-        return 'kg';
-      case HealthMetric.steps:
-        return 'min';
-      case HealthMetric.temperature:
-        return '°C';
-    }
   }
 }

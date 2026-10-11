@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../health/services/health_reading_service.dart';
+import '../../core/health/health_metrics.dart';
 import '../../core/theme/app_colors.dart';
 
 class TrendWarningService {
@@ -39,7 +40,11 @@ class TrendWarningService {
         ? diastolicReadings.reduce((a, b) => a + b) / diastolicReadings.length
         : 0.0;
 
-    final isHigh = avgSystolic > 140 || avgDiastolic > 90;
+    // "High" means the weekly average sits above the warning band
+    final sysBands = HealthMetrics.bandsFor(HealthMetric.systolic)!;
+    final diaBands = HealthMetrics.bandsFor(HealthMetric.diastolic)!;
+    final isHigh = avgSystolic > sysBands.warningMax ||
+        avgDiastolic > diaBands.warningMax;
     if (!isHigh) return;
 
     // Mark as shown for today before displaying so a hot-reload doesn't double-fire
