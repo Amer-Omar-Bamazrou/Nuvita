@@ -203,7 +203,18 @@ lib/shared/widgets/ — nuvita_text_field, nuvita_button, nuvita_time_picker
 - Every batch ends with `flutter analyze` and `flutter test` passing.
 - Natural developer-style comments only.
 
-## Git Strategy
-- main: stable code only
-- feature/xxx: one branch per feature
-- Always commit before switching branches
+## Branch and release workflow
+Follow this for every task.
+
+1. Never commit directly to main. Start every task by creating a new branch from the latest main, named `rebuild/<short-task-name>`.
+2. Commit in small steps with clear messages as the work progresses.
+3. Before anything reaches main, run all of these and confirm every one passes with no errors:
+   - flutter pub get
+   - flutter analyze
+   - flutter test
+   - flutter build apk --debug
+   - flutter build web
+4. If any check fails, fix the cause and run all checks again. Never skip, delete or weaken a test, and never suppress an analyzer error, to make a check pass. If it cannot be fixed, stop and report; do not merge.
+5. When all checks pass, push the branch and open a pull request into main with a summary of what changed and the check results.
+6. Merge into main only after the checks pass and the owner has approved the pull request. After merging, confirm main still passes the checks, then delete the branch.
+7. Update CLAUDE.md at the end of every task so it describes the code as it now stands.
