@@ -66,6 +66,9 @@ class HealthMetrics {
 
   // Clinical thresholds. These are the values HealthProvider.getStatus used
   // before this module existed. Any change needs clinical review.
+  // Blood sugar bands depend on the reading's context: fasting and before-meal
+  // use the old bloodSugarBefore bands, after-meal the old bloodSugarAfter
+  // bands, and random (or no context) the old general bloodSugar bands.
   static const _sugarRandom =
       StatusBands(low: 70, normalMax: 180, warningMax: 300);
   static const _sugarBeforeMeal =
@@ -89,22 +92,6 @@ class HealthMetrics {
       min: 20,
       max: 600,
       bands: _sugarRandom,
-    ),
-    HealthMetric.bloodSugarBefore: MetricDefinition(
-      metric: HealthMetric.bloodSugarBefore,
-      label: 'Blood Sugar (Before Meal)',
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-      bands: _sugarBeforeMeal,
-    ),
-    HealthMetric.bloodSugarAfter: MetricDefinition(
-      metric: HealthMetric.bloodSugarAfter,
-      label: 'Blood Sugar (After Meal)',
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-      bands: _sugarAfterMeal,
     ),
     HealthMetric.systolic: MetricDefinition(
       metric: HealthMetric.systolic,
@@ -156,19 +143,83 @@ class HealthMetrics {
     ),
   };
 
+  // Older documents used these keys. They are still read, never written.
+  static const _legacyKeys = <String, (HealthMetric, GlucoseContext?)>{
+    'bloodSugarBefore': (HealthMetric.bloodSugar, GlucoseContext.beforeMeal),
+    'bloodSugarAfter': (HealthMetric.bloodSugar, GlucoseContext.afterMeal),
+  };
+
   static MetricDefinition of(HealthMetric metric) => _definitions[metric]!;
 
-  static StatusBands? bandsFor(HealthMetric metric) => of(metric).bands;
+  // Bands for a reading. Only blood sugar looks at the context.
+  static StatusBands? bandsFor(HealthMetric metric, {GlucoseContext? context}) {
+    if (metric != HealthMetric.bloodSugar) return of(metric).bands;
+    switch (context) {
+      case GlucoseContext.fasting:
+      case GlucoseContext.beforeMeal:
+        return _sugarBeforeMeal;
+      case GlucoseContext.afterMeal:
+        return _sugarAfterMeal;
+      case GlucoseContext.random:
+      case null:
+        return _sugarRandom;
+    }
+  }
 
-  static MetricStatus? evaluate(HealthMetric metric, double value) =>
-      bandsFor(metric)?.evaluate(value);
+  static MetricStatus? evaluate(
+    HealthMetric metric,
+    double value, {
+    GlucoseContext? context,
+  }) =>
+      bandsFor(metric, context: context)?.evaluate(value);
 
-  // Maps a stored metricType string to its metric, or null if unknown
+  // Maps a stored metricType string, including legacy keys, to its metric.
+  // Returns null for keys the app doesn't know.
   static HealthMetric? metricForKey(String key) {
+    final legacy = _legacyKeys[key];
+    if (legacy != null) return legacy.$1;
     for (final m in HealthMetric.values) {
       if (m.name == key) return m;
     }
     return null;
+  }
+
+  // Context implied by a legacy key, e.g. bloodSugarAfter -> afterMeal
+  static GlucoseContext? legacyContextForKey(String key) =>
+      _legacyKeys[key]?.$2;
+
+  // Every key a metric may be stored under, for Firestore whereIn queries
+  static List<String> storedKeysFor(HealthMetric metric) => [
+        metric.name,
+        for (final e in _legacyKeys.entries)
+          if (e.value.$1 == metric) e.key,
+      ];
+
+  static GlucoseContext? contextFromName(String? name) {
+    for (final c in GlucoseContext.values) {
+      if (c.name == name) return c;
+    }
+    return null;
+  }
+
+  static String contextLabel(GlucoseContext context) {
+    switch (context) {
+      case GlucoseContext.fasting:
+        return 'Fasting';
+      case GlucoseContext.beforeMeal:
+        return 'Before meal';
+      case GlucoseContext.afterMeal:
+        return 'After meal';
+      case GlucoseContext.random:
+        return 'Random';
+    }
+  }
+
+  // Label for one reading, e.g. "Blood Sugar (Fasting)"
+  static String readingLabel(HealthMetric metric, {GlucoseContext? context}) {
+    final label = of(metric).label;
+    if (metric != HealthMetric.bloodSugar || context == null) return label;
+    return '$label (${contextLabel(context)})';
   }
 
   // Display label for a stored key; unknown keys are shown as-is

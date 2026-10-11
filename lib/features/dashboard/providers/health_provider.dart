@@ -11,6 +11,9 @@ class HealthProvider extends ChangeNotifier {
     for (final m in HealthMetric.values) m: null,
   };
 
+  // Context of the latest blood sugar value, so its status uses the right bands
+  final Map<HealthMetric, GlucoseContext?> _contexts = {};
+
   // Holds the Firebase-loaded baseline so trend arrows can compare against it.
   // These are set once on load and not updated when the user enters new readings.
   final Map<HealthMetric, double?> _previousValues = {
@@ -19,37 +22,50 @@ class HealthProvider extends ChangeNotifier {
 
   double? getValue(HealthMetric metric) => _values[metric];
 
+  GlucoseContext? getContext(HealthMetric metric) => _contexts[metric];
+
   double? getPreviousValue(HealthMetric metric) => _previousValues[metric];
 
-  void updateValue(HealthMetric metric, double value) {
+  void updateValue(HealthMetric metric, double value, {GlucoseContext? context}) {
     _values[metric] = value;
+    _contexts[metric] = context;
     notifyListeners();
   }
 
   // Returns a short contextual tip when a reading is outside the healthy range.
   // The range itself comes from HealthMetrics so tips and statuses always agree.
-  String? getSuggestionForMetric(String metricKey, double value) {
+  String? getSuggestionForMetric(
+    String metricKey,
+    double value, {
+    GlucoseContext? context,
+  }) {
     final metric = HealthMetrics.metricForKey(metricKey);
     if (metric == null) return null;
-    final status = HealthMetrics.evaluate(metric, value);
+    context ??= HealthMetrics.legacyContextForKey(metricKey);
+    final status = HealthMetrics.evaluate(metric, value, context: context);
     final high = status == MetricStatus.criticalHigh;
     final aboveNormal = high || status == MetricStatus.warning;
     final low = status == MetricStatus.criticalLow;
 
     switch (metric) {
       case HealthMetric.bloodSugar:
-        if (aboveNormal) return 'Blood sugar is high — reduce sugary drinks and rest';
-        if (low) return 'Blood sugar is low — eat something small now';
-        return null;
-      case HealthMetric.bloodSugarBefore:
-        if (high) return 'Fasting glucose is high — avoid late-night snacks';
-        if (low) return 'Fasting glucose is low — eat something small now';
-        return null;
-      case HealthMetric.bloodSugarAfter:
-        if (high) return 'Post-meal glucose is very high — limit carbs next meal';
-        if (aboveNormal) return 'Post-meal glucose is elevated — consider a short walk';
-        if (low) return 'Post-meal glucose is low — drink juice or eat a snack';
-        return null;
+        switch (context) {
+          case GlucoseContext.fasting:
+          case GlucoseContext.beforeMeal:
+            if (high) return 'Fasting glucose is high — avoid late-night snacks';
+            if (low) return 'Fasting glucose is low — eat something small now';
+            return null;
+          case GlucoseContext.afterMeal:
+            if (high) return 'Post-meal glucose is very high — limit carbs next meal';
+            if (aboveNormal) return 'Post-meal glucose is elevated — consider a short walk';
+            if (low) return 'Post-meal glucose is low — drink juice or eat a snack';
+            return null;
+          case GlucoseContext.random:
+          case null:
+            if (aboveNormal) return 'Blood sugar is high — reduce sugary drinks and rest';
+            if (low) return 'Blood sugar is low — eat something small now';
+            return null;
+        }
       case HealthMetric.systolic:
         if (high) return 'BP is elevated — avoid caffeine and rest quietly';
         return null;
@@ -70,8 +86,12 @@ class HealthProvider extends ChangeNotifier {
     }
   }
 
-  MetricStatus? getStatus(HealthMetric metric, double value) =>
-      HealthMetrics.evaluate(metric, value);
+  MetricStatus? getStatus(
+    HealthMetric metric,
+    double value, {
+    GlucoseContext? context,
+  }) =>
+      HealthMetrics.evaluate(metric, value, context: context);
 
   // Restores the latest reading per metric from Firestore so cards
   // show previous values when the app restarts. Also populates _previousValues
@@ -83,6 +103,7 @@ class HealthProvider extends ChangeNotifier {
             await HealthReadingService.getLatestReading(uid, metric.name);
         if (reading != null) {
           _values[metric] = reading.value;
+          _contexts[metric] = reading.context;
           _previousValues[metric] = reading.value;
         }
       }

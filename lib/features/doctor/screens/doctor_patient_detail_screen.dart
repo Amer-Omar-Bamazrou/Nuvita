@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/health/health_metrics.dart';
+import '../../health/models/health_reading.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
 import '../../charts/models/chart_data_point.dart';
@@ -543,27 +544,30 @@ class _DoctorPatientDetailScreenState
       );
     }
 
-    // Build a map of the latest reading per metric type (readings already sorted newest-first)
-    final Map<String, Map<String, dynamic>> latest = {};
+    // Latest reading per metric (readings arrive newest-first). Parsing through
+    // HealthReading folds legacy keys like bloodSugarBefore into bloodSugar.
+    final Map<String, HealthReading> latest = {};
     for (final r in _readings) {
-      final metric = r['metricType'] as String? ?? '';
-      if (metric.isNotEmpty && !latest.containsKey(metric)) latest[metric] = r;
+      final reading = _parseReading(r);
+      if (reading == null) continue;
+      latest.putIfAbsent(reading.metricType, () => reading);
     }
 
     // Single-value metrics shown in clinical order
     final singleMetrics = [
-      HealthMetric.bloodSugarBefore,
-      HealthMetric.bloodSugarAfter,
+      HealthMetric.bloodSugar,
       HealthMetric.weight,
       HealthMetric.temperature,
       HealthMetric.steps,
     ].map((m) {
       final def = HealthMetrics.of(m);
-      return _MetricDef(def.key, def.label, def.unit);
+      // Blood sugar shows when the latest reading was taken, e.g. (Fasting)
+      final label = latest[def.key]?.label ?? def.label;
+      return _MetricDef(def.key, label, def.unit);
     }).toList();
 
-    String getVal(String key) => latest[key]?['value']?.toString() ?? '—';
-    String getStatus(String key) => latest[key]?['status'] as String? ?? '—';
+    String getVal(String key) => latest[key]?.value.toString() ?? '—';
+    String getStatus(String key) => latest[key]?.status ?? '—';
 
     return Column(
       children: [
@@ -1037,6 +1041,12 @@ class _DoctorPatientDetailScreenState
     );
   }
 
+  // Reading documents from DoctorService arrive as raw maps
+  HealthReading? _parseReading(Map<String, dynamic> r) {
+    if (r['value'] is! num) return null;
+    return HealthReading.fromMap(r['id'] as String? ?? '', r);
+  }
+
   Widget _buildReadingRow(int index, Map<String, dynamic> r) {
     final ts = r['timestamp'];
     String date = '—';
@@ -1045,12 +1055,12 @@ class _DoctorPatientDetailScreenState
       date =
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
-    final metricKey = r['metricType'] as String? ?? '—';
-    final metric = HealthMetrics.labelForKey(metricKey);
+    final reading = _parseReading(r);
+    final metric = reading?.label ?? r['metricType'] as String? ?? '—';
     final value = r['value']?.toString() ?? '—';
-    final moduleUnit = HealthMetrics.unitForKey(metricKey);
+    final moduleUnit = HealthMetrics.unitForKey(reading?.metricType ?? '');
     final unit = moduleUnit.isNotEmpty ? moduleUnit : r['unit'] as String? ?? '';
-    final status = r['status'] as String? ?? 'Logged';
+    final status = reading?.status ?? r['status'] as String? ?? 'Logged';
 
     return Container(
       color: index.isOdd

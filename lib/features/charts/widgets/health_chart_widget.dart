@@ -84,8 +84,10 @@ class HealthChartWidget extends StatelessWidget {
                     if (idx < 0 || idx >= dataPoints.length) return null;
                     final point = dataPoints[idx];
                     final date = _fmtDate(point.date);
+                    final context =
+                        point.context == null ? '' : '\n${point.context}';
                     return LineTooltipItem(
-                      '$date\n${point.value.toStringAsFixed(1)} $unit',
+                      '$date\n${point.value.toStringAsFixed(1)} $unit$context',
                       const TextStyle(
                         color: Colors.white,
                         fontSize: 12,

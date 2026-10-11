@@ -16,6 +16,7 @@ import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
+import '../../health/models/reading_entry.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../health/screens/add_reading_input_screen.dart';
 import '../../health/screens/blood_pressure_input_screen.dart';
@@ -610,7 +611,7 @@ class _HomeBodyState extends State<_HomeBody> {
     for (final m in HealthMetric.values) {
       final value = provider.getValue(m);
       if (value == null) continue;
-      final status = provider.getStatus(m, value);
+      final status = provider.getStatus(m, value, context: provider.getContext(m));
       if (status == MetricStatus.warning ||
           status == MetricStatus.criticalLow ||
           status == MetricStatus.criticalHigh) {
@@ -1433,7 +1434,7 @@ class _HomeBodyState extends State<_HomeBody> {
                   physics: const NeverScrollableScrollPhysics(),
                   childAspectRatio: 1.15,
                   children: [
-                    _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugarBefore),
+                    _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar),
                     _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
                     _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
                     _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
@@ -1497,11 +1498,11 @@ class _HomeBodyState extends State<_HomeBody> {
   void _navigateToMetric(HealthMetric? metric) async {
     Widget screen;
     if (metric == null) {
-      screen = BloodPressureInputScreen(onSave: _saveReading);
+      screen = BloodPressureInputScreen(onSave: _saveReadings);
     } else {
       screen = AddReadingInputScreen(
         metric: metric,
-        onSave: _saveReading,
+        onSave: _saveReadings,
       );
     }
     final saved = await Navigator.push<bool>(
@@ -1615,9 +1616,14 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // Saves a reading submitted via the new full-screen reading flow.
-  // Also marks the matching task card as completed if one exists.
-  Future<void> _saveReading(HealthMetric metric, double value, DateTime when) async {
+  // Saves the readings submitted from a reading screen; they share one time
+  Future<void> _saveReadings(List<ReadingEntry> entries, DateTime when) async {
+    await Future.wait(entries.map((e) => _saveReading(e, when)));
+  }
+
+  Future<void> _saveReading(ReadingEntry entry, DateTime when) async {
+    final metric = entry.metric;
+    final value = entry.value;
     final def = HealthMetrics.of(metric);
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -1626,8 +1632,8 @@ class _HomeBodyState extends State<_HomeBody> {
     final provider = context.read<HealthProvider>();
     final historyProvider = context.read<HealthHistoryProvider>();
 
-    provider.updateValue(metric, value);
-    final status = provider.getStatus(metric, value);
+    provider.updateValue(metric, value, context: entry.context);
+    final status = provider.getStatus(metric, value, context: entry.context);
 
     final reading = HealthReading(
       id: '',
@@ -1636,16 +1642,18 @@ class _HomeBodyState extends State<_HomeBody> {
       unit: def.unit,
       status: HealthMetrics.statusLabel(status),
       timestamp: when,
+      note: entry.note,
+      context: entry.context,
     );
     final readingId = await HealthReadingService.saveReading(uid, reading);
-    historyProvider.addReading(metric, value);
+    historyProvider.addReading(metric, value, context: entry.context);
 
     // Fire critical reading notification
     final statusStr = HealthMetrics.statusLabel(status);
     if (statusStr == 'High' || statusStr == 'Low') {
       NotificationService.showCriticalReadingNotification(
         readingId: readingId,
-        metricName: def.label,
+        metricName: HealthMetrics.readingLabel(metric, context: entry.context),
         value: value,
         unit: def.unit,
       );

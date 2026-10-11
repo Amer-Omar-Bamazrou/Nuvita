@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
 import '../models/health_reading.dart';
 
 class HealthReadingService {
@@ -40,12 +41,15 @@ class HealthReadingService {
   }
 
   // Returns the single most recent reading for a given metric type.
-  // Fetches only that metric's documents and picks the latest in Dart
-  // to avoid requiring a (metricType + timestamp) composite index.
+  // Fetches only that metric's documents (legacy keys included) and picks the
+  // latest in Dart to avoid requiring a (metricType + timestamp) composite index.
   static Future<HealthReading?> getLatestReading(
       String uid, String metricType) async {
+    final metric = HealthMetrics.metricForKey(metricType);
+    final keys =
+        metric == null ? [metricType] : HealthMetrics.storedKeysFor(metric);
     final snap = await _col(uid)
-        .where('metricType', isEqualTo: metricType)
+        .where('metricType', whereIn: keys)
         .get();
 
     if (snap.docs.isEmpty) return null;

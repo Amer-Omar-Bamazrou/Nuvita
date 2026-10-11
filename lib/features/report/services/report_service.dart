@@ -152,6 +152,9 @@ class ReportService {
     final hrUnit = latestUnit('heartRate');
     final bs = latest('bloodSugar');
     final bsUnit = latestUnit('bloodSugar');
+    final bsContext = grouped['bloodSugar']?.first.context;
+    final bsSuffix =
+        bsContext == null ? '' : ' (${HealthMetrics.contextLabel(bsContext)})';
     final temp = latest('temperature');
     final tempUnit = latestUnit('temperature');
     final weight = latest('weight');
@@ -207,7 +210,7 @@ class ReportService {
             children: [
               vitalRow('SYS / DIA', '$sys / $dia${sys != '--' ? ' mmHg' : ''}'),
               vitalRow('Heart Rate', hr != '--' ? '$hr $hrUnit' : '--'),
-              vitalRow('Blood Sugar', bs != '--' ? '$bs $bsUnit' : '--'),
+              vitalRow('Blood Sugar', bs != '--' ? '$bs $bsUnit$bsSuffix' : '--'),
               vitalRow('Temperature', temp != '--' ? '$temp $tempUnit' : '--'),
               vitalRow('Weight', weight != '--' ? '$weight $weightUnit' : '--'),
               pw.Padding(
@@ -505,6 +508,8 @@ class ReportService {
 
   static pw.Widget _buildTable(List<HealthReading> readings) {
     final hasNotes = readings.any((r) => r.note != null && r.note!.isNotEmpty);
+    // Blood sugar statuses depend on when the reading was taken, so show it
+    final hasContext = readings.any((r) => r.context != null);
 
     final headerStyle = pw.TextStyle(
       color: PdfColors.white,
@@ -519,6 +524,7 @@ class ReportService {
         );
 
     final headers = ['Date', 'Value', 'Unit', 'Status'];
+    if (hasContext) headers.add('Context');
     if (hasNotes) headers.add('Note');
 
     final columnWidths = <int, pw.TableColumnWidth>{
@@ -527,8 +533,11 @@ class ReportService {
       2: const pw.FlexColumnWidth(1.2),
       3: const pw.FlexColumnWidth(1.5),
     };
+    if (hasContext) {
+      columnWidths[columnWidths.length] = const pw.FlexColumnWidth(1.8);
+    }
     if (hasNotes) {
-      columnWidths[4] = const pw.FlexColumnWidth(2.5);
+      columnWidths[columnWidths.length] = const pw.FlexColumnWidth(2.5);
     }
 
     return pw.Table(
@@ -547,6 +556,12 @@ class ReportService {
               cell(_unitFor(r.metricType, fallback: r.unit), cellStyle),
               cell(r.status, cellStyle),
             ];
+            if (hasContext) {
+              cells.add(cell(
+                r.context == null ? '' : HealthMetrics.contextLabel(r.context!),
+                cellStyle,
+              ));
+            }
             if (hasNotes) {
               cells.add(cell(r.note ?? '', cellStyle));
             }

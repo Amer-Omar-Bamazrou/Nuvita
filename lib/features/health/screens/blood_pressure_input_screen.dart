@@ -5,10 +5,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
+import '../models/reading_entry.dart';
 import '../widgets/status_display.dart';
 
 class BloodPressureInputScreen extends StatefulWidget {
-  final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
+  final SaveReadings onSave;
 
   const BloodPressureInputScreen({super.key, required this.onSave});
 
@@ -109,11 +110,12 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
         _selectedTime.hour,
         _selectedTime.minute,
       );
-      await Future.wait([
-        widget.onSave(HealthMetric.systolic, _sys, when),
-        widget.onSave(HealthMetric.diastolic, _dia, when),
-        widget.onSave(HealthMetric.heartRate, 70, when),
-      ]);
+      final note = _contextIndex >= 0 ? _contextChips[_contextIndex] : null;
+      await widget.onSave([
+        ReadingEntry(metric: HealthMetric.systolic, value: _sys, note: note),
+        ReadingEntry(metric: HealthMetric.diastolic, value: _dia, note: note),
+        ReadingEntry(metric: HealthMetric.heartRate, value: 70, note: note),
+      ], when);
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {

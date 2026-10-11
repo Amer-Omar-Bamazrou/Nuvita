@@ -85,8 +85,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   // ── Display helpers ──
 
-  String _metricLabel(String metricType) => HealthMetrics.labelForKey(metricType);
-
   String _metricUnit(String metricType) => HealthMetrics.unitForKey(metricType);
 
   IconData _metricIcon(String metricType) {
@@ -334,7 +332,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       builder: (_) => _EditReadingSheet(
         reading: reading,
-        metricLabel: _metricLabel(reading.metricType),
+        metricLabel: reading.label,
         unit: _metricUnit(reading.metricType),
         validRange: _validRange(reading.metricType),
       ),
@@ -351,7 +349,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _saveEdit(
       HealthReading reading, double newValue, DateTime newTimestamp) async {
-    final newStatus = _statusForValue(reading.metricType, newValue);
+    final newStatus = _statusForValue(reading, newValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final provider = context.read<HealthHistoryProvider>();
 
@@ -400,8 +398,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _saveBPEdit(_DisplayItem item, double sysValue,
       double diaValue, DateTime newTimestamp) async {
-    final sysStatus = _statusForValue('systolic', sysValue);
-    final diaStatus = _statusForValue('diastolic', diaValue);
+    final sysStatus = _statusForValue(item.systolic, sysValue);
+    final diaStatus = _statusForValue(item.diastolic, diaValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final provider = context.read<HealthHistoryProvider>();
 
@@ -433,10 +431,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  String _statusForValue(String metricType, double value) {
-    final metric = HealthMetrics.metricForKey(metricType);
+  String _statusForValue(HealthReading reading, double value) {
+    final metric = reading.metric;
     if (metric == null) return 'Logged';
-    return HealthMetrics.statusLabel(HealthMetrics.evaluate(metric, value));
+    return HealthMetrics.statusLabel(
+        HealthMetrics.evaluate(metric, value, context: reading.context));
   }
 
   List<double> _validRange(String metricType) {
@@ -929,7 +928,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _metricLabel(reading.metricType),
+                      reading.label,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

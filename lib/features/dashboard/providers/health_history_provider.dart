@@ -66,8 +66,8 @@ class HealthHistoryProvider extends ChangeNotifier {
 
   // Adds a reading to the in-memory list for instant UI update.
   // Firestore persistence is handled separately by HealthProvider.saveReadingToFirebase.
-  void addReading(HealthMetric metric, double value) {
-    final status = HealthMetrics.evaluate(metric, value);
+  void addReading(HealthMetric metric, double value, {GlucoseContext? context}) {
+    final status = HealthMetrics.evaluate(metric, value, context: context);
     final reading = HealthReading(
       id: '',
       metricType: metric.name,
@@ -75,6 +75,7 @@ class HealthHistoryProvider extends ChangeNotifier {
       unit: HealthMetrics.of(metric).unit,
       status: HealthMetrics.statusLabel(status),
       timestamp: DateTime.now(),
+      context: context,
     );
     _readings.insert(0, reading); // insert at front to keep newest-first order
     notifyListeners();
@@ -128,6 +129,7 @@ class HealthHistoryProvider extends ChangeNotifier {
       status: newStatus,
       timestamp: newTimestamp ?? old.timestamp,
       note: old.note,
+      context: old.context,
     );
 
     if (newTimestamp != null) {

@@ -5,11 +5,12 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
+import '../models/reading_entry.dart';
 import '../widgets/status_display.dart';
 
 class AddReadingInputScreen extends StatefulWidget {
   final HealthMetric metric;
-  final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
+  final SaveReadings onSave;
 
   const AddReadingInputScreen({
     super.key,
@@ -29,14 +30,17 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
   bool _saving = false;
   int _contextIndex = -1;
 
+  // Blood sugar only. Before-meal matches the screen's old default tab.
+  GlucoseContext _glucoseContext = GlucoseContext.beforeMeal;
+
   MetricDefinition get _def => HealthMetrics.of(_metric);
+
+  GlucoseContext? get _readingContext => _isBloodSugar ? _glucoseContext : null;
 
   double get _step => _def.step;
 
   double get _initialValue {
     switch (_metric) {
-      case HealthMetric.bloodSugarBefore:
-      case HealthMetric.bloodSugarAfter:
       case HealthMetric.bloodSugar:
         return 100;
       case HealthMetric.systolic:
@@ -98,8 +102,6 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return Icons.scale_rounded;
       case HealthMetric.heartRate:
         return Icons.monitor_heart_rounded;
-      case HealthMetric.bloodSugarBefore:
-      case HealthMetric.bloodSugarAfter:
       case HealthMetric.bloodSugar:
         return Icons.water_drop_rounded;
       case HealthMetric.steps:
@@ -117,8 +119,6 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return const Color(0xFF388E3C);
       case HealthMetric.heartRate:
         return const Color(0xFFE64A19);
-      case HealthMetric.bloodSugarBefore:
-      case HealthMetric.bloodSugarAfter:
       case HealthMetric.bloodSugar:
         return const Color(0xFF1976D2);
       case HealthMetric.steps:
@@ -136,12 +136,17 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return 'BODY WEIGHT';
       case HealthMetric.heartRate:
         return 'HEART RATE';
-      case HealthMetric.bloodSugarBefore:
-        return 'FASTING BLOOD SUGAR';
-      case HealthMetric.bloodSugarAfter:
-        return 'POST-MEAL BLOOD SUGAR';
       case HealthMetric.bloodSugar:
-        return 'BLOOD SUGAR';
+        switch (_glucoseContext) {
+          case GlucoseContext.fasting:
+            return 'FASTING BLOOD SUGAR';
+          case GlucoseContext.beforeMeal:
+            return 'BEFORE-MEAL BLOOD SUGAR';
+          case GlucoseContext.afterMeal:
+            return 'POST-MEAL BLOOD SUGAR';
+          case GlucoseContext.random:
+            return 'RANDOM BLOOD SUGAR';
+        }
       case HealthMetric.steps:
         return 'WALKING MINUTES';
       default:
@@ -149,12 +154,13 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
     }
   }
 
-  (String label, Color color) get _status =>
-      statusDisplay(HealthMetrics.evaluate(_metric, _value));
+  (String label, Color color) get _status => statusDisplay(
+      HealthMetrics.evaluate(_metric, _value, context: _readingContext));
 
   String? get _rangeHint {
     if (_metric == HealthMetric.steps) return 'Aim for at least 30 minutes daily';
-    return normalRangeHint(_def, HealthMetrics.bandsFor(_metric));
+    return normalRangeHint(
+        _def, HealthMetrics.bandsFor(_metric, context: _readingContext));
   }
 
   List<String> get _contextChips {
@@ -163,10 +169,16 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return ['Resting', 'After exercise', 'After meal', 'Feeling unwell'];
       case HealthMetric.heartRate:
         return ['Resting', 'After exercise', 'After meal', 'Stressed'];
-      case HealthMetric.bloodSugarBefore:
-        return ['Just woke up', 'Before breakfast', 'Before lunch', 'Before dinner'];
-      case HealthMetric.bloodSugarAfter:
-        return ['After breakfast', 'After lunch', 'After dinner', 'After snack'];
+      case HealthMetric.bloodSugar:
+        switch (_glucoseContext) {
+          case GlucoseContext.fasting:
+          case GlucoseContext.beforeMeal:
+            return ['Just woke up', 'Before breakfast', 'Before lunch', 'Before dinner'];
+          case GlucoseContext.afterMeal:
+            return ['After breakfast', 'After lunch', 'After dinner', 'After snack'];
+          case GlucoseContext.random:
+            return [];
+        }
       case HealthMetric.steps:
         return ['Walking', 'Jogging', 'Errands', 'Exercise'];
       default:
@@ -174,9 +186,13 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
     }
   }
 
-  bool get _isBloodSugar =>
-      _metric == HealthMetric.bloodSugarBefore ||
-      _metric == HealthMetric.bloodSugarAfter;
+  bool get _isBloodSugar => _metric == HealthMetric.bloodSugar;
+
+  String? get _selectedChip {
+    final chips = _contextChips;
+    if (_contextIndex < 0 || _contextIndex >= chips.length) return null;
+    return chips[_contextIndex];
+  }
 
   // ── Pickers ─────────────────────────────────────────────────────
 
@@ -252,7 +268,14 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         _selectedTime.hour,
         _selectedTime.minute,
       );
-      await widget.onSave(_metric, _value, when);
+      await widget.onSave([
+        ReadingEntry(
+          metric: _metric,
+          value: _value,
+          context: _readingContext,
+          note: _selectedChip,
+        ),
+      ], when);
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
@@ -365,7 +388,6 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
   // ── Widgets ─────────────────────────────────────────────────────
 
   Widget _buildMealToggle() {
-    final isBefore = _metric == HealthMetric.bloodSugarBefore;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -373,24 +395,17 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        children: [
-          _mealTab('Before Meal', isBefore, () {
-            if (!isBefore) {
+        children: GlucoseContext.values.map((c) {
+          final selected = c == _glucoseContext;
+          return _mealTab(HealthMetrics.contextLabel(c), selected, () {
+            if (!selected) {
               setState(() {
-                _metric = HealthMetric.bloodSugarBefore;
+                _glucoseContext = c;
                 _contextIndex = -1;
               });
             }
-          }),
-          _mealTab('After Meal', !isBefore, () {
-            if (isBefore) {
-              setState(() {
-                _metric = HealthMetric.bloodSugarAfter;
-                _contextIndex = -1;
-              });
-            }
-          }),
-        ],
+          });
+        }).toList(),
       ),
     );
   }
@@ -400,7 +415,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
           decoration: BoxDecoration(
             color: selected ? AppColors.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
@@ -408,13 +423,18 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
                 ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.18), blurRadius: 8, offset: const Offset(0, 2))]
                 : null,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.secondary,
+          // Four segments share the row, so long labels shrink instead of wrapping
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppColors.secondary,
+              ),
             ),
           ),
         ),

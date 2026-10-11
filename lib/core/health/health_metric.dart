@@ -2,8 +2,6 @@
 // stored on each reading document in Firestore.
 enum HealthMetric {
   bloodSugar,
-  bloodSugarBefore,
-  bloodSugarAfter,
   systolic,
   diastolic,
   heartRate,
@@ -14,3 +12,7 @@ enum HealthMetric {
 
 // Status bands for a reading. Metrics without thresholds have no status.
 enum MetricStatus { normal, warning, criticalLow, criticalHigh }
+
+// When a blood sugar reading was taken, stored in the reading's `context`
+// field. The enum name is the stored value.
+enum GlucoseContext { fasting, beforeMeal, afterMeal, random }
