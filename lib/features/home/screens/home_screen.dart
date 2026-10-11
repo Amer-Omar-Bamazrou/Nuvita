@@ -26,6 +26,8 @@ import '../../health/screens/blood_pressure_input_screen.dart';
 import '../../appointments/screens/add_appointment_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/health/conditions.dart';
+import '../../disease/services/conditions_service.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
 
@@ -76,7 +78,7 @@ class _HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<_HomeBody> {
   bool _isLoading = true;
   String _userName = '';
-  String _diseaseType = 'other';
+  PatientConditions _conditions = PatientConditions.none;
   int _medScheduleCount = 0;
   List<DailyTask> _tasks = [];
   bool _isLoadingTasks = false;
@@ -104,6 +106,7 @@ class _HomeBodyState extends State<_HomeBody> {
     _listenForMedicationChanges();
     HomeScreen.refreshNotifier.addListener(_onRefreshRequested);
     CareServices.changes.addListener(_loadServices);
+    ConditionsService.changes.addListener(_loadUserProfile);
   }
 
   @override
@@ -111,6 +114,7 @@ class _HomeBodyState extends State<_HomeBody> {
     _medsSub?.cancel();
     HomeScreen.refreshNotifier.removeListener(_onRefreshRequested);
     CareServices.changes.removeListener(_loadServices);
+    ConditionsService.changes.removeListener(_loadUserProfile);
     super.dispose();
   }
 
@@ -182,7 +186,7 @@ class _HomeBodyState extends State<_HomeBody> {
           final firestoreName = profile?['name'] as String? ?? '';
           _userName =
               firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
-          _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+          _conditions = PatientConditions.fromProfile(profile);
         });
       }
       if (mounted) {
@@ -499,7 +503,7 @@ class _HomeBodyState extends State<_HomeBody> {
             context,
             MaterialPageRoute(
               builder: (_) => SuggestionsPanelScreen(
-                diseaseType: _diseaseType,
+                diseaseType: _conditions.legacyDiseaseType,
                 currentReadings: {
                   for (final m in HealthMetric.values)
                     m.name: context.read<HealthProvider>().getValue(m),
@@ -1548,20 +1552,32 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // Measurements offer the vital signs, Activities offers walking
+  // Measurements offer the vital signs, Activities offers walking. The
+  // patient's conditions decide the order, so e.g. Sugar leads for diabetes.
   List<Widget> _quickMeasurementChips(BuildContext sheetCtx) {
-    return [
-      if (_measurementsOn) ...[
-        _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar),
-        _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
-        _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
-        _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
-      ],
-      if (_activitiesOn)
-        _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes),
-      if (_measurementsOn)
-        _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
-    ];
+    final chips = <Widget>[];
+    for (final metric in _conditions.metricOrder) {
+      final walking = metric == HealthMetric.walkingMinutes;
+      if (walking ? !_activitiesOn : !_measurementsOn) continue;
+      switch (metric) {
+        case HealthMetric.bloodSugar:
+          chips.add(_buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar));
+        case HealthMetric.systolic:
+          // Systolic stands for the blood pressure screen
+          chips.add(_buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null));
+        case HealthMetric.diastolic:
+          break;
+        case HealthMetric.heartRate:
+          chips.add(_buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate));
+        case HealthMetric.weight:
+          chips.add(_buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight));
+        case HealthMetric.walkingMinutes:
+          chips.add(_buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes));
+        case HealthMetric.temperature:
+          chips.add(_buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature));
+      }
+    }
+    return chips;
   }
 
   void _navigateToMetric(HealthMetric? metric) async {

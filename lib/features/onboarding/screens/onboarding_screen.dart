@@ -7,6 +7,8 @@ import '../../../core/services/preferences_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../home/screens/main_shell.dart';
 import '../widgets/service_option_card.dart';
+import '../../../core/health/conditions.dart';
+import '../../disease/screens/disease_selection_screen.dart';
 
 // ─── Local data classes ───────────────────────────────────────────────────────
 
@@ -27,7 +29,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   // Steps: 0=welcome, 1=intro, 2=name(combined), 3=gender, 4=dob,
-  //        5=services, 6=account
+  //        5=conditions, 6=services, 7=account
   int _step = 0;
   bool _goingForward = true;
   bool _isSaving = false;
@@ -37,6 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _gender;
   DateTime? _dob;
   final Set<String> _selectedServices = {};
+  Set<Condition> _selectedConditions = {};
 
   static const _genderOptions = [
     _GenderOption(label: 'Male', icon: Icons.person_rounded),
@@ -74,7 +77,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _showError('Please select your date of birth');
       return false;
     }
-    if (_step == 5 && _selectedServices.isEmpty) {
+    if (_step == 5 && _selectedConditions.isEmpty) {
+      _showError('Please select at least one condition, or Other');
+      return false;
+    }
+    if (_step == 6 && _selectedServices.isEmpty) {
       _showError('Please select at least one service');
       return false;
     }
@@ -101,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_isSaving || !_validateCurrentStep()) return;
 
     // Persist onboarding data when leaving the services step
-    if (_step == 5) {
+    if (_step == 6) {
       setState(() => _isSaving = true);
       await PreferencesService.saveOnboardingData(
         firstName: _firstNameController.text.trim(),
@@ -109,6 +116,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         gender: _gender!,
         dob: _dob!,
         services: _selectedServices.toList(),
+        conditions: _selectedConditions.map((c) => c.id).toList(),
       );
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -176,6 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 gender: _gender!,
                 dob: _dob!,
                 services: [],
+                conditions: _selectedConditions.map((c) => c.id).toList(),
               );
               if (!mounted) return;
               setState(() {
@@ -238,7 +247,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           children: [
             // Progress header shown only on personal info steps (name through services)
-            if (_step >= 2 && _step <= 5) _buildStepHeader(),
+            if (_step >= 2 && _step <= 6) _buildStepHeader(),
             Expanded(child: _buildAnimatedStep()),
           ],
         ),
@@ -249,9 +258,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── Progress header ───────────────────────────────────────────────────────
 
   Widget _buildStepHeader() {
-    // step 2 → 1 dot filled, step 5 → 4 dots filled
+    // step 2 → 1 dot filled, step 6 → 5 dots filled
     final filledCount = _step - 1;
-    final showSkip = _step == 5;
+    final showSkip = _step == 6;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -282,7 +291,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (i) {
+              children: List.generate(5, (i) {
                 final filled = i < filledCount;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -362,8 +371,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       2 => _buildNameStep(),
       3 => _buildGenderStep(),
       4 => _buildDobStep(),
-      5 => _buildServicesStep(),
-      6 => _buildAccountStep(),
+      5 => _buildConditionsStep(),
+      6 => _buildServicesStep(),
+      7 => _buildAccountStep(),
       _ => const SizedBox.shrink(),
     };
   }
@@ -700,7 +710,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 5: Service Preferences ───────────────────────────────────────────
+  // ── Step 5: Conditions ────────────────────────────────────────────────────
+
+  Widget _buildConditionsStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('Your conditions', style: AppTextStyles.heading1),
+              SizedBox(height: 6),
+              Text(
+                'Select all that apply so we can show the right readings first',
+                style: AppTextStyles.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConditionSelector(
+              selected: _selectedConditions,
+              onChanged: (next) => setState(() => _selectedConditions = next),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: NuvitaButton(
+            label: 'Continue',
+            onPressed: _selectedConditions.isNotEmpty ? _goNext : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 6: Service Preferences ───────────────────────────────────────────
 
   Widget _buildServicesStep() {
     return Column(
@@ -751,7 +801,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 6: Secure Your Data ──────────────────────────────────────────────
+  // ── Step 7: Secure Your Data ──────────────────────────────────────────────
 
   Widget _buildAccountStep() {
     return Padding(

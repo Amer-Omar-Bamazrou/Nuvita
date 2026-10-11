@@ -7,6 +7,7 @@ class PreferencesService {
   static const _keyGender = 'onboarding_gender';
   static const _keyDob = 'onboarding_dob';
   static const _keyServices = 'onboarding_services';
+  static const _keyConditions = 'onboarding_conditions';
 
   static SharedPreferences? _prefs;
 
@@ -31,6 +32,7 @@ class PreferencesService {
     required String gender,
     required DateTime dob,
     required List<String> services,
+    List<String> conditions = const [],
   }) async {
     final prefs = await _getInstance();
     await prefs.setString(_keyFirstName, firstName);
@@ -38,6 +40,15 @@ class PreferencesService {
     await prefs.setString(_keyGender, gender);
     await prefs.setString(_keyDob, dob.toIso8601String());
     await prefs.setString(_keyServices, services.join(','));
+    await prefs.setString(_keyConditions, conditions.join(','));
+  }
+
+  // Condition ids picked during onboarding, written to the profile at sign-up
+  static Future<List<String>> getConditions() async {
+    final prefs = await _getInstance();
+    final raw = prefs.getString(_keyConditions);
+    if (raw == null || raw.isEmpty) return [];
+    return raw.split(',');
   }
 
   static Future<String?> getFirstName() async {
@@ -91,6 +102,7 @@ class PreferencesService {
       _keyGender,
       _keyDob,
       _keyServices,
+      _keyConditions,
     ]) {
       await prefs.remove(key);
     }

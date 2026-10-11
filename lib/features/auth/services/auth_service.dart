@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/conditions.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -67,14 +68,15 @@ class AuthService {
     required String gender,
     required String dobIso,
     List<String> services = const [],
+    PatientConditions conditions = PatientConditions.none,
   }) async {
     await _firestore.collection('users').doc(uid).set({
       'profile': {
         'name': '$firstName $lastName'.trim(),
         'gender': gender,
         'dob': dobIso,
-        'diseaseType': 'other',
         'services': services,
+        ...conditions.toProfileFields(),
       },
     }, SetOptions(merge: true));
   }

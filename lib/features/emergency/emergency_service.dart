@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/services/preferences_service.dart';
+import '../../core/health/conditions.dart';
 
 // SOS currently only records an alert that the care team sees in the doctor
 // portal. It does not call emergency services or the user's emergency
@@ -41,6 +42,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
   String? _uid;
   String _patientName = 'Unknown';
   String _diseaseType = 'other';
+  List<String> _conditions = [];
   String _patientId = '';
 
   @override
@@ -66,7 +68,10 @@ class _CountdownDialogState extends State<_CountdownDialog> {
             .get();
         final data = doc.data() ?? {};
         final profile = data['profile'] as Map<String, dynamic>?;
-        _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+        final conditions = PatientConditions.fromProfile(profile);
+        // diseaseType stays for the doctor's alert list; conditions add detail
+        _diseaseType = conditions.legacyDiseaseType;
+        _conditions = conditions.labels;
         _patientId = data['patientId'] as String? ?? '';
       } catch (e) {
         debugPrint('EmergencyService: profile fetch failed: $e');
@@ -89,6 +94,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         'patientName': _patientName,
         'patientId': _patientId,
         'diseaseType': _diseaseType,
+        'conditions': _conditions,
       });
       return true;
     } catch (e) {

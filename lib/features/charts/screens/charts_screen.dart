@@ -10,6 +10,7 @@ import '../../home/screens/main_shell.dart';
 import '../models/chart_data_point.dart';
 import '../services/chart_data_service.dart';
 import '../widgets/health_chart_widget.dart';
+import '../../../core/health/conditions.dart';
 
 // ─── Enums used only within this screen ───────────────────────────────────────
 
@@ -31,7 +32,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
   _ChartMetric _metric = _ChartMetric.heartRate;
   _TimeRange _range = _TimeRange.days7;
 
-  String _diseaseType = 'other';
+  PatientConditions _conditions = PatientConditions.none;
   bool _loadingDisease = true;
   bool _loadingChart = false;
 
@@ -82,13 +83,13 @@ class _ChartsScreenState extends State<ChartsScreen> {
           .doc(uid)
           .get();
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
-      final disease = profile?['diseaseType'] as String? ?? 'other';
+      final conditions = PatientConditions.fromProfile(profile);
 
       if (!mounted) return;
       setState(() {
-        _diseaseType = disease;
+        _conditions = conditions;
         if (widget.preselectedMetric == null) {
-          _metric = _defaultMetric(disease);
+          _metric = _chartMetricFor(conditions.defaultChartMetric);
         }
         _loadingDisease = false;
       });
@@ -100,26 +101,28 @@ class _ChartsScreenState extends State<ChartsScreen> {
     _loadChartData();
   }
 
-  _ChartMetric _defaultMetric(String disease) {
-    switch (disease) {
-      case 'diabetes':
+  static _ChartMetric _chartMetricFor(HealthMetric metric) {
+    switch (metric) {
+      case HealthMetric.bloodSugar:
         return _ChartMetric.bloodSugar;
-      case 'blood_pressure':
-        return _ChartMetric.systolic;
-      default:
+      case HealthMetric.heartRate:
         return _ChartMetric.heartRate;
+      default:
+        return _ChartMetric.systolic;
     }
   }
 
+  // All three charts, the condition's default first, then by relevance
   List<_ChartMetric> get _availableMetrics {
-    switch (_diseaseType) {
-      case 'blood_pressure':
-        return [_ChartMetric.systolic, _ChartMetric.heartRate];
-      case 'diabetes':
-        return [_ChartMetric.bloodSugar, _ChartMetric.systolic];
-      default:
-        return [_ChartMetric.heartRate, _ChartMetric.systolic, _ChartMetric.bloodSugar];
-    }
+    final ordered = <_ChartMetric>[
+      _chartMetricFor(_conditions.defaultChartMetric),
+      for (final m in _conditions.metricOrder)
+        if (m == HealthMetric.bloodSugar ||
+            m == HealthMetric.systolic ||
+            m == HealthMetric.heartRate)
+          _chartMetricFor(m),
+    ];
+    return ordered.toSet().toList();
   }
 
   // ── Chart data ────────────────────────────────────────────────────────────

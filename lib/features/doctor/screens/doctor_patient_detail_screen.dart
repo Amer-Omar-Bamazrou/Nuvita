@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/health/health_metrics.dart';
+import '../../../core/health/conditions.dart';
 import '../../health/models/health_reading.dart';
 import '../../medication/services/adherence.dart';
 import '../../medication/services/medication_service.dart';
@@ -195,26 +196,15 @@ class _DoctorPatientDetailScreenState
     }
   }
 
-  String get _patientDiseaseType {
-    final profile =
-        widget.patient['profile'] as Map<String, dynamic>? ?? {};
-    return profile['diseaseType'] as String? ?? 'other';
-  }
+  // Conditions list, or the old diseaseType for older profiles
+  PatientConditions get _conditions => PatientConditions.fromProfile(
+      widget.patient['profile'] as Map<String, dynamic>?);
 
   Future<void> _loadChart() async {
     setState(() => _loadingChart = true);
     try {
-      String metric;
-      switch (_patientDiseaseType) {
-        case 'diabetes':
-          metric = 'bloodSugar';
-          break;
-        case 'heart':
-          metric = 'heartRate';
-          break;
-        default:
-          metric = 'systolic';
-      }
+      // Systolic stands for the combined blood pressure chart
+      final metric = _conditions.defaultChartMetric.name;
 
       List<ChartDataPoint> points;
       List<ChartDataPoint> diaPoints = [];
@@ -488,7 +478,6 @@ class _DoctorPatientDetailScreenState
         widget.patient['profile'] as Map<String, dynamic>? ?? {};
     final patientId = widget.patient['patientId'] as String? ?? '—';
     final email = widget.patient['email'] as String? ?? '—';
-    final diseaseType = profile['diseaseType'] as String? ?? 'other';
     final gender = profile['gender'] as String? ?? '—';
     final dobRaw = profile['dob'] as String? ?? '';
     final dob = _formatDob(dobRaw);
@@ -498,13 +487,6 @@ class _DoctorPatientDetailScreenState
       final dt = createdAt.toDate();
       memberSince = '${dt.day}/${dt.month}/${dt.year}';
     }
-
-    final diseaseLabels = {
-      'diabetes': 'Diabetes',
-      'blood_pressure': 'Blood Pressure',
-      'heart': 'Heart Condition',
-      'other': 'General Monitoring',
-    };
 
     return _Card(
       child: Column(
@@ -516,8 +498,7 @@ class _DoctorPatientDetailScreenState
           _InfoRow('Email', email),
           _InfoRow('Gender', gender),
           _InfoRow('Date of Birth', dob),
-          _InfoRow('Condition',
-              diseaseLabels[diseaseType] ?? 'General Monitoring'),
+          _InfoRow('Conditions', _conditions.summary),
           _InfoRow('Member Since', memberSince),
         ],
       ),
@@ -544,13 +525,18 @@ class _DoctorPatientDetailScreenState
       latest.putIfAbsent(reading.metricType, () => reading);
     }
 
-    // Single-value metrics shown in clinical order
-    final singleMetrics = [
+    // Single-value metrics, the ones the patient's conditions are monitored
+    // with first. Blood sugar goes above the blood pressure card for diabetes.
+    const singles = {
       HealthMetric.bloodSugar,
       HealthMetric.weight,
       HealthMetric.temperature,
       HealthMetric.walkingMinutes,
-    ].map((m) {
+    };
+    final conditions = _conditions;
+    final singleMetrics = conditions.metricOrder
+        .where(singles.contains)
+        .map((m) {
       final def = HealthMetrics.of(m);
       // Blood sugar shows when the latest reading was taken, e.g. (Fasting)
       final label = latest[def.key]?.label ?? def.label;
@@ -560,10 +546,8 @@ class _DoctorPatientDetailScreenState
     String getVal(String key) => latest[key]?.value.toString() ?? '—';
     String getStatus(String key) => latest[key]?.status ?? '—';
 
-    return Column(
-      children: [
-        // ── Blood Pressure combined card ──────────────────────────────────
-        Padding(
+    // ── Blood Pressure combined card ────────────────────────────────────
+    final bpCard = Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _Card(
             child: Column(
@@ -590,10 +574,10 @@ class _DoctorPatientDetailScreenState
               ],
             ),
           ),
-        ),
+        );
 
-        // ── Remaining single-value cards ──────────────────────────────────
-        ...singleMetrics.map((m) {
+    // ── Single-value cards ───────────────────────────────────────────────
+    Widget singleCard(_MetricDef m) {
           final value = getVal(m.metricType);
           final status = getStatus(m.metricType);
           return Padding(
@@ -638,7 +622,15 @@ class _DoctorPatientDetailScreenState
               ),
             ),
           );
-        }),
+    }
+
+    // Diabetes puts blood sugar first; otherwise blood pressure leads
+    final sugarFirst = conditions.isDiabetic;
+    return Column(
+      children: [
+        if (sugarFirst) singleCard(singleMetrics.first),
+        bpCard,
+        ...singleMetrics.skip(sugarFirst ? 1 : 0).map(singleCard),
       ],
     );
   }

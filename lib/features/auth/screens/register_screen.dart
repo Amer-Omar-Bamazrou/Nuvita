@@ -6,6 +6,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../services/auth_service.dart';
+import '../../../core/health/conditions.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../home/screens/main_shell.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
@@ -60,6 +61,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final gender    = await PreferencesService.getGender()    ?? '';
         final dob       = await PreferencesService.getDateOfBirth();
         final services  = await PreferencesService.getSelectedServices();
+        final conditionIds = await PreferencesService.getConditions();
         await _authService.saveOnboardingProfile(
           uid: uid,
           firstName: firstName,
@@ -67,6 +69,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           gender: gender,
           dobIso: dob?.toIso8601String() ?? '',
           services: services,
+          conditions: PatientConditions(conditionIds
+              .map(Condition.fromId)
+              .whereType<Condition>()
+              .toSet()),
         );
       }
 

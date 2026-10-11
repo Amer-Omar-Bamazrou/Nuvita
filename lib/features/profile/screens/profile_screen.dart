@@ -14,6 +14,7 @@ import '../../dashboard/providers/health_history_provider.dart';
 import '../../emergency/screens/emergency_contacts_screen.dart';
 import '../services/account_service.dart';
 import 'my_services_screen.dart';
+import '../../disease/screens/disease_selection_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -658,6 +659,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'View Profile',
                     subtitle: 'Name, gender, date of birth',
                     onTap: _showPersonalInfoSheet,
+                  ),
+                  _divider(),
+                  _tile(
+                    leading: Icons.monitor_heart_outlined,
+                    title: 'My Conditions',
+                    subtitle: 'Diabetes, hypertension, heart disease…',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const DiseaseSelectionScreen()),
+                    ),
                   ),
                   _divider(),
                   _tile(

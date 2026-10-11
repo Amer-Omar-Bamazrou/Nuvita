@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/doctor_service.dart';
 import 'doctor_patient_detail_screen.dart';
+import '../../../core/health/conditions.dart';
 
 class DoctorPatientsScreen extends StatefulWidget {
   final void Function(Map<String, dynamic> patient) onSelectPatient;
@@ -28,17 +29,32 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   static const _diseaseOptions = [
     'All',
     'diabetes',
-    'blood_pressure',
+    'hypertension',
     'heart',
     'other',
   ];
 
   static const _diseaseLabels = {
     'diabetes': 'Diabetes',
-    'blood_pressure': 'Blood Pressure',
-    'heart': 'Heart',
-    'other': 'General',
+    'hypertension': 'Hypertension',
+    'heart': 'Heart disease',
+    'other': 'Other / general',
   };
+
+  static bool _matchesCondition(PatientConditions c, String filter) {
+    switch (filter) {
+      case 'diabetes':
+        return c.isDiabetic;
+      case 'hypertension':
+        return c.hasHypertension;
+      case 'heart':
+        return c.hasHeartDisease;
+      case 'other':
+        return c.isEmpty || c.conditions.contains(Condition.other);
+      default:
+        return true;
+    }
+  }
 
   @override
   void initState() {
@@ -130,11 +146,10 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
       _filtered = _allPatients.where((p) {
         final name = _patientName(p).toLowerCase();
         final id = (p['patientId'] as String? ?? '').toLowerCase();
-        final disease = _patientDisease(p);
         final matchesSearch =
             query.isEmpty || name.contains(query) || id.contains(query);
         final matchesDisease =
-            _diseaseFilter == 'All' || disease == _diseaseFilter;
+            _matchesCondition(_patientConditions(p), _diseaseFilter);
         return matchesSearch && matchesDisease;
       }).toList();
     });
@@ -146,8 +161,10 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
         'Unknown';
   }
 
-  String _patientDisease(Map<String, dynamic> p) {
-    return (p['profile'] as Map?)?['diseaseType'] as String? ?? 'other';
+  // Reads the conditions list, falling back to the old diseaseType field
+  PatientConditions _patientConditions(Map<String, dynamic> p) {
+    return PatientConditions.fromProfile(
+        p['profile'] as Map<String, dynamic>?);
   }
 
   @override
@@ -266,8 +283,9 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   Widget _buildPatientCard(Map<String, dynamic> patient) {
     final name = _patientName(patient);
     final patientId = patient['patientId'] as String? ?? '—';
-    final disease = _patientDisease(patient);
-    final diseaseLabel = _diseaseLabels[disease] ?? 'General';
+    final conditions = _patientConditions(patient);
+    final conditionLabels =
+        conditions.isEmpty ? ['General'] : conditions.labels;
 
     return InkWell(
       onTap: () {
@@ -371,22 +389,29 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            // Disease type chip
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE0F0F0),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                diseaseLabel,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF004346),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+            // One chip per condition
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final label in conditionLabels)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F0F0),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF004346),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
