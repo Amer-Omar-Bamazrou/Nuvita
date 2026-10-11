@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/preferences_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/care_services.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/home/screens/main_shell.dart';
@@ -19,6 +20,7 @@ import 'features/appointments/screens/appointment_detail_screen.dart';
 import 'features/medication/services/medication_service.dart';
 import 'features/medication/screens/medication_detail_screen.dart';
 import 'features/notifications/screens/suggestions_panel_screen.dart';
+import 'features/profile/services/account_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -56,8 +58,10 @@ void main() async {
             .doc(user.uid)
             .get();
         if (doc.data()?['active'] == false) {
-          await FirebaseAuth.instance.signOut();
+          await AccountService.signOut();
           deactivated = true;
+        } else {
+          await CareServices.restoreFromUserDoc(doc.data());
         }
       } catch (e) {
         debugPrint('main: active-status check failed: $e');
@@ -95,6 +99,22 @@ void main() async {
     );
   });
 
+  NotificationService.setAppointmentRescheduleHandler((appointmentId) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final apt = await AppointmentService.getAppointmentById(appointmentId);
+    if (apt == null) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AppointmentDetailScreen(
+          appointment: apt,
+          openReschedule: true,
+        ),
+      ),
+    );
+  });
+
   NotificationService.setMedicationDetailHandler((medicationId) async {
     await Future.delayed(const Duration(milliseconds: 500));
     final med = await MedicationService.getById(medicationId);
@@ -124,6 +144,11 @@ void main() async {
 
   // Show UI immediately
   runApp(NuvitaApp(home: home));
+
+  // A notification tap that launched the app from closed
+  if (!kIsWeb && loggedInUid != null) {
+    NotificationService.handleLaunchFromNotification();
+  }
 
   // Defer non-critical work to after first frame
   if (scheduleWellness) {

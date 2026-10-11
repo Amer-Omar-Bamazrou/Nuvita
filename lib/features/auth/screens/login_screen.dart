@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,11 @@ import '../../home/screens/main_shell.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import 'register_screen.dart';
 import 'forgot_password_sent_screen.dart';
+import '../../profile/services/account_service.dart';
+import '../../../core/services/care_services.dart';
+import '../../../core/services/notification_service.dart';
+import '../../medication/services/medication_service.dart';
+import '../../appointments/services/appointment_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -65,16 +71,21 @@ class _LoginScreenState extends State<LoginScreen> {
               .doc(uid)
               .get();
           if (doc.data()?['active'] == false) {
-            await FirebaseAuth.instance.signOut();
+            await AccountService.signOut();
             if (!mounted) return;
             setState(() => _isLoading = false);
             _showDeactivatedDialog();
             return;
           }
+          // The local copy was cleared at sign-out; bring this account's
+          // services back so Home and reminders match them
+          await CareServices.restoreFromUserDoc(doc.data());
         } catch (e) {
           debugPrint('LoginScreen: active-status check failed: $e');
         }
       }
+
+      if (uid != null) unawaited(_restoreLocalData(uid));
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -92,6 +103,18 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = 'Something went wrong. Please try again';
         _isLoading = false;
       });
+    }
+  }
+
+  // Sign-out removed this device's copy of the user's medications,
+  // appointments and reminders. Pull them back and schedule the reminders.
+  Future<void> _restoreLocalData(String uid) async {
+    try {
+      await MedicationService.syncFromFirebase(uid);
+      await AppointmentService.syncFromFirebase(uid);
+      await NotificationService.rescheduleAll();
+    } catch (e) {
+      debugPrint('LoginScreen: restoring local data failed: $e');
     }
   }
 
@@ -121,13 +144,18 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // Registration uses the onboarding answers saved on this device. After a
+  // sign-out those are cleared, so a new person goes through onboarding again
+  // instead of registering with someone else's (or no) details.
   Future<void> _navigateToRegister() async {
     final onboardingDone = await PreferencesService.isOnboardingComplete();
+    final hasDetails = await PreferencesService.hasOnboardingDetails();
     if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            onboardingDone ? const RegisterScreen() : const OnboardingScreen(),
+        builder: (_) => onboardingDone && hasDetails
+            ? const RegisterScreen()
+            : const OnboardingScreen(),
       ),
     );
   }

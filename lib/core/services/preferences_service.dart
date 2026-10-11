@@ -7,6 +7,7 @@ class PreferencesService {
   static const _keyGender = 'onboarding_gender';
   static const _keyDob = 'onboarding_dob';
   static const _keyServices = 'onboarding_services';
+  static const _keyConditions = 'onboarding_conditions';
 
   static SharedPreferences? _prefs;
 
@@ -31,6 +32,7 @@ class PreferencesService {
     required String gender,
     required DateTime dob,
     required List<String> services,
+    List<String> conditions = const [],
   }) async {
     final prefs = await _getInstance();
     await prefs.setString(_keyFirstName, firstName);
@@ -38,6 +40,15 @@ class PreferencesService {
     await prefs.setString(_keyGender, gender);
     await prefs.setString(_keyDob, dob.toIso8601String());
     await prefs.setString(_keyServices, services.join(','));
+    await prefs.setString(_keyConditions, conditions.join(','));
+  }
+
+  // Condition ids picked during onboarding, written to the profile at sign-up
+  static Future<List<String>> getConditions() async {
+    final prefs = await _getInstance();
+    final raw = prefs.getString(_keyConditions);
+    if (raw == null || raw.isEmpty) return [];
+    return raw.split(',');
   }
 
   static Future<String?> getFirstName() async {
@@ -62,11 +73,39 @@ class PreferencesService {
     return DateTime.tryParse(raw);
   }
 
+  static Future<void> saveSelectedServices(List<String> services) async {
+    final prefs = await _getInstance();
+    await prefs.setString(_keyServices, services.join(','));
+  }
+
   static Future<List<String>> getSelectedServices() async {
     final prefs = await _getInstance();
     final raw = prefs.getString(_keyServices);
     if (raw == null || raw.isEmpty) return [];
     return raw.split(',');
+  }
+
+  // True when this device holds name/gender/DOB from an onboarding run that
+  // hasn't been cleared by a sign-out
+  static Future<bool> hasOnboardingDetails() async {
+    final prefs = await _getInstance();
+    return (prefs.getString(_keyFirstName) ?? '').isNotEmpty;
+  }
+
+  // Removes the onboarding answers (they belong to one person) but keeps the
+  // onboarding-complete flag
+  static Future<void> clearOnboardingDetails() async {
+    final prefs = await _getInstance();
+    for (final key in [
+      _keyFirstName,
+      _keyLastName,
+      _keyGender,
+      _keyDob,
+      _keyServices,
+      _keyConditions,
+    ]) {
+      await prefs.remove(key);
+    }
   }
 
   static Future<void> clearAll() async {

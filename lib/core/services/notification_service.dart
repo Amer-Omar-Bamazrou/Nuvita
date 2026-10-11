@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_10y.dart' as tz_data;
 import 'package:firebase_core/firebase_core.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../firebase_options.dart';
 import '../../features/medication/models/medication_model.dart';
 import '../../features/medication/services/medication_service.dart';
+import '../../features/medication/services/dose_service.dart';
 import '../../features/appointments/services/appointment_service.dart';
+import 'care_services.dart';
+import 'reminder_time.dart';
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static GlobalKey<NavigatorState>? _navigatorKey;
+
+  // The device's zone. When it can't be resolved this is a fixed-offset
+  // stand-in and _zoneResolved is false.
+  static tz.Location _zone = tz.UTC;
+  static bool _zoneResolved = false;
 
   // ── Channels ──────────────────────────────────────────────────────────────
 
@@ -57,12 +65,19 @@ class NotificationService {
   // ── Tap handlers (set from main.dart to avoid circular imports) ───────────
 
   static Future<void> Function(String appointmentId)? _appointmentTapHandler;
+  static Future<void> Function(String appointmentId)?
+      _appointmentRescheduleHandler;
   static VoidCallback? _suggestionsPanelHandler;
   static Future<void> Function(String medicationId)? _medicationDetailHandler;
 
   static void setAppointmentTapHandler(
       Future<void> Function(String appointmentId) handler) {
     _appointmentTapHandler = handler;
+  }
+
+  static void setAppointmentRescheduleHandler(
+      Future<void> Function(String appointmentId) handler) {
+    _appointmentRescheduleHandler = handler;
   }
 
   static void setSuggestionsPanelHandler(VoidCallback handler) {
@@ -79,7 +94,7 @@ class NotificationService {
   static Future<void> initialize({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (_initialized) return;
     _navigatorKey = navigatorKey;
-    tz_data.initializeTimeZones();
+    await _configureLocalTimeZone();
 
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -90,6 +105,46 @@ class NotificationService {
       onDidReceiveBackgroundNotificationResponse: _onBackgroundAction,
     );
     _initialized = true;
+  }
+
+  // Points tz.local at the device's zone so repeating reminders are scheduled
+  // in local time and keep their wall-clock time across daylight-saving
+  // changes. Every isolate that schedules notifications must call this.
+  static Future<void> _configureLocalTimeZone() async {
+    tz_data.initializeTimeZones();
+    try {
+      final info = await FlutterTimezone.getLocalTimezone();
+      _zone = tz.getLocation(info.identifier);
+      tz.setLocalLocation(_zone);
+      _zoneResolved = true;
+    } catch (e) {
+      debugPrint('NotificationService: device timezone unavailable: $e');
+      _zone = fixedOffsetLocation(DateTime.now().timeZoneOffset);
+      _zoneResolved = false;
+    }
+  }
+
+  // The fixed-offset stand-in has no name Android recognises, so in that
+  // case hand the plugin the same instant in UTC (the old behaviour).
+  static tz.TZDateTime _forPlugin(tz.TZDateTime time) =>
+      _zoneResolved ? time : tz.TZDateTime.from(time, tz.UTC);
+
+  // A one-off local DateTime as a zoned time for the plugin
+  static tz.TZDateTime _at(DateTime local) =>
+      _forPlugin(tz.TZDateTime.from(local, _zone));
+
+  // When a notification (or one of its buttons) started the app from closed,
+  // the tap isn't delivered to the callback; route it once the UI is up.
+  static Future<void> handleLaunchFromNotification() async {
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      final response = details?.notificationResponse;
+      if (details?.didNotificationLaunchApp == true && response != null) {
+        _onNotificationTap(response);
+      }
+    } catch (e) {
+      debugPrint('NotificationService: launch details failed: $e');
+    }
   }
 
   static Future<void> requestPermissions() async {
@@ -106,15 +161,18 @@ class NotificationService {
     final payload = response.payload;
     if (payload == null) return;
 
-    // Reschedule action opens app to appointment detail
+    // Reschedule action opens the appointment's edit form
     if (response.actionId == 'appt_reschedule') {
       final apptId = payload.replaceFirst('appt:', '');
-      _appointmentTapHandler?.call(apptId);
+      (_appointmentRescheduleHandler ?? _appointmentTapHandler)?.call(apptId);
       return;
     }
 
     if (payload.startsWith('med:')) {
-      _handleMedicationTap(payload.split(':')[1]);
+      final parts = payload.split(':');
+      // med:{medId}:{HH}:{mm} — the slot itself contains a colon
+      final slot = parts.length >= 4 ? '${parts[2]}:${parts[3]}' : null;
+      _handleMedicationTap(parts[1], slot);
     } else if (payload.startsWith('appt:') || payload.startsWith('tomorrow:')) {
       _appointmentTapHandler?.call(payload.split(':')[1]);
     } else if (payload.startsWith('missed:')) {
@@ -129,7 +187,8 @@ class NotificationService {
     }
   }
 
-  static Future<void> _handleMedicationTap(String medicationId) async {
+  static Future<void> _handleMedicationTap(
+      String medicationId, String? timeSlot) async {
     await Future.delayed(const Duration(milliseconds: 500));
 
     if (_navigatorKey?.currentContext == null) return;
@@ -159,7 +218,10 @@ class NotificationService {
     );
 
     if (confirmed == true) {
-      await MedicationService.takeMedication(medicationId);
+      final slot = timeSlot ?? await DoseService.nextUntakenSlot(med);
+      if (slot != null) {
+        await DoseService.markTaken(medicationId: medicationId, timeSlot: slot);
+      }
       final ctx = _navigatorKey?.currentContext;
       if (ctx != null && ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
@@ -182,7 +244,8 @@ class NotificationService {
       debugPrint('NotificationService: Firebase init failed: $e');
     }
 
-    tz_data.initializeTimeZones();
+    // Background isolates start without the zone set up
+    await _configureLocalTimeZone();
 
     // Plugin needs init in background isolate to schedule/show notifications
     const settings = InitializationSettings(
@@ -199,6 +262,9 @@ class NotificationService {
       case 'med_snooze':
         await _bgMedSnooze(payload);
         break;
+      case 'med_undo':
+        await _bgMedUndo(payload);
+        break;
       case 'supply_refilled':
         await _bgSupplyRefilled(payload);
         break;
@@ -211,41 +277,37 @@ class NotificationService {
     }
   }
 
-  // payload: med:{medId}:{time}
+  // payload: med:{medId}:{HH}:{mm}
   static Future<void> _bgMedTaken(String payload) async {
     final parts = payload.split(':');
-    if (parts.length < 3) return;
+    if (parts.length < 4) return;
     final medId = parts[1];
-    final time = parts[2];
+    final time = '${parts[2]}:${parts[3]}';
+    final date = DoseService.dateKey(DateTime.now());
 
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final prefKey = 'taken_${medId}_${time}_$todayStr';
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefKey, 'true');
-
-    final updated = await MedicationService.takeMedication(medId);
+    final updated = await DoseService.markTaken(medicationId: medId, timeSlot: time);
     if (updated == null) return;
 
-    // Save adherence to Firestore
-    MedicationService.saveDoseToFirebase(
-      medicationId: medId,
-      medicationName: updated.name,
-      dosage: updated.dosage,
-      timeSlot: time,
-      date: todayStr,
+    // Follow-up confirmation with a way to take it back
+    await _showFollowUp(
+      '${updated.name} marked as taken ✅',
+      payload: 'taken:$medId:$time:$date',
+      actions: _takenFollowUpActions,
     );
+  }
 
-    // Check low supply
-    if (MedicationService.checkLowSupply(updated) && !updated.lowSupplyNotified) {
-      await scheduleLowSupplyAlert(updated.id, updated.name, updated.pillsRemaining!);
-      await MedicationService.update(updated.copyWith(lowSupplyNotified: true));
-    }
-
-    // Follow-up confirmation
-    await _showFollowUp('${updated.name} marked as taken ✅');
+  // payload: taken:{medId}:{HH}:{mm}:{yyyy-MM-dd}
+  static Future<void> _bgMedUndo(String payload) async {
+    final parts = payload.split(':');
+    if (parts.length < 5) return;
+    final day = DateTime.tryParse(parts[4]);
+    final med = await DoseService.undo(
+      medicationId: parts[1],
+      timeSlot: '${parts[2]}:${parts[3]}',
+      day: day,
+    );
+    if (med == null) return;
+    await _showFollowUp('${med.name} dose undone');
   }
 
   // payload: med:{medId}:{time}
@@ -274,7 +336,7 @@ class NotificationService {
       _snoozedMedNotificationId(medId),
       'Medication Reminder',
       'Time to take ${med.name}\n${med.dosage} — Take ${med.pillsPerDose} pill${med.pillsPerDose > 1 ? 's' : ''}',
-      tz.TZDateTime.from(snoozeTime.toUtc(), tz.UTC),
+      _at(snoozeTime),
       NotificationDetails(android: androidDetails),
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -326,7 +388,7 @@ class NotificationService {
       _lowSupplyNotificationId(medId),
       'Low Pill Supply',
       '${med.name} is running low.\n${med.pillsRemaining ?? 0} pills remaining.',
-      tz.TZDateTime.from(remindTime.toUtc(), tz.UTC),
+      _at(remindTime),
       NotificationDetails(android: androidDetails),
       payload: 'supply:$medId',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -352,7 +414,11 @@ class NotificationService {
     await _showFollowUp('Appointment confirmed — See you at $hour:$minute ✅');
   }
 
-  static Future<void> _showFollowUp(String message) async {
+  static Future<void> _showFollowUp(
+    String message, {
+    String? payload,
+    List<AndroidNotificationAction>? actions,
+  }) async {
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -360,6 +426,7 @@ class NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       icon: '@mipmap/ic_launcher',
+      actions: actions,
     );
 
     await _plugin.show(
@@ -367,6 +434,7 @@ class NotificationService {
       'Nuvita',
       message,
       NotificationDetails(android: androidDetails),
+      payload: payload,
     );
   }
 
@@ -381,6 +449,14 @@ class NotificationService {
     AndroidNotificationAction(
       'med_snooze',
       '⏰ Snooze',
+      showsUserInterface: false,
+    ),
+  ];
+
+  static const _takenFollowUpActions = <AndroidNotificationAction>[
+    AndroidNotificationAction(
+      'med_undo',
+      '↩ Undo',
       showsUserInterface: false,
     ),
   ];
@@ -420,6 +496,8 @@ class NotificationService {
     List<String> times, {
     int pillsPerDose = 1,
   }) async {
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -468,6 +546,8 @@ class NotificationService {
 
   static Future<void> scheduleLowSupplyAlert(
       String id, String name, int remaining) async {
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _lowSupplyChannelId,
       _lowSupplyChannelName,
@@ -502,6 +582,7 @@ class NotificationService {
     required DateTime appointmentDateTime,
   }) async {
     if (scheduledDate.isBefore(DateTime.now())) return;
+    if (!await CareServices.isEnabled(CareServices.appointments)) return;
 
     final hour = appointmentDateTime.hour.toString().padLeft(2, '0');
     final minute = appointmentDateTime.minute.toString().padLeft(2, '0');
@@ -520,7 +601,7 @@ class NotificationService {
       _appointmentNotificationId(id),
       'Appointment Reminder',
       'Dr. $doctorName — $speciality\nAppointment at $hour:$minute',
-      tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC),
+      _at(scheduledDate),
       NotificationDetails(android: androidDetails),
       payload: 'appt:$id',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -612,6 +693,13 @@ class NotificationService {
   // ── 11. Weekly health summary ─────────────────────────────────────────────
 
   static Future<void> scheduleWeeklyHealthSummary() async {
+    // The summary is about readings and adherence
+    final services = await CareServices.load();
+    if (!services.contains(CareServices.measurements) &&
+        !services.contains(CareServices.medications)) {
+      return;
+    }
+
     final androidDetails = AndroidNotificationDetails(
       _weeklySummaryChannelId,
       _weeklySummaryChannelName,
@@ -718,6 +806,7 @@ class NotificationService {
 
     // Skip if appointment is today (main reminder handles it)
     if (!apptDate.isAfter(today)) return;
+    if (!await CareServices.isEnabled(CareServices.appointments)) return;
 
     final reminderDate = DateTime(
       apptDate.year,
@@ -745,7 +834,7 @@ class NotificationService {
       _appointmentTomorrowNotificationId(id),
       'Appointment Tomorrow',
       'Reminder: Dr. $doctorName — $speciality\ntomorrow at $hour:$minute',
-      tz.TZDateTime.from(reminderDate.toUtc(), tz.UTC),
+      _at(reminderDate),
       NotificationDetails(android: androidDetails),
       payload: 'tomorrow:$id',
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -760,7 +849,10 @@ class NotificationService {
 
   // ── Daily wellness reminder ───────────────────────────────────────────────
 
+  // The daily "stay on track" nudge is what the Activities service offers
   static Future<void> scheduleDailyWellnessReminder() async {
+    if (!await CareServices.isEnabled(CareServices.activities)) return;
+
     final androidDetails = AndroidNotificationDetails(
       _wellnessChannelId,
       _wellnessChannelName,
@@ -792,6 +884,7 @@ class NotificationService {
 
   static Future<void> scheduleMedicationReminder(MedicationModel med) async {
     if (!med.isActive) return;
+    if (!await CareServices.isEnabled(CareServices.medications)) return;
 
     final androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -833,6 +926,41 @@ class NotificationService {
     await _plugin.cancelAll();
   }
 
+  // Cancels and re-creates every reminder from the stored medications and
+  // appointments. Used when the chosen services change and after sign-in
+  // (sign-out cancels everything). Each schedule call checks its service.
+  static Future<void> rescheduleAll() async {
+    await initialize();
+
+    final meds = await MedicationService.loadAll();
+    for (final med in meds) {
+      await cancelMedicationReminder(med.id, med.times.length);
+      await cancelDailyMedicationReminders(med.id, med.times);
+      if (!med.isActive) continue;
+      await scheduleMedicationReminder(med);
+      if (med.reminderEnabled) {
+        await scheduleDailyMedicationReminder(
+          med.id,
+          med.name,
+          med.dosage,
+          med.times,
+          pillsPerDose: med.pillsPerDose,
+        );
+      }
+    }
+
+    final appointments = await AppointmentService.getUpcomingAppointments();
+    for (final appt in appointments) {
+      await AppointmentService.cancelReminder(appt.id);
+      if (!appt.isCompleted) await AppointmentService.scheduleReminder(appt);
+    }
+
+    await cancelWellnessReminder();
+    await scheduleDailyWellnessReminder();
+    await cancelWeeklyHealthSummary();
+    await scheduleWeeklyHealthSummary();
+  }
+
   // ── Legacy one-time notification (kept for non-appointment callers) ───────
 
   static Future<void> scheduleNotification({
@@ -858,7 +986,7 @@ class NotificationService {
       id.hashCode.abs() % 999990,
       title,
       body,
-      tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC),
+      _at(scheduledDate),
       details,
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -873,26 +1001,12 @@ class NotificationService {
 
   // ── Time helpers ──────────────────────────────────────────────────────────
 
-  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
-    final now = DateTime.now();
-    var local = DateTime(now.year, now.month, now.day, hour, minute);
-    if (local.isBefore(now)) {
-      local = local.add(const Duration(days: 1));
-    }
-    return tz.TZDateTime.from(local.toUtc(), tz.UTC);
-  }
+  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) =>
+      _forPlugin(nextInstanceOfTime(_zone, hour, minute));
 
   static tz.TZDateTime _nextInstanceOfDayAndTime(
-      int weekday, int hour, int minute) {
-    final now = DateTime.now();
-    var local = DateTime(now.year, now.month, now.day, hour, minute);
-
-    // Advance to the next matching weekday
-    while (local.weekday != weekday || local.isBefore(now)) {
-      local = local.add(const Duration(days: 1));
-    }
-    return tz.TZDateTime.from(local.toUtc(), tz.UTC);
-  }
+          int weekday, int hour, int minute) =>
+      _forPlugin(nextInstanceOfDayAndTime(_zone, weekday, hour, minute));
 
   // ── ID helpers ────────────────────────────────────────────────────────────
 

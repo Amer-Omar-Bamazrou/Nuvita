@@ -1,13 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
 
 class HealthReading {
   final String id;
-  final String metricType; // matches HealthMetric.name — e.g. 'bloodSugar'
+  final String metricType; // HealthMetric.name; legacy keys are mapped on read
   final double value;
   final String unit;
   final String status; // 'Normal', 'Warning', 'Low', 'High', 'Logged'
   final DateTime timestamp;
   final String? note;
+  final GlucoseContext? context; // blood sugar only
 
   const HealthReading({
     required this.id,
@@ -17,7 +19,17 @@ class HealthReading {
     required this.status,
     required this.timestamp,
     this.note,
+    this.context,
   });
+
+  HealthMetric? get metric => HealthMetrics.metricForKey(metricType);
+
+  // e.g. "Blood Sugar (Fasting)"; unknown metrics fall back to the raw key
+  String get label {
+    final m = metric;
+    if (m == null) return metricType;
+    return HealthMetrics.readingLabel(m, context: context);
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -27,6 +39,7 @@ class HealthReading {
       'status': status,
       'timestamp': Timestamp.fromDate(timestamp),
       if (note != null) 'note': note,
+      if (context != null) 'context': context!.name,
     };
   }
 
@@ -39,17 +52,21 @@ class HealthReading {
             : DateTime.now();
 
     // Support old documents that stored the field as 'metric' instead of 'metricType'
-    final metricType =
+    final rawKey =
         map['metricType'] as String? ?? map['metric'] as String? ?? '';
+    // Legacy keys such as bloodSugarBefore become bloodSugar plus a context
+    final metric = HealthMetrics.metricForKey(rawKey);
 
     return HealthReading(
       id: id,
-      metricType: metricType,
+      metricType: metric?.name ?? rawKey,
       value: (map['value'] as num).toDouble(),
       unit: map['unit'] as String? ?? '',
       status: _normalizeStatus(map['status'] as String?),
       timestamp: dt,
       note: map['note'] as String?,
+      context: HealthMetrics.contextFromName(map['context'] as String?) ??
+          HealthMetrics.legacyContextForKey(rawKey),
     );
   }
 

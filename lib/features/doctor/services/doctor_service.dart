@@ -29,6 +29,15 @@ class DoctorService {
         .toList();
   }
 
+  // The full patient record (same shape as getAllPatients), or null when the
+  // user document doesn't exist
+  Future<Map<String, dynamic>?> getPatient(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    final data = doc.data();
+    if (data == null) return null;
+    return {'uid': doc.id, ...data};
+  }
+
   // Last 10 readings for a patient, newest first
   Future<List<Map<String, dynamic>>> getPatientReadings(String uid) async {
     final snap = await _db
@@ -39,6 +48,20 @@ class DoctorService {
         .limit(10)
         .get();
     return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+  }
+
+  // Same as getPatientReadings, kept live so the patient detail updates when
+  // a reading is added, edited or deleted
+  Stream<List<Map<String, dynamic>>> watchPatientReadings(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('readings')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 
   // All active medications for a patient

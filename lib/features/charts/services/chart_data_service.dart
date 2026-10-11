@@ -1,7 +1,8 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
+import '../../health/models/health_reading.dart';
 import '../models/chart_data_point.dart';
-import '../models/metric_thresholds.dart';
 
 class ChartDataService {
   ChartDataService._();
@@ -11,6 +12,26 @@ class ChartDataService {
           .collection('users')
           .doc(uid)
           .collection('readings');
+
+  // Parses reading documents through HealthReading so legacy metric keys
+  // (bloodSugarBefore, bloodSugarAfter) land under their current metric.
+  static List<HealthReading> _parse(
+      QuerySnapshot<Map<String, dynamic>> snap) {
+    final readings = <HealthReading>[];
+    for (final d in snap.docs) {
+      if (d.data()['value'] is! num) continue;
+      readings.add(HealthReading.fromMap(d.id, d.data()));
+    }
+    return readings;
+  }
+
+  static ChartDataPoint _toPoint(HealthReading r) => ChartDataPoint(
+        date: r.timestamp,
+        value: r.value,
+        status: r.status,
+        context: r.context == null ? null : HealthMetrics.contextLabel(r.context!),
+        note: r.note,
+      );
 
   /// Fetches readings for a given metricType from the last [days] days.
   /// Results are sorted oldest → newest (ascending) so fl_chart renders left to right.
@@ -25,24 +46,10 @@ class ChartDataService {
         .orderBy('timestamp', descending: false)
         .get();
 
-    return snap.docs.where((d) {
-      final data = d.data();
-      final stored = data['metricType'] as String? ?? '';
-      if (stored != metricType) return false;
-
-      final ts = data['timestamp'];
-      final DateTime dt =
-          ts is Timestamp ? ts.toDate() : DateTime.now();
-      return dt.isAfter(cutoff);
-    }).map((d) {
-      final data = d.data();
-      final ts = data['timestamp'];
-      final DateTime dt =
-          ts is Timestamp ? ts.toDate() : DateTime.now();
-      final double value = (data['value'] as num?)?.toDouble() ?? 0.0;
-      final String status = data['status'] as String? ?? 'Logged';
-      return ChartDataPoint(date: dt, value: value, status: status);
-    }).toList();
+    return _parse(snap)
+        .where((r) => r.metricType == metricType && r.timestamp.isAfter(cutoff))
+        .map(_toPoint)
+        .toList();
   }
 
   /// Fetches both systolic and diastolic readings for the BP dual-line chart.
@@ -58,23 +65,17 @@ class ChartDataService {
     final systolic = <ChartDataPoint>[];
     final diastolic = <ChartDataPoint>[];
 
-    for (final d in snap.docs) {
-      final data = d.data();
-      final metric = data['metricType'] as String? ?? '';
-      if (metric != 'systolic' && metric != 'diastolic') continue;
+    for (final r in _parse(snap)) {
+      if (r.metric != HealthMetric.systolic &&
+          r.metric != HealthMetric.diastolic) {
+        continue;
+      }
+      if (!r.timestamp.isAfter(cutoff)) continue;
 
-      final ts = data['timestamp'];
-      final DateTime dt = ts is Timestamp ? ts.toDate() : DateTime.now();
-      if (!dt.isAfter(cutoff)) continue;
-
-      final double value = (data['value'] as num?)?.toDouble() ?? 0.0;
-      final String status = data['status'] as String? ?? 'Logged';
-      final point = ChartDataPoint(date: dt, value: value, status: status);
-
-      if (metric == 'systolic') {
-        systolic.add(point);
+      if (r.metric == HealthMetric.systolic) {
+        systolic.add(_toPoint(r));
       } else {
-        diastolic.add(point);
+        diastolic.add(_toPoint(r));
       }
     }
 
@@ -131,7 +132,7 @@ class ChartDataService {
     TrendDirection trend,
     double average,
   ) {
-    final status = MetricThresholds.getStatus(metricType, average);
+    final status = _insightStatus(metricType, average);
     final label = metricLabel(metricType);
 
     if (trend == TrendDirection.improving && status == 'Normal') {
@@ -243,18 +244,30 @@ class ChartDataService {
         : 'This period your average $label was $pct% higher than the previous 7 days.';
   }
 
-  /// Lowercase label used inside insight sentences.
-  static String metricLabel(String metricType) {
-    switch (metricType) {
-      case 'systolic':
-        return 'blood pressure';
-      case 'heartRate':
-        return 'heart rate';
-      case 'bloodSugar':
-        return 'blood sugar';
-      default:
-        return metricType;
+  // 'Normal', 'Warning', 'Critical' or 'Logged' for an average value
+  static String _insightStatus(String metricType, double value) {
+    final metric = HealthMetrics.metricForKey(metricType);
+    final status = metric == null ? null : HealthMetrics.evaluate(metric, value);
+    switch (status) {
+      case MetricStatus.normal:
+        return 'Normal';
+      case MetricStatus.warning:
+        return 'Warning';
+      case MetricStatus.criticalLow:
+      case MetricStatus.criticalHigh:
+        return 'Critical';
+      case null:
+        return 'Logged';
     }
+  }
+
+  /// Lowercase label used inside insight sentences.
+  /// The systolic chart is the combined blood pressure chart.
+  static String metricLabel(String metricType) {
+    if (metricType == HealthMetric.systolic.name) {
+      return HealthMetrics.bloodPressureLabel.toLowerCase();
+    }
+    return HealthMetrics.labelForKey(metricType).toLowerCase();
   }
 }
 

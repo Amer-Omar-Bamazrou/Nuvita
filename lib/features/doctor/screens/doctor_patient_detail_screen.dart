@@ -1,19 +1,31 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
+import '../../../core/health/conditions.dart';
+import '../../health/models/health_reading.dart';
+import '../../medication/services/adherence.dart';
+import '../../medication/services/medication_service.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
 import '../../charts/models/chart_data_point.dart';
 import '../../charts/services/chart_data_service.dart';
 import '../../charts/widgets/health_chart_widget.dart';
+import '../widgets/status_badge.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
   final String doctorName;
 
+  // Set when shown inside the dashboard shell: the back arrow returns to
+  // the patient list instead of popping a route
+  final VoidCallback? onBack;
+
   const DoctorPatientDetailScreen({
     super.key,
     required this.patient,
     required this.doctorName,
+    this.onBack,
   });
 
   @override
@@ -63,6 +75,7 @@ class _DoctorPatientDetailScreenState
 
   final _suggestionCtrl = TextEditingController();
   bool _sendingSuggestion = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _readingsSub;
 
   static const _primary = Color(0xFF004346);
 
@@ -93,23 +106,34 @@ class _DoctorPatientDetailScreenState
 
   @override
   void dispose() {
+    _readingsSub?.cancel();
     _suggestionCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadReadings() async {
+  // Live: the readings table and measurement cards update when the patient
+  // adds, edits or deletes a reading, and the chart is refreshed with them
+  void _loadReadings() {
     setState(() => _loadingReadings = true);
-    try {
-      final r = await _service.getPatientReadings(_uid);
-      if (!mounted) return;
-      setState(() {
-        _readings = r;
-        _loadingReadings = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingReadings = false);
-    }
+    var first = true;
+    _readingsSub?.cancel();
+    _readingsSub = _service.watchPatientReadings(_uid).listen(
+      (r) {
+        if (!mounted) return;
+        setState(() {
+          _readings = r;
+          _loadingReadings = false;
+        });
+        // initState already loads the chart once
+        if (!first) _loadChart();
+        first = false;
+      },
+      onError: (Object e) {
+        debugPrint('DoctorPatientDetail: live readings failed: $e');
+        if (!mounted) return;
+        setState(() => _loadingReadings = false);
+      },
+    );
   }
 
   Future<void> _loadMedications() async {
@@ -150,44 +174,33 @@ class _DoctorPatientDetailScreenState
     setState(() => _loadingAdherence = true);
     try {
       final doses = await _service.getPatientAdherence(_uid, 7);
-      final meds = await _service.getPatientMedications(_uid);
-      final activeMeds = meds.where((m) => m['isActive'] != false).toList();
+      final meds = (await _service.getPatientMedications(_uid))
+          .map(MedicationService.fromFirestoreDoc)
+          .toList();
       final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final report = calculateAdherence(
+        medications: meds,
+        takenDoses: {
+          for (final d in doses)
+            if (d['taken'] == true) d['id'] as String,
+        },
+        from: DateTime(today.year, today.month, today.day - 6),
+        to: today,
+        now: now,
+      );
+
       final days = <_AdherenceDay>[];
-
       for (int i = 0; i < 7; i++) {
-        final date = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: i));
-        final dateStr =
-            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-        int total = 0;
-        int taken = 0;
-
-        for (final med in activeMeds) {
-          DateTime? startDate;
-          final sd = med['startDate'];
-          if (sd is Timestamp) {
-            startDate = sd.toDate();
-          } else if (sd is String) {
-            startDate = DateTime.tryParse(sd);
-          }
-          if (startDate != null) {
-            final start = DateTime(startDate.year, startDate.month, startDate.day);
-            if (start.isAfter(date)) continue;
-          }
-
-          final times = med['times'] as List<dynamic>? ?? [];
-          for (final time in times) {
-            total++;
-            final docId = '${dateStr}_${med['id']}_$time';
-            if (doses.any((d) => d['id'] == docId && d['taken'] == true)) {
-              taken++;
-            }
-          }
-        }
-
-        days.add(_AdherenceDay(date: date, taken: taken, total: total));
+        final date = DateTime(today.year, today.month, today.day - i);
+        final counts = report.byDay[date] ?? const AdherenceCounts();
+        days.add(_AdherenceDay(
+          date: date,
+          taken: counts.taken,
+          total: counts.expected,
+          pending: counts.pending,
+        ));
       }
 
       if (!mounted) return;
@@ -201,26 +214,15 @@ class _DoctorPatientDetailScreenState
     }
   }
 
-  String get _patientDiseaseType {
-    final profile =
-        widget.patient['profile'] as Map<String, dynamic>? ?? {};
-    return profile['diseaseType'] as String? ?? 'other';
-  }
+  // Conditions list, or the old diseaseType for older profiles
+  PatientConditions get _conditions => PatientConditions.fromProfile(
+      widget.patient['profile'] as Map<String, dynamic>?);
 
   Future<void> _loadChart() async {
     setState(() => _loadingChart = true);
     try {
-      String metric;
-      switch (_patientDiseaseType) {
-        case 'diabetes':
-          metric = 'bloodSugar';
-          break;
-        case 'heart':
-          metric = 'heartRate';
-          break;
-        default:
-          metric = 'systolic';
-      }
+      // Systolic stands for the combined blood pressure chart
+      final metric = _conditions.defaultChartMetric.name;
 
       List<ChartDataPoint> points;
       List<ChartDataPoint> diaPoints = [];
@@ -437,6 +439,13 @@ class _DoctorPatientDetailScreenState
         foregroundColor: const Color(0xFF172A3A),
         elevation: 0,
         titleSpacing: 0,
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back to patients',
+                onPressed: widget.onBack,
+              ),
         title: Text(
           _patientName,
           style: const TextStyle(
@@ -494,7 +503,6 @@ class _DoctorPatientDetailScreenState
         widget.patient['profile'] as Map<String, dynamic>? ?? {};
     final patientId = widget.patient['patientId'] as String? ?? '—';
     final email = widget.patient['email'] as String? ?? '—';
-    final diseaseType = profile['diseaseType'] as String? ?? 'other';
     final gender = profile['gender'] as String? ?? '—';
     final dobRaw = profile['dob'] as String? ?? '';
     final dob = _formatDob(dobRaw);
@@ -504,13 +512,6 @@ class _DoctorPatientDetailScreenState
       final dt = createdAt.toDate();
       memberSince = '${dt.day}/${dt.month}/${dt.year}';
     }
-
-    final diseaseLabels = {
-      'diabetes': 'Diabetes',
-      'blood_pressure': 'Blood Pressure',
-      'heart': 'Heart Condition',
-      'other': 'General Monitoring',
-    };
 
     return _Card(
       child: Column(
@@ -522,8 +523,7 @@ class _DoctorPatientDetailScreenState
           _InfoRow('Email', email),
           _InfoRow('Gender', gender),
           _InfoRow('Date of Birth', dob),
-          _InfoRow('Condition',
-              diseaseLabels[diseaseType] ?? 'General Monitoring'),
+          _InfoRow('Conditions', _conditions.summary),
           _InfoRow('Member Since', memberSince),
         ],
       ),
@@ -541,56 +541,68 @@ class _DoctorPatientDetailScreenState
       );
     }
 
-    // Build a map of the latest reading per metric type (readings already sorted newest-first)
-    final Map<String, Map<String, dynamic>> latest = {};
+    // Latest reading per metric (readings arrive newest-first). Parsing through
+    // HealthReading folds legacy keys like bloodSugarBefore into bloodSugar.
+    final Map<String, HealthReading> latest = {};
     for (final r in _readings) {
-      final metric = r['metricType'] as String? ?? '';
-      if (metric.isNotEmpty && !latest.containsKey(metric)) latest[metric] = r;
+      final reading = _parseReading(r);
+      if (reading == null) continue;
+      latest.putIfAbsent(reading.metricType, () => reading);
     }
 
-    // Single-value metrics shown in clinical order
-    const singleMetrics = [
-      _MetricDef('bloodSugarBefore', 'Blood Sugar (Before Meal)', 'mg/dL'),
-      _MetricDef('bloodSugarAfter', 'Blood Sugar (After Meal)', 'mg/dL'),
-      _MetricDef('weight', 'Weight', 'kg'),
-      _MetricDef('temperature', 'Temperature', '°C'),
-      _MetricDef('steps', 'Walking', 'min'),
-    ];
+    // Single-value metrics, the ones the patient's conditions are monitored
+    // with first. Blood sugar goes above the blood pressure card for diabetes.
+    const singles = {
+      HealthMetric.bloodSugar,
+      HealthMetric.weight,
+      HealthMetric.temperature,
+      HealthMetric.walkingMinutes,
+    };
+    final conditions = _conditions;
+    final singleMetrics = conditions.metricOrder
+        .where(singles.contains)
+        .map((m) {
+      final def = HealthMetrics.of(m);
+      // Blood sugar shows when the latest reading was taken, e.g. (Fasting)
+      final label = latest[def.key]?.label ?? def.label;
+      return _MetricDef(def.key, label, def.unit);
+    }).toList();
 
-    String getVal(String key) => latest[key]?['value']?.toString() ?? '—';
-    String getStatus(String key) => latest[key]?['status'] as String? ?? '—';
+    String getVal(String key) => latest[key]?.value.toString() ?? '—';
+    String getStatus(String key) => latest[key]?.status ?? '—';
 
-    return Column(
-      children: [
-        // ── Blood Pressure combined card ──────────────────────────────────
-        Padding(
+    // ── Blood Pressure combined card ────────────────────────────────────
+    final bpCard = Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Blood Pressure',
+                Text(HealthMetrics.bloodPressureLabel,
                     style: TextStyle(fontSize: 12, color: const Color(0xFF6E7A82))),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _BPSubValue(label: 'Sys', value: getVal('systolic'), unit: 'mmHg',
+                    _BPSubValue(label: 'Sys', value: getVal('systolic'),
+                        unit: HealthMetrics.unitForKey('systolic'),
                         status: getStatus('systolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Dia', value: getVal('diastolic'), unit: 'mmHg',
+                    _BPSubValue(label: 'Dia', value: getVal('diastolic'),
+                        unit: HealthMetrics.unitForKey('diastolic'),
                         status: getStatus('diastolic')),
                     _BPDivider(),
-                    _BPSubValue(label: 'Pulse', value: getVal('heartRate'), unit: 'bpm',
+                    _BPSubValue(label: 'Pulse', value: getVal('heartRate'),
+                        unit: HealthMetrics.unitForKey('heartRate'),
                         status: getStatus('heartRate')),
                   ],
                 ),
               ],
             ),
           ),
-        ),
+        );
 
-        // ── Remaining single-value cards ──────────────────────────────────
-        ...singleMetrics.map((m) {
+    // ── Single-value cards ───────────────────────────────────────────────
+    Widget singleCard(_MetricDef m) {
           final value = getVal(m.metricType);
           final status = getStatus(m.metricType);
           return Padding(
@@ -630,12 +642,20 @@ class _DoctorPatientDetailScreenState
                       ],
                     ),
                   ),
-                  if (status != '—') _StatusBadge(status: status),
+                  if (status != '—') StatusBadge(status: status),
                 ],
               ),
             ),
           );
-        }),
+    }
+
+    // Diabetes puts blood sugar first; otherwise blood pressure leads
+    final sugarFirst = conditions.isDiabetic;
+    return Column(
+      children: [
+        if (sugarFirst) singleCard(singleMetrics.first),
+        bpCard,
+        ...singleMetrics.skip(sugarFirst ? 1 : 0).map(singleCard),
       ],
     );
   }
@@ -644,16 +664,6 @@ class _DoctorPatientDetailScreenState
 
   Widget _buildHealthTrendsSection() {
     final isBP = _chartMetric == 'systolic';
-    final metricLabels = {
-      'systolic': 'Blood Pressure',
-      'heartRate': 'Heart Rate',
-      'bloodSugar': 'Blood Sugar',
-    };
-    final metricUnits = {
-      'systolic': 'mmHg',
-      'heartRate': 'bpm',
-      'bloodSugar': 'mg/dL',
-    };
 
     return _Card(
       child: Column(
@@ -680,8 +690,7 @@ class _DoctorPatientDetailScreenState
                         const Color(0xFF508991), 'Diastolic'),
                   ] else
                     _chartLegendDot(
-                        _primary,
-                        metricLabels[_chartMetric] ?? _chartMetric),
+                        _primary, HealthMetrics.labelForKey(_chartMetric)),
                 ],
               ),
             ),
@@ -690,7 +699,7 @@ class _DoctorPatientDetailScreenState
               child: HealthChartWidget(
                 dataPoints: _chartPoints,
                 metricType: _chartMetric,
-                unit: metricUnits[_chartMetric] ?? '',
+                unit: HealthMetrics.unitForKey(_chartMetric),
                 secondaryData:
                     isBP && _chartDiaPoints.isNotEmpty ? _chartDiaPoints : null,
                 secondaryLabel: isBP ? 'Diastolic' : null,
@@ -920,7 +929,7 @@ class _DoctorPatientDetailScreenState
           if (_loadingAdherence)
             const Center(
                 child: CircularProgressIndicator(color: _primary))
-          else if (_adherenceDays.every((d) => d.total == 0))
+          else if (_adherenceDays.every((d) => d.total + d.pending == 0))
             Text('No medication schedule found.',
                 style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)))
           else
@@ -935,7 +944,10 @@ class _DoctorPatientDetailScreenState
     final ratio = day.total > 0 ? day.taken / day.total : 0.0;
 
     Color barColor;
-    if (pct == 100) {
+    if (day.total == 0) {
+      // Nothing due that day (or today's doses are still to come)
+      barColor = const Color(0xFF9AA3AB);
+    } else if (pct == 100) {
       barColor = const Color(0xFF388E3C);
     } else if (pct >= 50) {
       barColor = const Color(0xFFFF6F00);
@@ -982,7 +994,7 @@ class _DoctorPatientDetailScreenState
           SizedBox(
             width: 72,
             child: Text(
-              '${day.taken}/${day.total} ($pct%)',
+              day.total == 0 ? '—' : '${day.taken}/${day.total} ($pct%)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -1040,6 +1052,12 @@ class _DoctorPatientDetailScreenState
     );
   }
 
+  // Reading documents from DoctorService arrive as raw maps
+  HealthReading? _parseReading(Map<String, dynamic> r) {
+    if (r['value'] is! num) return null;
+    return HealthReading.fromMap(r['id'] as String? ?? '', r);
+  }
+
   Widget _buildReadingRow(int index, Map<String, dynamic> r) {
     final ts = r['timestamp'];
     String date = '—';
@@ -1048,10 +1066,12 @@ class _DoctorPatientDetailScreenState
       date =
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
-    final metric = r['metricType'] as String? ?? '—';
+    final reading = _parseReading(r);
+    final metric = reading?.label ?? r['metricType'] as String? ?? '—';
     final value = r['value']?.toString() ?? '—';
-    final unit = r['unit'] as String? ?? '';
-    final status = r['status'] as String? ?? 'Logged';
+    final moduleUnit = HealthMetrics.unitForKey(reading?.metricType ?? '');
+    final unit = moduleUnit.isNotEmpty ? moduleUnit : r['unit'] as String? ?? '';
+    final status = reading?.status ?? r['status'] as String? ?? 'Logged';
 
     return Container(
       color: index.isOdd
@@ -1066,15 +1086,24 @@ class _DoctorPatientDetailScreenState
                   style: const TextStyle(fontSize: 12))),
           Expanded(
               flex: 3,
-              child: Text(metric,
-                  style: const TextStyle(fontSize: 12))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(metric, style: const TextStyle(fontSize: 12)),
+                  // Context chip the patient picked, e.g. "After exercise"
+                  if (reading?.note != null && reading!.note!.isNotEmpty)
+                    Text(reading.note!,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF9AA3AB))),
+                ],
+              )),
           Expanded(
               flex: 2,
               child: Text('$value $unit',
                   style: const TextStyle(fontSize: 12))),
           Expanded(
               flex: 2,
-              child: _StatusBadge(status: status)),
+              child: StatusBadge(status: status)),
         ],
       ),
     );
@@ -1287,47 +1316,6 @@ class _TableHeader extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color fg;
-    switch (status) {
-      case 'Normal':
-        fg = const Color(0xFF2E7D32);
-        break;
-      case 'Warning':
-        fg = const Color(0xFFFF6F00);
-        break;
-      case 'Critical':
-      case 'High':
-      case 'Low':
-        fg = const Color(0xFFD32F2F);
-        break;
-      default:
-        fg = const Color(0xFF9AA3AB);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: fg.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
-  }
-}
-
 class _MetricDef {
   final String metricType;
   final String label;
@@ -1373,7 +1361,7 @@ class _BPSubValue extends StatelessWidget {
           ],
           if (status != '—') ...[
             const SizedBox(height: 4),
-            _StatusBadge(status: status),
+            StatusBadge(status: status),
           ],
         ],
       ),
@@ -1794,8 +1782,13 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
 class _AdherenceDay {
   final DateTime date;
   final int taken;
-  final int total;
+  final int total; // doses that were due
+  final int pending; // later today, not due yet
 
-  const _AdherenceDay(
-      {required this.date, required this.taken, required this.total});
+  const _AdherenceDay({
+    required this.date,
+    required this.taken,
+    required this.total,
+    this.pending = 0,
+  });
 }

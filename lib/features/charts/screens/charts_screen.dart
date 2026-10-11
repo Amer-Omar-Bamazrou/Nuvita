@@ -2,13 +2,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../auth/screens/register_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../home/screens/main_shell.dart';
 import '../models/chart_data_point.dart';
 import '../services/chart_data_service.dart';
 import '../widgets/health_chart_widget.dart';
+import '../../../core/health/conditions.dart';
 
 // ─── Enums used only within this screen ───────────────────────────────────────
 
@@ -30,7 +31,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
   _ChartMetric _metric = _ChartMetric.heartRate;
   _TimeRange _range = _TimeRange.days7;
 
-  String _diseaseType = 'other';
+  PatientConditions _conditions = PatientConditions.none;
   bool _loadingDisease = true;
   bool _loadingChart = false;
 
@@ -42,6 +43,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
   ChartDataPoint? _personalBest;
   Map<String, dynamic>? _weeklySummary;
   String? _comparisonInsight;
+
+  // Last 7 days regardless of the selected range; null when nothing logged
+  double? _weekAverage;
+  double? _weekDiastolicAverage;
 
   @override
   void initState() {
@@ -81,42 +86,46 @@ class _ChartsScreenState extends State<ChartsScreen> {
           .doc(uid)
           .get();
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
-      final disease = profile?['diseaseType'] as String? ?? 'other';
+      final conditions = PatientConditions.fromProfile(profile);
 
+      if (!mounted) return;
       setState(() {
-        _diseaseType = disease;
+        _conditions = conditions;
         if (widget.preselectedMetric == null) {
-          _metric = _defaultMetric(disease);
+          _metric = _chartMetricFor(conditions.defaultChartMetric);
         }
         _loadingDisease = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loadingDisease = false);
     }
 
     _loadChartData();
   }
 
-  _ChartMetric _defaultMetric(String disease) {
-    switch (disease) {
-      case 'diabetes':
+  static _ChartMetric _chartMetricFor(HealthMetric metric) {
+    switch (metric) {
+      case HealthMetric.bloodSugar:
         return _ChartMetric.bloodSugar;
-      case 'blood_pressure':
-        return _ChartMetric.systolic;
-      default:
+      case HealthMetric.heartRate:
         return _ChartMetric.heartRate;
+      default:
+        return _ChartMetric.systolic;
     }
   }
 
+  // All three charts, the condition's default first, then by relevance
   List<_ChartMetric> get _availableMetrics {
-    switch (_diseaseType) {
-      case 'blood_pressure':
-        return [_ChartMetric.systolic, _ChartMetric.heartRate];
-      case 'diabetes':
-        return [_ChartMetric.bloodSugar, _ChartMetric.systolic];
-      default:
-        return [_ChartMetric.heartRate, _ChartMetric.systolic, _ChartMetric.bloodSugar];
-    }
+    final ordered = <_ChartMetric>[
+      _chartMetricFor(_conditions.defaultChartMetric),
+      for (final m in _conditions.metricOrder)
+        if (m == HealthMetric.bloodSugar ||
+            m == HealthMetric.systolic ||
+            m == HealthMetric.heartRate)
+          _chartMetricFor(m),
+    ];
+    return ordered.toSet().toList();
   }
 
   // ── Chart data ────────────────────────────────────────────────────────────
@@ -163,10 +172,13 @@ class _ChartsScreenState extends State<ChartsScreen> {
       final best = ChartDataService.getPersonalBest(metricType, points);
       final summary = ChartDataService.getWeeklySummary(points);
 
-      String? comparison;
-      if (_range != _TimeRange.days7 && points.length >= 2) {
-        comparison = _computeComparison(points, metricType);
-      }
+      // This week's average and how it compares with the week before
+      final weekly = await Future.wait([
+        ChartDataService.getWeeklyAverage(uid, metricType),
+        if (_isBP) ChartDataService.getWeeklyAverage(uid, 'diastolic'),
+      ]);
+      final comparison =
+          await ChartDataService.getComparisonInsight(uid, metricType);
 
       if (!mounted) return;
       setState(() {
@@ -178,6 +190,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
         _personalBest = best;
         _weeklySummary = summary;
         _comparisonInsight = comparison;
+        // getWeeklyAverage returns 0 when there were no readings
+        _weekAverage = weekly[0] > 0 ? weekly[0] : null;
+        _weekDiastolicAverage =
+            _isBP && weekly.length > 1 && weekly[1] > 0 ? weekly[1] : null;
         _loadingChart = false;
       });
     } catch (_) {
@@ -202,37 +218,12 @@ class _ChartsScreenState extends State<ChartsScreen> {
     }
   }
 
-  // Compares last 7 days vs the 7 days before that, using already-fetched data.
-  String? _computeComparison(List<ChartDataPoint> points, String metricType) {
-    final sevenAgo = DateTime.now().subtract(const Duration(days: 7));
-    final fourteenAgo = DateTime.now().subtract(const Duration(days: 14));
-
-    final last7 = points.where((p) => p.date.isAfter(sevenAgo)).toList();
-    final prev7 = points
-        .where((p) =>
-            p.date.isAfter(fourteenAgo) && p.date.isBefore(sevenAgo))
-        .toList();
-
-    if (last7.isEmpty || prev7.isEmpty) return null;
-
-    final lastAvg =
-        last7.map((p) => p.value).reduce((a, b) => a + b) / last7.length;
-    final prevAvg =
-        prev7.map((p) => p.value).reduce((a, b) => a + b) / prev7.length;
-
-    if (prevAvg == 0) return null;
-
-    final pct = ((lastAvg - prevAvg) / prevAvg * 100).abs().toStringAsFixed(1);
-    final label = ChartDataService.metricLabel(metricType);
-
-    return lastAvg < prevAvg
-        ? 'This period your average $label was $pct% lower than the previous 7 days.'
-        : 'This period your average $label was $pct% higher than the previous 7 days.';
-  }
-
   String _getBPInsight() {
-    final sysNormal = _average >= 90 && _average <= 120;
-    final diaNormal = _diastolicAverage >= 60 && _diastolicAverage <= 80;
+    final sysNormal = HealthMetrics.evaluate(HealthMetric.systolic, _average) ==
+        MetricStatus.normal;
+    final diaNormal =
+        HealthMetrics.evaluate(HealthMetric.diastolic, _diastolicAverage) ==
+            MetricStatus.normal;
 
     if (sysNormal && diaNormal) {
       if (_trend == TrendDirection.improving) {
@@ -266,26 +257,12 @@ class _ChartsScreenState extends State<ChartsScreen> {
   }
 
   String _metricLabel(_ChartMetric m) {
-    switch (m) {
-      case _ChartMetric.systolic:
-        return 'Blood Pressure';
-      case _ChartMetric.heartRate:
-        return 'Heart Rate';
-      case _ChartMetric.bloodSugar:
-        return 'Glucose';
-    }
+    if (m == _ChartMetric.systolic) return HealthMetrics.bloodPressureLabel;
+    return HealthMetrics.labelForKey(_metricTypeStr(m));
   }
 
-  String _metricUnit(_ChartMetric m) {
-    switch (m) {
-      case _ChartMetric.systolic:
-        return 'mmHg';
-      case _ChartMetric.heartRate:
-        return 'bpm';
-      case _ChartMetric.bloodSugar:
-        return 'mg/dL';
-    }
-  }
+  String _metricUnit(_ChartMetric m) =>
+      HealthMetrics.unitForKey(_metricTypeStr(m));
 
   String _rangeLabel(_TimeRange r) {
     switch (r) {
@@ -307,10 +284,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid == null) return _buildGuestView();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -580,6 +553,8 @@ class _ChartsScreenState extends State<ChartsScreen> {
         children: [
           _buildTrendHeaderCard(),
           const SizedBox(height: 12),
+          _buildWeekAverageCard(),
+          const SizedBox(height: 12),
           _buildChartCard(),
           const SizedBox(height: 12),
           _buildInsightCard(),
@@ -756,6 +731,73 @@ class _ChartsScreenState extends State<ChartsScreen> {
           ],
         );
     }
+  }
+
+  // ── 7-day average ─────────────────────────────────────────────────────────
+
+  Widget _buildWeekAverageCard() {
+    final unit = _metricUnit(_metric);
+    String value;
+    if (_weekAverage == null) {
+      value = 'No readings this week';
+    } else if (_isBP && _weekDiastolicAverage != null) {
+      value = '${_weekAverage!.toStringAsFixed(0)} / '
+          '${_weekDiastolicAverage!.toStringAsFixed(0)} $unit';
+    } else {
+      value = '${_weekAverage!.toStringAsFixed(1)} $unit';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.date_range_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '7-day average',
+                  style: TextStyle(fontSize: 13, color: AppColors.secondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Chart card ────────────────────────────────────────────────────────────
@@ -1023,94 +1065,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Guest view ────────────────────────────────────────────────────────────
-
-  Widget _buildGuestView() {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.textDark),
-        title: const Text(
-          'Health Trends',
-          style: TextStyle(
-            color: AppColors.textDark,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 48,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Charts available for registered users',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Create an account to track your health trends over time',
-                style: TextStyle(fontSize: 14, color: AppColors.secondary),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 28),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const RegisterScreen(),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 36,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('Create Account'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

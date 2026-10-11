@@ -3,11 +3,11 @@ import 'package:iconly/iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../charts/screens/charts_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
-import '../../dashboard/providers/health_provider.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../home/screens/main_shell.dart';
@@ -24,7 +24,8 @@ const _filterOptions = [
   _FilterOption('Blood Pressure', {HealthMetric.systolic, HealthMetric.diastolic}),
   _FilterOption('Heart Rate', {HealthMetric.heartRate}),
   _FilterOption('Weight', {HealthMetric.weight}),
-  _FilterOption('Steps', {HealthMetric.steps}),
+  _FilterOption('Walking', {HealthMetric.walkingMinutes}),
+  _FilterOption('Temperature', {HealthMetric.temperature}),
 ];
 
 class _DisplayItem {
@@ -41,7 +42,10 @@ class _DisplayItem {
 }
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({super.key, this.initialMetric});
+
+  // Opened from a reading screen: start filtered to that metric
+  final HealthMetric? initialMetric;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -50,16 +54,20 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   final Set<int> _activeFilters = {};
   bool _showHint = false;
-  bool _loadingMore = false;
 
   @override
   void initState() {
     super.initState();
+    final metric = widget.initialMetric;
+    if (metric != null) {
+      final i = _filterOptions.indexWhere((o) => o.metrics!.contains(metric));
+      if (i != -1) _activeFilters.add(i);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        context.read<HealthHistoryProvider>().loadReadings(uid);
+        context.read<HealthHistoryProvider>().watch(uid);
       }
     });
     _checkHint();
@@ -85,42 +93,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   // ── Display helpers ──
 
-  String _metricLabel(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return 'Blood Sugar';
-      case 'systolic':
-        return 'Systolic BP';
-      case 'diastolic':
-        return 'Diastolic BP';
-      case 'heartRate':
-        return 'Heart Rate';
-      case 'weight':
-        return 'Weight';
-      case 'steps':
-        return 'Steps';
-      default:
-        return metricType;
-    }
-  }
-
-  String _metricUnit(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return 'mg/dL';
-      case 'systolic':
-      case 'diastolic':
-        return 'mmHg';
-      case 'heartRate':
-        return 'bpm';
-      case 'weight':
-        return 'kg';
-      case 'steps':
-        return 'steps';
-      default:
-        return '';
-    }
-  }
+  String _metricUnit(String metricType) => HealthMetrics.unitForKey(metricType);
 
   IconData _metricIcon(String metricType) {
     switch (metricType) {
@@ -133,8 +106,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return Icons.monitor_heart_rounded;
       case 'weight':
         return Icons.scale_rounded;
-      case 'steps':
+      case 'walkingMinutes':
         return Icons.directions_walk_rounded;
+      case 'temperature':
+        return Icons.thermostat_rounded;
       default:
         return Icons.health_and_safety_rounded;
     }
@@ -151,8 +126,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return const Color(0xFFE64A19);
       case 'weight':
         return const Color(0xFF388E3C);
-      case 'steps':
+      case 'walkingMinutes':
         return const Color(0xFF7B1FA2);
+      case 'temperature':
+        return const Color(0xFF0097A7);
       default:
         return AppColors.secondary;
     }
@@ -367,7 +344,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       builder: (_) => _EditReadingSheet(
         reading: reading,
-        metricLabel: _metricLabel(reading.metricType),
+        metricLabel: reading.label,
         unit: _metricUnit(reading.metricType),
         validRange: _validRange(reading.metricType),
       ),
@@ -382,29 +359,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  // The live query picks the change up; nothing to patch locally
   Future<void> _saveEdit(
       HealthReading reading, double newValue, DateTime newTimestamp) async {
-    final newStatus = _statusForValue(reading.metricType, newValue);
+    final newStatus = _statusForValue(reading, newValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final provider = context.read<HealthHistoryProvider>();
+    if (uid == null || reading.id.isEmpty) return;
 
     final timestampChanged = reading.timestamp != newTimestamp;
-    provider.patchReading(reading, newValue, newStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-
-    if (uid != null && reading.id.isNotEmpty) {
-      try {
-        await HealthReadingService.updateReading(
-          uid,
-          reading.id,
-          newValue,
-          newStatus,
-          timestamp: timestampChanged ? newTimestamp : null,
-        );
-      } catch (e) {
-        debugPrint('HistoryScreen._saveEdit: $e');
-      }
+    try {
+      await HealthReadingService.updateReading(
+        uid,
+        reading.id,
+        newValue,
+        newStatus,
+        timestamp: timestampChanged ? newTimestamp : null,
+      );
+    } catch (e) {
+      debugPrint('HistoryScreen._saveEdit: $e');
+      _showEditFailed();
     }
+  }
+
+  void _showEditFailed() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Couldn't save the change. Please try again."),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _showEditBPSheet(_DisplayItem item) async {
@@ -433,17 +418,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _saveBPEdit(_DisplayItem item, double sysValue,
       double diaValue, DateTime newTimestamp) async {
-    final sysStatus = _statusForValue('systolic', sysValue);
-    final diaStatus = _statusForValue('diastolic', diaValue);
+    final sysStatus = _statusForValue(item.systolic, sysValue);
+    final diaStatus = _statusForValue(item.diastolic, diaValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final provider = context.read<HealthHistoryProvider>();
 
     final timestampChanged = item.systolic.timestamp != newTimestamp;
-    provider.patchReading(item.systolic, sysValue, sysStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-    provider.patchReading(item.diastolic, diaValue, diaStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-
     if (uid != null) {
       try {
         final futures = <Future>[];
@@ -462,73 +441,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
         await Future.wait(futures);
       } catch (e) {
         debugPrint('HistoryScreen._saveBPEdit: $e');
+        _showEditFailed();
       }
     }
   }
 
-  String _statusForValue(String metricType, double value) {
-    switch (metricType) {
-      case 'bloodSugar':
-        if (value < 70) return 'Low';
-        if (value <= 180) return 'Normal';
-        if (value <= 300) return 'Warning';
-        return 'High';
-      case 'systolic':
-        if (value < 90) return 'Low';
-        if (value <= 120) return 'Normal';
-        if (value <= 140) return 'Warning';
-        return 'High';
-      case 'diastolic':
-        if (value < 60) return 'Low';
-        if (value <= 80) return 'Normal';
-        if (value <= 90) return 'Warning';
-        return 'High';
-      case 'heartRate':
-        if (value < 50) return 'Low';
-        if (value <= 100) return 'Normal';
-        if (value <= 120) return 'Warning';
-        return 'High';
-      default:
-        return 'Logged';
-    }
+  String _statusForValue(HealthReading reading, double value) {
+    final metric = reading.metric;
+    if (metric == null) return 'Logged';
+    return HealthMetrics.statusLabel(
+        HealthMetrics.evaluate(metric, value, context: reading.context));
   }
 
   List<double> _validRange(String metricType) {
-    switch (metricType) {
-      case 'bloodSugar':
-        return [1, 600];
-      case 'systolic':
-        return [60, 250];
-      case 'diastolic':
-        return [40, 180];
-      case 'heartRate':
-        return [30, 250];
-      case 'weight':
-        return [10, 300];
-      case 'steps':
-        return [0, 100000];
-      default:
-        return [0, 99999];
-    }
+    final metric = HealthMetrics.metricForKey(metricType);
+    if (metric == null) return [0, 99999];
+    final def = HealthMetrics.of(metric);
+    return [def.min, def.max];
   }
 
-  // ── Pull to refresh ──
-
-  Future<void> _onRefresh() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    await context.read<HealthHistoryProvider>().forceReload(uid);
-  }
-
-  // ── Load more ──
-
-  Future<void> _onLoadMore() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    setState(() => _loadingMore = true);
-    await context.read<HealthHistoryProvider>().loadMore(uid);
-    if (mounted) setState(() => _loadingMore = false);
-  }
 
   // ── Chart filter pass ──
 
@@ -585,7 +516,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         builder: (context, provider, _) {
           final filtered = provider.filteredReadings(_combinedMetrics);
           final uid = FirebaseAuth.instance.currentUser?.uid;
-          final isLoading = uid != null && !provider.isLoaded;
+          final failed = uid != null && !provider.isLoaded && provider.loadFailed;
+          final isLoading = uid != null && !provider.isLoaded && !failed;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,19 +526,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
               if (provider.allReadings.isNotEmpty)
                 _buildSummaryCard(filtered),
               Expanded(
-                child: isLoading
+                child: failed
+                    ? _buildLoadError(uid)
+                    : isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
                           color: AppColors.primary,
                         ),
                       )
-                    : RefreshIndicator(
-                        color: AppColors.primary,
-                        onRefresh: _onRefresh,
-                        child: filtered.isEmpty
-                            ? _buildEmptyState()
-                            : _buildReadingsList(filtered, provider),
-                      ),
+                    : filtered.isEmpty
+                        ? _buildEmptyState()
+                        : _buildReadingsList(filtered, provider),
               ),
               if (_showHint)
                 Padding(
@@ -785,6 +715,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  Widget _buildLoadError(String uid) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off_rounded,
+                size: 64, color: AppColors.primary),
+            const SizedBox(height: 20),
+            Text(
+              "Couldn't load your readings",
+              style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Check your connection and try again.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton(
+              onPressed: () => context.read<HealthHistoryProvider>().retry(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -853,12 +827,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       itemBuilder: (context, index) {
         final dataCount = _countItems(grouped);
 
-        // "Load older readings" button
+        // "Load older readings" button (or Retry if the live query failed)
         if (index == dataCount) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Center(
-              child: _loadingMore
+              child: provider.loadingMore
                   ? const SizedBox(
                       width: 24,
                       height: 24,
@@ -868,7 +842,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     )
                   : OutlinedButton(
-                      onPressed: _onLoadMore,
+                      onPressed: provider.loadFailed
+                          ? provider.retry
+                          : provider.loadMore,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
                         side: const BorderSide(color: AppColors.primary, width: 1.5),
@@ -878,8 +854,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 24, vertical: 12),
                       ),
-                      child: const Text(
-                        'Load older readings',
+                      child: Text(
+                        provider.loadFailed
+                            ? "Couldn't load readings. Retry"
+                            : 'Load older readings',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -995,7 +973,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _metricLabel(reading.metricType),
+                      reading.label,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1003,25 +981,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        reading.status,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
+                    _statusWithNote(reading.status, statusColor, reading.note),
                   ],
                 ),
               ),
@@ -1065,6 +1025,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Status pill, followed by the context chip picked when the reading was
+  // taken (e.g. "After exercise")
+  Widget _statusWithNote(String status, Color statusColor, String? note) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+          ),
+          child: Text(
+            status,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: statusColor,
+            ),
+          ),
+        ),
+        if (note != null && note.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              note,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppColors.secondary),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1142,25 +1138,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        status,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
+                    _statusWithNote(status, statusColor, sys.note ?? dia.note),
                   ],
                 ),
               ),
@@ -1790,12 +1768,14 @@ class _EditBPSheetState extends State<_EditBPSheet> {
   void _onSave() {
     final rawSys = double.tryParse(_sysController.text.trim());
     final rawDia = double.tryParse(_diaController.text.trim());
+    final sysDef = HealthMetrics.of(HealthMetric.systolic);
+    final diaDef = HealthMetrics.of(HealthMetric.diastolic);
 
-    if (rawSys == null || rawSys < 60 || rawSys > 250) {
+    if (rawSys == null || !sysDef.isInRange(rawSys)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Enter systolic between 60 and 250 mmHg'),
+          content: Text(
+              'Enter systolic between ${sysDef.min.toInt()} and ${sysDef.max.toInt()} mmHg'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -1804,14 +1784,26 @@ class _EditBPSheetState extends State<_EditBPSheet> {
       return;
     }
 
-    if (rawDia == null || rawDia < 40 || rawDia > 180) {
+    if (rawDia == null || !diaDef.isInRange(rawDia)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Enter diastolic between 40 and 180 mmHg'),
+          content: Text(
+              'Enter diastolic between ${diaDef.min.toInt()} and ${diaDef.max.toInt()} mmHg'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (rawSys <= rawDia) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Systolic (upper number) must be higher than diastolic'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
         ),
       );
       return;

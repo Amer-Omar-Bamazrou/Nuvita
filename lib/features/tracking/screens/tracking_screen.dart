@@ -1,10 +1,12 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/care_services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../medication/models/medication_model.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/adherence.dart';
 import '../../medication/screens/medication_screen.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../appointments/models/appointment_model.dart';
@@ -13,6 +15,7 @@ import '../../appointments/screens/appointments_screen.dart';
 import '../../appointments/screens/add_appointment_screen.dart';
 import '../../report/screens/report_screen.dart';
 import '../../health/services/health_reading_service.dart';
+import '../../charts/screens/charts_screen.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -22,49 +25,70 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
-  bool _isGuest = false;
   bool _isLoading = true;
 
   List<MedicationModel> _medications = [];
   List<AppointmentModel> _appointments = [];
   int _readingsCount = 0;
   int _activeMedsCount = 0;
+  // Medications with nothing left to take today
   Set<String> _takenKeys = {};
+
+  // Services chosen in onboarding / Profile decide which cards show
+  Set<String> _services = {...CareServices.all};
 
   @override
   void initState() {
     super.initState();
-    _isGuest = FirebaseAuth.instance.currentUser == null;
     _loadData();
+    CareServices.changes.addListener(_loadData);
+  }
+
+  @override
+  void dispose() {
+    CareServices.changes.removeListener(_loadData);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
+    final services = await CareServices.load();
     final meds = await MedicationService.loadAll();
     final activeMeds = meds.where((m) => m.isActive).toList();
 
-    // Check which meds are taken today
+    // Today's status per medication, using the same rules as the adherence
+    // figures: done once every dose scheduled for today has been taken
     final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now();
+    final now = DateTime.now();
     final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    final taken = <String>{};
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final takenDoses = <String>{};
     for (final med in activeMeds) {
       for (final time in med.times) {
-        final key = 'taken_${med.id}_${time}_$todayStr';
-        if (prefs.getString(key) == 'true') {
-          taken.add(med.id);
+        if (prefs.getString('taken_${med.id}_${time}_$todayStr') == 'true') {
+          takenDoses.add(doseKey(now, med.id, time));
         }
       }
+    }
+    final taken = <String>{};
+    for (final med in activeMeds) {
+      final today = calculateAdherence(
+        medications: [med],
+        takenDoses: takenDoses,
+        from: now,
+        to: now,
+        now: now,
+      ).total;
+      if (!today.hasSchedule || today.isComplete) taken.add(med.id);
     }
 
     List<AppointmentModel> upcoming = [];
     int readingsCount = 0;
 
-    if (!_isGuest) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
       upcoming = await AppointmentService.getUpcomingAppointments();
 
       // Count readings in last 30 days
-      final uid = FirebaseAuth.instance.currentUser!.uid;
       try {
         final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
         readingsCount = readings.length;
@@ -75,6 +99,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
     if (!mounted) return;
     setState(() {
+      _services = services;
       _medications = activeMeds;
       _appointments = upcoming;
       _readingsCount = readingsCount;
@@ -120,64 +145,38 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Guest sign-in prompt
-                if (_isGuest) ...[
-                  _buildGuestBanner(),
+                // Medications card
+                if (_services.contains(CareServices.medications)) ...[
+                  _buildSectionLabel('MEDICATIONS'),
+                  const SizedBox(height: 8),
+                  _buildMedicationsCard(),
                   const SizedBox(height: 20),
                 ],
 
-                // Medications card
-                _buildSectionLabel('MEDICATIONS'),
-                const SizedBox(height: 8),
-                _buildMedicationsCard(),
-                const SizedBox(height: 20),
-
-                // Appointments card (logged-in only)
-                if (!_isGuest) ...[
+                // Appointments card
+                if (_services.contains(CareServices.appointments)) ...[
                   _buildSectionLabel('APPOINTMENTS'),
                   const SizedBox(height: 8),
                   _buildAppointmentsCard(),
                   const SizedBox(height: 20),
                 ],
 
-                // Health report card (logged-in only)
-                if (!_isGuest) ...[
-                  _buildSectionLabel('HEALTH REPORT'),
+                // Charts
+                if (_services.contains(CareServices.measurements)) ...[
+                  _buildSectionLabel('HEALTH TRENDS'),
                   const SizedBox(height: 8),
-                  _buildReportCard(),
+                  _buildTrendsCard(),
+                  const SizedBox(height: 20),
                 ],
+
+                // Health report card
+                _buildSectionLabel('HEALTH REPORT'),
+                const SizedBox(height: 8),
+                _buildReportCard(),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // ── Guest banner ──────────────────────────────────────────────────────────
-
-  Widget _buildGuestBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              color: AppColors.primary, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Sign in to access all tracking features',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -545,6 +544,80 @@ class _TrackingScreenState extends State<TrackingScreen> {
     final amPm = dt.hour >= 12 ? 'PM' : 'AM';
     final min = dt.minute.toString().padLeft(2, '0');
     return '${dt.day} ${months[dt.month - 1]} · $hour:$min $amPm';
+  }
+
+  // ── Trends card ───────────────────────────────────────────────────────────
+
+  Widget _buildTrendsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.show_chart_rounded,
+                  size: 22,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Charts',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'See how your readings change over time, with your 7-day '
+            'average and how it compares with the week before',
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChartsScreen()),
+                );
+              },
+              child: const Text(
+                'View Charts →',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Report card ───────────────────────────────────────────────────────────

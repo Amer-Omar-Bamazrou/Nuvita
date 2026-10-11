@@ -1,11 +1,16 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
-import 'doctor_patient_detail_screen.dart';
 
 class CriticalAlertsScreen extends StatelessWidget {
   final String doctorName;
-  const CriticalAlertsScreen({super.key, required this.doctorName});
+  final void Function(Map<String, dynamic> patient) onSelectPatient;
+
+  const CriticalAlertsScreen({
+    super.key,
+    required this.doctorName,
+    required this.onSelectPatient,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +49,11 @@ class CriticalAlertsScreen extends StatelessWidget {
             itemCount: alerts.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) =>
-                _AlertCard(alert: alerts[i], doctorName: doctorName),
+                _AlertCard(
+                  alert: alerts[i],
+                  doctorName: doctorName,
+                  onSelectPatient: onSelectPatient,
+                ),
           );
         },
       ),
@@ -93,8 +102,36 @@ class CriticalAlertsScreen extends StatelessWidget {
 class _AlertCard extends StatelessWidget {
   final Map<String, dynamic> alert;
   final String doctorName;
+  final void Function(Map<String, dynamic> patient) onSelectPatient;
 
-  const _AlertCard({required this.alert, required this.doctorName});
+  const _AlertCard({
+    required this.alert,
+    required this.doctorName,
+    required this.onSelectPatient,
+  });
+
+  // The alert only carries a name and ID, so fetch the whole patient
+  // document before opening it in the dashboard
+  Future<void> _openPatient(BuildContext context, String uid) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final patient = await DoctorService().getPatient(uid);
+      if (patient == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Patient record not found')),
+        );
+        return;
+      }
+      navigator.pop();
+      onSelectPatient(patient);
+    } catch (e) {
+      debugPrint('CriticalAlerts: loading patient failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not open the patient. Try again.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -127,23 +164,7 @@ class _AlertCard extends StatelessWidget {
     return InkWell(
       onTap: patientUid.isEmpty
           ? null
-          : () {
-              final patientData = {
-                'uid': patientUid,
-                'name': patientName,
-                'patientId': patientId,
-                'profile': {'diseaseType': diseaseType},
-              };
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DoctorPatientDetailScreen(
-                    patient: patientData,
-                    doctorName: doctorName,
-                  ),
-                ),
-              );
-            },
+          : () => _openPatient(context, patientUid),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),

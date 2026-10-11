@@ -12,6 +12,7 @@ import '../services/medication_service.dart';
 import 'add_medication_screen.dart';
 import 'medication_detail_screen.dart';
 import 'medication_history_screen.dart';
+import '../services/dose_service.dart';
 
 const _orange = Color(0xFFFF6F00);
 
@@ -594,71 +595,53 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
   Future<void> _toggleTaken(_ScheduleEntry entry) async {
     final isTaken = _takenToday.contains(entry.key);
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final prefKey = 'taken_${entry.medicationId}_${entry.time}_$todayStr';
-    final prefs = await SharedPreferences.getInstance();
+    final day = DateTime.now();
 
     if (isTaken) {
-      await prefs.remove(prefKey);
-      MedicationService.removeDoseFromFirebase(
+      await DoseService.undo(
         medicationId: entry.medicationId,
         timeSlot: entry.time,
-        date: todayStr,
-      );
-      if (mounted) setState(() => _takenToday.remove(entry.key));
-    } else {
-      await prefs.setString(prefKey, 'true');
-      await MedicationService.takeMedication(entry.medicationId);
-      MedicationService.saveDoseToFirebase(
-        medicationId: entry.medicationId,
-        medicationName: entry.medicationName,
-        dosage: entry.dosage,
-        timeSlot: entry.time,
-        date: todayStr,
+        day: day,
       );
       if (mounted) {
-        setState(() => _takenToday.add(entry.key));
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${entry.medicationName} ${entry.dosage} at ${entry.time} marked as taken.',
-            ),
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Undo',
-              textColor: AppColors.white,
-              onPressed: () async {
-                await prefs.remove(prefKey);
-                MedicationService.removeDoseFromFirebase(
-                  medicationId: entry.medicationId,
-                  timeSlot: entry.time,
-                  date: todayStr,
-                );
-                final med = await MedicationService.getById(entry.medicationId);
-                if (med != null && med.pillsRemaining != null) {
-                  final restored = med.pillsRemaining! + med.pillsPerDose;
-                  final updated = med.copyWith(
-                    pillsRemaining: restored,
-                    lowSupplyNotified: restored > 7 ? false : med.lowSupplyNotified,
-                  );
-                  await MedicationService.update(updated);
-                  if (restored > 7) {
-                    await NotificationService.cancelLowSupplyAlert(med.id);
-                  }
-                }
-                if (mounted) {
-                  setState(() => _takenToday.remove(entry.key));
-                  _load();
-                }
-              },
-            ),
-          ),
-        );
+        setState(() => _takenToday.remove(entry.key));
+        _load();
       }
+      return;
     }
+
+    await DoseService.markTaken(
+      medicationId: entry.medicationId,
+      timeSlot: entry.time,
+      day: day,
+    );
+    if (!mounted) return;
+    setState(() => _takenToday.add(entry.key));
+    _load();
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${entry.medicationName} ${entry.dosage} at ${entry.time} marked as taken.',
+        ),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AppColors.white,
+          onPressed: () async {
+            await DoseService.undo(
+              medicationId: entry.medicationId,
+              timeSlot: entry.time,
+              day: day,
+            );
+            if (mounted) {
+              setState(() => _takenToday.remove(entry.key));
+              _load();
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildScheduleRow(_ScheduleEntry entry) {

@@ -6,8 +6,10 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../services/auth_service.dart';
+import '../../../core/health/conditions.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../home/screens/main_shell.dart';
+import 'login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -59,12 +61,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final lastName  = await PreferencesService.getLastName()  ?? '';
         final gender    = await PreferencesService.getGender()    ?? '';
         final dob       = await PreferencesService.getDateOfBirth();
+        final services  = await PreferencesService.getSelectedServices();
+        final conditionIds = await PreferencesService.getConditions();
         await _authService.saveOnboardingProfile(
           uid: uid,
           firstName: firstName,
           lastName: lastName,
           gender: gender,
           dobIso: dob?.toIso8601String() ?? '',
+          services: services,
+          conditions: PatientConditions(conditionIds
+              .map(Condition.fromId)
+              .whereType<Condition>()
+              .toSet()),
         );
       }
 
@@ -145,6 +154,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _goBackToOnboarding() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+    );
+  }
+
+  // "Already have an account?" used to lead back into onboarding
+  void _goToLogin() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 
@@ -263,7 +279,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         Text('Already have an account?', style: AppTextStyles.bodySmall),
         TextButton(
-          onPressed: _goBackToOnboarding,
+          onPressed: _goToLogin,
           child: const Text('Sign In'),
         ),
       ],

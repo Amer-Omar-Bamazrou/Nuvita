@@ -5,15 +5,18 @@ import 'doctor_suggestions_history_screen.dart';
 import 'doctor_messages_screen.dart';
 import 'critical_alerts_screen.dart';
 import 'deleted_patients_screen.dart';
+import '../widgets/status_badge.dart';
 
 class DoctorOverviewScreen extends StatefulWidget {
   final String doctorName;
   final VoidCallback onViewPatients;
+  final void Function(Map<String, dynamic> patient) onSelectPatient;
 
   const DoctorOverviewScreen({
     super.key,
     required this.doctorName,
     required this.onViewPatients,
+    required this.onSelectPatient,
   });
 
   @override
@@ -169,8 +172,10 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CriticalAlertsScreen(doctorName: widget.doctorName),
+                  builder: (_) => CriticalAlertsScreen(
+                    doctorName: widget.doctorName,
+                    onSelectPatient: widget.onSelectPatient,
+                  ),
                 ),
               );
             },
@@ -233,7 +238,8 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const DoctorMessagesScreen(),
+            builder: (_) =>
+                DoctorMessagesScreen(onSelectPatient: widget.onSelectPatient),
           ),
         );
         _loadData();
@@ -391,7 +397,7 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
               ],
             ),
           ),
-          _StatusBadge(status: status),
+          StatusBadge(status: status),
           const SizedBox(width: 12),
           Text(
             time,
@@ -411,47 +417,6 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    switch (status) {
-      case 'Normal':
-        color = const Color(0xFF2E7D32);
-        break;
-      case 'Warning':
-        color = const Color(0xFFFF6F00);
-        break;
-      case 'Critical':
-      case 'High':
-      case 'Low':
-        color = const Color(0xFFD32F2F);
-        break;
-      default:
-        color = const Color(0xFF6E7A82);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
 
 class _StatCard {
   final String label;

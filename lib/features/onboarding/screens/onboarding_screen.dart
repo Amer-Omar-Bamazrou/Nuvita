@@ -5,7 +5,10 @@ import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../home/screens/main_shell.dart';
+import '../widgets/service_option_card.dart';
+import '../../../core/health/conditions.dart';
+import '../../disease/screens/disease_selection_screen.dart';
+import '../../auth/screens/register_screen.dart';
 
 // ─── Local data classes ───────────────────────────────────────────────────────
 
@@ -13,21 +16,6 @@ class _GenderOption {
   final String label;
   final IconData icon;
   const _GenderOption({required this.label, required this.icon});
-}
-
-class _ServiceDef {
-  final String id;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String description;
-  const _ServiceDef({
-    required this.id,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.description,
-  });
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -41,7 +29,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   // Steps: 0=welcome, 1=intro, 2=name(combined), 3=gender, 4=dob,
-  //        5=services, 6=account
+  //        5=conditions, 6=services, 7=account
   int _step = 0;
   bool _goingForward = true;
   bool _isSaving = false;
@@ -51,6 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _gender;
   DateTime? _dob;
   final Set<String> _selectedServices = {};
+  Set<Condition> _selectedConditions = {};
 
   static const _genderOptions = [
     _GenderOption(label: 'Male', icon: Icons.person_rounded),
@@ -58,36 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _GenderOption(label: 'Prefer not to say', icon: Icons.person_rounded),
   ];
 
-  static const _services = [
-    _ServiceDef(
-      id: 'medications',
-      icon: Icons.medication_rounded,
-      iconColor: Color(0xFF1565C0),
-      title: 'Medications',
-      description: 'Get reminders and track your medication intakes',
-    ),
-    _ServiceDef(
-      id: 'measurements',
-      icon: Icons.monitor_heart_rounded,
-      iconColor: Color(0xFF2E7D32),
-      title: 'Measurements',
-      description: 'Log health readings like blood pressure and blood sugar',
-    ),
-    _ServiceDef(
-      id: 'activities',
-      icon: Icons.directions_walk_rounded,
-      iconColor: Color(0xFFE65100),
-      title: 'Activities',
-      description: 'Set reminders for walking, hydration and exercise',
-    ),
-    _ServiceDef(
-      id: 'appointments',
-      icon: Icons.calendar_month_rounded,
-      iconColor: Color(0xFF00695C),
-      title: 'Appointments',
-      description: 'Never miss a doctor appointment again',
-    ),
-  ];
+  static const _services = serviceOptions;
 
   @override
   void dispose() {
@@ -117,7 +77,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _showError('Please select your date of birth');
       return false;
     }
-    if (_step == 5 && _selectedServices.isEmpty) {
+    if (_step == 5 && _selectedConditions.isEmpty) {
+      _showError('Please select at least one condition, or Other');
+      return false;
+    }
+    if (_step == 6 && _selectedServices.isEmpty) {
       _showError('Please select at least one service');
       return false;
     }
@@ -144,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_isSaving || !_validateCurrentStep()) return;
 
     // Persist onboarding data when leaving the services step
-    if (_step == 5) {
+    if (_step == 6) {
       setState(() => _isSaving = true);
       await PreferencesService.saveOnboardingData(
         firstName: _firstNameController.text.trim(),
@@ -152,6 +116,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         gender: _gender!,
         dob: _dob!,
         services: _selectedServices.toList(),
+        conditions: _selectedConditions.map((c) => c.id).toList(),
       );
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -189,11 +154,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Future<void> _skipToGuest() async {
+  // There is no guest mode: finishing onboarding means creating an account
+  Future<void> _navigateToRegister() async {
     await PreferencesService.setOnboardingComplete();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainShell()),
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
   }
 
@@ -219,6 +185,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 gender: _gender!,
                 dob: _dob!,
                 services: [],
+                conditions: _selectedConditions.map((c) => c.id).toList(),
               );
               if (!mounted) return;
               setState(() {
@@ -281,7 +248,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           children: [
             // Progress header shown only on personal info steps (name through services)
-            if (_step >= 2 && _step <= 5) _buildStepHeader(),
+            if (_step >= 2 && _step <= 6) _buildStepHeader(),
             Expanded(child: _buildAnimatedStep()),
           ],
         ),
@@ -292,9 +259,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── Progress header ───────────────────────────────────────────────────────
 
   Widget _buildStepHeader() {
-    // step 2 → 1 dot filled, step 5 → 4 dots filled
+    // step 2 → 1 dot filled, step 6 → 5 dots filled
     final filledCount = _step - 1;
-    final showSkip = _step == 5;
+    final showSkip = _step == 6;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -325,7 +292,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (i) {
+              children: List.generate(5, (i) {
                 final filled = i < filledCount;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -405,8 +372,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       2 => _buildNameStep(),
       3 => _buildGenderStep(),
       4 => _buildDobStep(),
-      5 => _buildServicesStep(),
-      6 => _buildAccountStep(),
+      5 => _buildConditionsStep(),
+      6 => _buildServicesStep(),
+      7 => _buildAccountStep(),
       _ => const SizedBox.shrink(),
     };
   }
@@ -743,7 +711,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ── Step 5: Service Preferences ───────────────────────────────────────────
+  // ── Step 5: Conditions ────────────────────────────────────────────────────
+
+  Widget _buildConditionsStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('Your conditions', style: AppTextStyles.heading1),
+              SizedBox(height: 6),
+              Text(
+                'Select all that apply so we can show the right readings first',
+                style: AppTextStyles.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConditionSelector(
+              selected: _selectedConditions,
+              onChanged: (next) => setState(() => _selectedConditions = next),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: NuvitaButton(
+            label: 'Continue',
+            onPressed: _selectedConditions.isNotEmpty ? _goNext : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 6: Service Preferences ───────────────────────────────────────────
 
   Widget _buildServicesStep() {
     return Column(
@@ -779,9 +787,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildServiceCard(_ServiceDef service) {
+  Widget _buildServiceCard(ServiceOption service) {
     final isSelected = _selectedServices.contains(service.id);
-    return GestureDetector(
+    return ServiceOptionCard(
+      service: service,
+      selected: isSelected,
       onTap: () => setState(() {
         if (isSelected) {
           _selectedServices.remove(service.id);
@@ -789,84 +799,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _selectedServices.add(service.id);
         }
       }),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.07)
-              : AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 2.0 : 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.textDark.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: service.iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(service.icon, color: service.iconColor, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    service.title,
-                    style: AppTextStyles.heading3.copyWith(
-                      fontSize: 15,
-                      color: isSelected ? AppColors.primary : AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    service.description,
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.divider,
-                  width: 2,
-                ),
-              ),
-              child: Icon(
-                isSelected ? Icons.check : Icons.add,
-                color: isSelected ? AppColors.white : AppColors.secondary,
-                size: 18,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  // ── Step 6: Secure Your Data ──────────────────────────────────────────────
+  // ── Step 7: Secure Your Data ──────────────────────────────────────────────
 
   Widget _buildAccountStep() {
     return Padding(
@@ -895,17 +831,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in to protect and sync your health data',
+            'Create an account to protect and sync your health data',
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
           const Spacer(),
-          NuvitaButton(label: 'Sign In', onPressed: _navigateToLogin),
+          NuvitaButton(label: 'Create Account', onPressed: _navigateToRegister),
           const SizedBox(height: 28),
           GestureDetector(
-            onTap: _skipToGuest,
+            onTap: _navigateToLogin,
             child: const Text(
-              'Skip for now →',
+              'I already have an account →',
               style: TextStyle(
                 fontSize: 15,
                 color: AppColors.secondary,

@@ -7,21 +7,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/health/health_metrics.dart';
+import '../../../core/services/care_services.dart';
 import '../../dashboard/providers/health_provider.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../notifications/screens/suggestions_panel_screen.dart';
 import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/dose_service.dart';
+import '../../medication/services/adherence.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
-import '../../health/models/metric_config.dart';
+import '../../health/models/reading_entry.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../health/screens/add_reading_input_screen.dart';
 import '../../health/screens/blood_pressure_input_screen.dart';
 import '../../appointments/screens/add_appointment_screen.dart';
 import '../../doctor/services/patient_suggestion_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/health/conditions.dart';
+import '../../disease/services/conditions_service.dart';
+import '../../charts/screens/charts_screen.dart';
 
 // ─── Task model ──────────────────────────────────────────────────────────────
 
@@ -72,7 +79,7 @@ class _HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<_HomeBody> {
   bool _isLoading = true;
   String _userName = '';
-  String _diseaseType = 'other';
+  PatientConditions _conditions = PatientConditions.none;
   int _medScheduleCount = 0;
   List<DailyTask> _tasks = [];
   bool _isLoadingTasks = false;
@@ -82,87 +89,39 @@ class _HomeBodyState extends State<_HomeBody> {
   final _suggestionService = PatientSuggestionService();
   StreamSubscription<QuerySnapshot>? _medsSub;
 
-  // Metric config used for reading task validation and units
-  static const _configs = <HealthMetric, MetricConfig>{
-    HealthMetric.bloodSugar: MetricConfig(
-      title: 'Blood Sugar',
-      icon: Icons.water_drop,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.bloodSugarBefore: MetricConfig(
-      title: 'Blood Sugar (Before Meal)',
-      icon: Icons.water_drop,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.bloodSugarAfter: MetricConfig(
-      title: 'Blood Sugar (After Meal)',
-      icon: Icons.water_drop_outlined,
-      unit: 'mg/dL',
-      min: 20,
-      max: 600,
-    ),
-    HealthMetric.systolic: MetricConfig(
-      title: 'Systolic BP',
-      icon: Icons.favorite,
-      unit: 'mmHg',
-      min: 50,
-      max: 250,
-    ),
-    HealthMetric.diastolic: MetricConfig(
-      title: 'Diastolic BP',
-      icon: Icons.favorite_border,
-      unit: 'mmHg',
-      min: 30,
-      max: 150,
-    ),
-    HealthMetric.heartRate: MetricConfig(
-      title: 'Heart Rate',
-      icon: Icons.monitor_heart,
-      unit: 'BPM',
-      min: 20,
-      max: 250,
-    ),
-    HealthMetric.weight: MetricConfig(
-      title: 'Weight',
-      icon: Icons.scale,
-      unit: 'kg',
-      min: 20,
-      max: 300,
-    ),
-    HealthMetric.steps: MetricConfig(
-      title: 'Walking',
-      icon: Icons.directions_walk,
-      unit: 'min',
-      min: 0,
-      max: 300,
-    ),
-    HealthMetric.temperature: MetricConfig(
-      title: 'Temperature',
-      icon: Icons.thermostat,
-      unit: '°C',
-      min: 30,
-      max: 45,
-    ),
-  };
+  // Services chosen in onboarding / Profile decide which sections show
+  Set<String> _services = {...CareServices.all};
+
+  bool get _medsOn => _services.contains(CareServices.medications);
+  bool get _measurementsOn => _services.contains(CareServices.measurements);
+  bool get _activitiesOn => _services.contains(CareServices.activities);
+  bool get _appointmentsOn => _services.contains(CareServices.appointments);
+  bool get _readingsOn => _measurementsOn || _activitiesOn;
 
   @override
   void initState() {
     super.initState();
+    _loadServices();
     _loadUserProfile();
     _loadMedSummary();
     _listenForMedicationChanges();
     HomeScreen.refreshNotifier.addListener(_onRefreshRequested);
+    CareServices.changes.addListener(_loadServices);
+    ConditionsService.changes.addListener(_loadUserProfile);
   }
 
   @override
   void dispose() {
     _medsSub?.cancel();
     HomeScreen.refreshNotifier.removeListener(_onRefreshRequested);
+    CareServices.changes.removeListener(_loadServices);
+    ConditionsService.changes.removeListener(_loadUserProfile);
     super.dispose();
+  }
+
+  Future<void> _loadServices() async {
+    final services = await CareServices.load();
+    if (mounted) setState(() => _services = services);
   }
 
   void _listenForMedicationChanges() {
@@ -228,12 +187,12 @@ class _HomeBodyState extends State<_HomeBody> {
           final firestoreName = profile?['name'] as String? ?? '';
           _userName =
               firestoreName.isNotEmpty ? firestoreName : (savedFirstName ?? '');
-          _diseaseType = profile?['diseaseType'] as String? ?? 'other';
+          _conditions = PatientConditions.fromProfile(profile);
         });
       }
       if (mounted) {
         context.read<HealthProvider>().loadReadingsFromFirebase(uid);
-        context.read<HealthHistoryProvider>().loadReadings(uid);
+        context.read<HealthHistoryProvider>().watch(uid);
         TrendWarningService.checkBPTrend(context, uid);
       }
     } catch (_) {
@@ -246,14 +205,9 @@ class _HomeBodyState extends State<_HomeBody> {
   Future<void> _loadMedSummary() async {
     final meds = await MedicationService.loadAll();
     final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
     var count = 0;
     for (final med in meds) {
-      if (!med.isActive) continue;
-      final start = med.startDate;
-      if (DateTime(start.year, start.month, start.day).isAfter(todayDate)) {
-        continue;
-      }
+      if (!isScheduledOn(med, today)) continue;
       count += med.times.length;
     }
     if (mounted) setState(() => _medScheduleCount = count);
@@ -275,11 +229,9 @@ class _HomeBodyState extends State<_HomeBody> {
       final meds = await MedicationService.loadAll();
       final prefs = await SharedPreferences.getInstance();
       for (final med in meds) {
-        if (!med.isActive) continue;
-        final start = med.startDate;
-        if (DateTime(start.year, start.month, start.day).isAfter(todayStart)) {
-          continue;
-        }
+        // Same schedule rules as the adherence figures (weekly and
+        // "As needed" medications don't get a task every day)
+        if (!isScheduledOn(med, todayStart)) continue;
         for (final time in med.times) {
           final prefKey = 'taken_${med.id}_${time}_$todayStr';
           final taken = prefs.getString(prefKey) == 'true';
@@ -326,33 +278,51 @@ class _HomeBodyState extends State<_HomeBody> {
 
     try {
       final now = DateTime.now();
-      final startStr = _dateStr(now.subtract(const Duration(days: 60)));
+      final today = DateTime(now.year, now.month, now.day);
+      final from = DateTime(today.year, today.month, today.day - 60);
 
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('adherence')
-          .where('date', isGreaterThanOrEqualTo: startStr)
+          .where('date', isGreaterThanOrEqualTo: _dateStr(from))
           .get();
 
       final Map<String, List<Map<String, dynamic>>> byDate = {};
+      final takenDoses = <String>{};
       for (final doc in snap.docs) {
         final data = doc.data();
         final date = data['date'] as String?;
         if (date == null) continue;
         byDate.putIfAbsent(date, () => []);
         byDate[date]!.add(data);
+        if (data['taken'] == true) takenDoses.add(doc.id);
+      }
+      // Today's taps may not have reached Firestore yet
+      for (final t in _tasks) {
+        if (t.isCompleted && t.medicationId != null) {
+          takenDoses.add(doseKey(today, t.medicationId!, t.timeOfDay));
+        }
       }
 
+      final meds = await MedicationService.loadAll();
+      final report = calculateAdherence(
+        medications: meds,
+        takenDoses: takenDoses,
+        from: from,
+        to: today,
+        now: now,
+      );
+
+      // Share of each day's scheduled doses that were taken
       final Map<String, double> cMap = {};
-      for (final entry in byDate.entries) {
-        final takenCount =
-            entry.value.where((d) => d['taken'] == true).length;
-        cMap[entry.key] =
-            entry.value.isEmpty ? 0.0 : takenCount / entry.value.length;
+      for (final entry in report.byDay.entries) {
+        final c = entry.value;
+        if (!c.hasSchedule) continue;
+        cMap[_dateStr(entry.key)] = c.taken / (c.expected + c.pending);
       }
 
-      final todayStr = _dateStr(now);
+      final todayStr = _dateStr(today);
       if (_tasks.isNotEmpty) {
         final completed = _tasks.where((t) => t.isCompleted).length;
         cMap[todayStr] = completed / _tasks.length;
@@ -362,7 +332,8 @@ class _HomeBodyState extends State<_HomeBody> {
       if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
 
       for (int i = 1; i <= 60; i++) {
-        final dayStr = _dateStr(now.subtract(Duration(days: i)));
+        final dayStr =
+            _dateStr(DateTime(today.year, today.month, today.day - i));
         if (cMap.containsKey(dayStr) && cMap[dayStr]! >= 1.0) {
           streak++;
         } else {
@@ -384,7 +355,8 @@ class _HomeBodyState extends State<_HomeBody> {
 
   void _updateTodayStreak() {
     final now = DateTime.now();
-    final todayStr = _dateStr(now);
+    final today = DateTime(now.year, now.month, now.day);
+    final todayStr = _dateStr(today);
 
     if (_tasks.isNotEmpty) {
       final completed = _tasks.where((t) => t.isCompleted).length;
@@ -395,7 +367,7 @@ class _HomeBodyState extends State<_HomeBody> {
     if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
 
     for (int i = 1; i <= 60; i++) {
-      final dayStr = _dateStr(now.subtract(Duration(days: i)));
+      final dayStr = _dateStr(DateTime(today.year, today.month, today.day - i));
       if (_completionMap.containsKey(dayStr) && _completionMap[dayStr]! >= 1.0) {
         streak++;
       } else {
@@ -456,13 +428,16 @@ class _HomeBodyState extends State<_HomeBody> {
                   children: [
                     _buildHeader(provider),
                     const SizedBox(height: 16),
-                    _buildDailySummaryCard(historyProvider),
-                    const SizedBox(height: 16),
-                    _buildSummaryBanner(),
-                    const SizedBox(height: 6),
-                    _buildSimulateButton(context),
-                    const SizedBox(height: 20),
-                    _buildTaskList(),
+                    if (_medsOn || _readingsOn) ...[
+                      _buildDailySummaryCard(historyProvider),
+                      const SizedBox(height: 16),
+                    ],
+                    // Streak and dose tasks belong to the Medications service
+                    if (_medsOn) ...[
+                      _buildSummaryBanner(),
+                      const SizedBox(height: 20),
+                      _buildTaskList(),
+                    ],
                   ],
                 ),
               ),
@@ -505,12 +480,31 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
         const SizedBox(width: 12),
+        // SOS normally sits on the streak banner; without the Medications
+        // service that banner is hidden, so it moves up here
+        if (!_medsOn) ...[
+          GestureDetector(
+            onTap: () => EmergencyService.showEmergencyFlow(context),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.warning_rounded,
+                  color: Colors.red, size: 26),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         GestureDetector(
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => SuggestionsPanelScreen(
-                diseaseType: _diseaseType,
+                diseaseType: _conditions.legacyDiseaseType,
                 currentReadings: {
                   for (final m in HealthMetric.values)
                     m.name: context.read<HealthProvider>().getValue(m),
@@ -590,36 +584,69 @@ class _HomeBodyState extends State<_HomeBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Today's Summary",
-            style: AppTextStyles.label.copyWith(
-              fontSize: 13,
-              color: AppColors.primary,
-            ),
+          Row(
+            children: [
+              Text(
+                "Today's Summary",
+                style: AppTextStyles.label.copyWith(
+                  fontSize: 13,
+                  color: AppColors.primary,
+                ),
+              ),
+              const Spacer(),
+              if (_measurementsOn)
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ChartsScreen()),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.show_chart_rounded,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'View trends',
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              _buildSummaryItem(
-                Icons.monitor_heart_rounded,
-                '$todayCount',
-                'readings today',
-                AppColors.success,
-              ),
-              const SizedBox(width: 8),
-              _buildSummaryItem(
-                Icons.medication_rounded,
-                '$_medScheduleCount',
-                'meds scheduled',
-                const Color(0xFF1565C0),
-              ),
-              const SizedBox(width: 8),
-              _buildSummaryItem(
-                Icons.access_time_rounded,
-                lastText,
-                'last reading',
-                AppColors.secondary,
-              ),
+              for (final item in [
+                if (_readingsOn)
+                  _buildSummaryItem(
+                    Icons.monitor_heart_rounded,
+                    '$todayCount',
+                    'readings today',
+                    AppColors.success,
+                  ),
+                if (_medsOn)
+                  _buildSummaryItem(
+                    Icons.medication_rounded,
+                    '$_medScheduleCount',
+                    'meds scheduled',
+                    const Color(0xFF1565C0),
+                  ),
+                if (_readingsOn)
+                  _buildSummaryItem(
+                    Icons.access_time_rounded,
+                    lastText,
+                    'last reading',
+                    AppColors.secondary,
+                  ),
+              ].indexed) ...[
+                if (item.$1 > 0) const SizedBox(width: 8),
+                item.$2,
+              ],
             ],
           ),
         ],
@@ -679,7 +706,7 @@ class _HomeBodyState extends State<_HomeBody> {
     for (final m in HealthMetric.values) {
       final value = provider.getValue(m);
       if (value == null) continue;
-      final status = provider.getStatus(m, value);
+      final status = provider.getStatus(m, value, context: provider.getContext(m));
       if (status == MetricStatus.warning ||
           status == MetricStatus.criticalLow ||
           status == MetricStatus.criticalHigh) {
@@ -1171,34 +1198,9 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // ── Simulate critical reading — quick testing shortcut ───────────────────
-
-  Widget _buildSimulateButton(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: TextButton(
-        onPressed: () => EmergencyService.showEmergencyFlow(context),
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.error,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: const Text(
-          'Simulate Critical Reading',
-          style: TextStyle(fontSize: 12),
-        ),
-      ),
-    );
-  }
-
   // ── Task list ─────────────────────────────────────────────────────────────
 
   Widget _buildTaskList() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid == null) return _buildGuestTaskPrompt();
-
     if (_isLoadingTasks) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
@@ -1320,53 +1322,18 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  Widget _buildGuestTaskPrompt() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Column(
-          children: [
-            const Icon(Icons.task_alt_outlined,
-                color: AppColors.primary, size: 56),
-            const SizedBox(height: 16),
-            Text(
-              'Sign in to see your daily tasks',
-              style: AppTextStyles.heading3,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your medications and readings\nwill appear here',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── Task actions ──────────────────────────────────────────────────────────
 
   Future<void> _markMedTaken(DailyTask task) async {
-    final today = DateTime.now();
-    final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    final prefKey = 'taken_${task.medicationId}_${task.timeOfDay}_$todayStr';
+    final medId = task.medicationId;
+    if (medId == null) return;
+    final day = DateTime.now();
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefKey, 'true');
-
-    if (task.medicationId != null) {
-      await MedicationService.takeMedication(task.medicationId!);
-      MedicationService.saveDoseToFirebase(
-        medicationId: task.medicationId!,
-        medicationName: task.displayName,
-        dosage: task.subtitle ?? '',
-        timeSlot: task.timeOfDay,
-        date: todayStr,
-      );
-    }
+    await DoseService.markTaken(
+      medicationId: medId,
+      timeSlot: task.timeOfDay,
+      day: day,
+    );
 
     if (mounted) {
       setState(() {
@@ -1386,14 +1353,11 @@ class _HomeBodyState extends State<_HomeBody> {
             label: 'Undo',
             textColor: Colors.white,
             onPressed: () async {
-              await prefs.remove(prefKey);
-              if (task.medicationId != null) {
-                MedicationService.removeDoseFromFirebase(
-                  medicationId: task.medicationId!,
-                  timeSlot: task.timeOfDay,
-                  date: todayStr,
-                );
-              }
+              await DoseService.undo(
+                medicationId: medId,
+                timeSlot: task.timeOfDay,
+                day: day,
+              );
               if (mounted) {
                 setState(() {
                   task.isCompleted = false;
@@ -1405,21 +1369,6 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
       );
-    }
-  }
-
-  String _statusToString(MetricStatus? status) {
-    switch (status) {
-      case MetricStatus.normal:
-        return 'Normal';
-      case MetricStatus.warning:
-        return 'Warning';
-      case MetricStatus.criticalLow:
-        return 'Low';
-      case MetricStatus.criticalHigh:
-        return 'High';
-      case null:
-        return 'Logged';
     }
   }
 
@@ -1461,6 +1410,7 @@ class _HomeBodyState extends State<_HomeBody> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
+        final quickChips = _quickMeasurementChips(sheetCtx);
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -1519,46 +1469,46 @@ class _HomeBodyState extends State<_HomeBody> {
                     color: AppColors.secondary,
                   ),
                 ),
-                const SizedBox(height: 18),
-                Text(
-                  'QUICK MEASUREMENT',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: const Color(0xFF6E7A82),
+                if (quickChips.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'QUICK MEASUREMENT',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF6E7A82),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GridView.count(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.15,
-                  children: [
-                    _buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugarBefore),
-                    _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
-                    _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
-                    _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
-                    _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Steps', sheetCtx, HealthMetric.steps),
-                    _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Divider(height: 1, color: AppColors.divider),
-                const SizedBox(height: 16),
-                Text(
-                  'OTHER',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: const Color(0xFF6E7A82),
+                  const SizedBox(height: 10),
+                  GridView.count(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.15,
+                    children: quickChips,
                   ),
-                ),
-                const SizedBox(height: 10),
+                ],
+                if (quickChips.isNotEmpty && (_medsOn || _appointmentsOn)) ...[
+                  const SizedBox(height: 20),
+                  Divider(height: 1, color: AppColors.divider),
+                ],
+                if (_medsOn || _appointmentsOn) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'OTHER',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF6E7A82),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (_medsOn)
                 _buildOtherRow(
                   icon: Icons.medication_rounded,
                   color: AppColors.card,
@@ -1576,7 +1526,8 @@ class _HomeBodyState extends State<_HomeBody> {
                     });
                   },
                 ),
-                const SizedBox(height: 8),
+                if (_medsOn && _appointmentsOn) const SizedBox(height: 8),
+                if (_appointmentsOn)
                 _buildOtherRow(
                   icon: Icons.calendar_month_rounded,
                   color: const Color(0xFF00695C),
@@ -1599,16 +1550,42 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
+  // Measurements offer the vital signs, Activities offers walking. The
+  // patient's conditions decide the order, so e.g. Sugar leads for diabetes.
+  List<Widget> _quickMeasurementChips(BuildContext sheetCtx) {
+    final chips = <Widget>[];
+    for (final metric in _conditions.metricOrder) {
+      final walking = metric == HealthMetric.walkingMinutes;
+      if (walking ? !_activitiesOn : !_measurementsOn) continue;
+      switch (metric) {
+        case HealthMetric.bloodSugar:
+          chips.add(_buildQuickChip(Icons.water_drop_rounded, const Color(0xFF1976D2), 'Sugar', sheetCtx, HealthMetric.bloodSugar));
+        case HealthMetric.systolic:
+          // Systolic stands for the blood pressure screen
+          chips.add(_buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null));
+        case HealthMetric.diastolic:
+          break;
+        case HealthMetric.heartRate:
+          chips.add(_buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate));
+        case HealthMetric.weight:
+          chips.add(_buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight));
+        case HealthMetric.walkingMinutes:
+          chips.add(_buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes));
+        case HealthMetric.temperature:
+          chips.add(_buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature));
+      }
+    }
+    return chips;
+  }
+
   void _navigateToMetric(HealthMetric? metric) async {
     Widget screen;
     if (metric == null) {
-      screen = BloodPressureInputScreen(onSave: _saveReading);
+      screen = BloodPressureInputScreen(onSave: _saveReadings);
     } else {
-      final config = _configs[metric]!;
       screen = AddReadingInputScreen(
         metric: metric,
-        config: config,
-        onSave: _saveReading,
+        onSave: _saveReadings,
       );
     }
     final saved = await Navigator.push<bool>(
@@ -1722,40 +1699,50 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // Saves a reading submitted via the new full-screen reading flow.
-  // Also marks the matching task card as completed if one exists.
-  Future<void> _saveReading(HealthMetric metric, double value, DateTime when) async {
-    final config = _configs[metric];
-
+  // Saves the readings submitted from a reading screen. They share one time
+  // and are written together, then added to the session state with their
+  // real Firestore IDs.
+  Future<void> _saveReadings(List<ReadingEntry> entries, DateTime when) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      throw const ReadingSaveException(
+          'You need an account to save readings. Please sign in or register.');
+    }
+    if (when.isAfter(DateTime.now())) {
+      throw const ReadingSaveException("The reading time can't be in the future.");
+    }
 
     final provider = context.read<HealthProvider>();
-    final historyProvider = context.read<HealthHistoryProvider>();
 
-    provider.updateValue(metric, value);
-    final status = provider.getStatus(metric, value);
-
-    final reading = HealthReading(
-      id: '',
-      metricType: metric.name,
-      value: value,
-      unit: config?.unit ?? '',
-      status: _statusToString(status),
-      timestamp: when,
-    );
-    final readingId = await HealthReadingService.saveReading(uid, reading);
-    historyProvider.addReading(metric, value);
-
-    // Fire critical reading notification
-    final statusStr = _statusToString(status);
-    if (statusStr == 'High' || statusStr == 'Low') {
-      NotificationService.showCriticalReadingNotification(
-        readingId: readingId,
-        metricName: config?.title ?? metric.name,
-        value: value,
-        unit: config?.unit ?? '',
+    final drafts = entries.map((e) {
+      final status = HealthMetrics.evaluate(e.metric, e.value, context: e.context);
+      return HealthReading(
+        id: '',
+        metricType: e.metric.name,
+        value: e.value,
+        unit: HealthMetrics.of(e.metric).unit,
+        status: HealthMetrics.statusLabel(status),
+        timestamp: when,
+        note: e.note,
+        context: e.context,
       );
+    }).toList();
+
+    final saved = await HealthReadingService.saveReadings(uid, drafts);
+
+    // History picks the new readings up from its live query, with their
+    // Firestore IDs and the time the user chose
+    for (final reading in saved) {
+      provider.recordReading(reading);
+
+      if (reading.status == 'High' || reading.status == 'Low') {
+        NotificationService.showCriticalReadingNotification(
+          readingId: reading.id,
+          metricName: reading.label,
+          value: reading.value,
+          unit: reading.unit,
+        );
+      }
     }
   }
 }

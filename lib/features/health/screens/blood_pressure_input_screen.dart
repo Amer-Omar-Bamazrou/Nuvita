@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../features/dashboard/providers/health_provider.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_time_picker.dart';
+import '../models/reading_entry.dart';
+import '../widgets/status_display.dart';
+import '../widgets/value_entry_dialog.dart';
+import '../../history/screens/history_screen.dart';
 
 class BloodPressureInputScreen extends StatefulWidget {
-  final Future<void> Function(HealthMetric metric, double value, DateTime when) onSave;
+  final SaveReadings onSave;
 
   const BloodPressureInputScreen({super.key, required this.onSave});
 
@@ -24,7 +28,14 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
   bool _saving = false;
   int _contextIndex = -1;
 
+  // Pulse is optional; a heart-rate reading is only saved when this is filled in
+  final _pulseController = TextEditingController();
+
   static const _contextChips = ['Resting', 'After exercise', 'After meal', 'Stressed'];
+
+  static final _sysDef = HealthMetrics.of(HealthMetric.systolic);
+  static final _diaDef = HealthMetrics.of(HealthMetric.diastolic);
+  static final _pulseDef = HealthMetrics.of(HealthMetric.heartRate);
 
   @override
   void initState() {
@@ -34,13 +45,25 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
     _selectedTime = TimeOfDay(hour: now.hour, minute: now.minute);
   }
 
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
   // ── Status ──────────────────────────────────────────────────────
 
-  (String, Color) get _status {
-    if (_sys < 120 && _dia < 80) return ('Normal', AppColors.success);
-    if (_sys <= 129 && _dia < 80) return ('Elevated', AppColors.warning);
-    if (_sys <= 139 || _dia <= 89) return ('High Stage 1', AppColors.warning);
-    return ('High Stage 2', AppColors.error);
+  // The pair shows whichever of systolic and diastolic is more concerning
+  (String, Color) get _status => statusDisplay(HealthMetrics.worseStatus(
+        HealthMetrics.evaluate(HealthMetric.systolic, _sys),
+        HealthMetrics.evaluate(HealthMetric.diastolic, _dia),
+      ));
+
+  String get _rangeHint {
+    final sys = _sysDef.bands!;
+    final dia = _diaDef.bands!;
+    return 'Normal range: ${sys.low.toInt()}–${sys.normalMax.toInt()} / '
+        '${dia.low.toInt()}–${dia.normalMax.toInt()} mmHg';
   }
 
   // ── Date / time ─────────────────────────────────────────────────
@@ -87,36 +110,81 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
+  Future<void> _typeValue({required bool systolic}) async {
+    final v = await showValueEntryDialog(
+      context,
+      def: systolic ? _sysDef : _diaDef,
+      initial: systolic ? _sys : _dia,
+      title: systolic ? 'Enter systolic' : 'Enter diastolic',
+    );
+    if (v == null || !mounted) return;
+    // Steppers move in whole mmHg, so keep typed values whole too
+    setState(() {
+      if (systolic) {
+        _sys = v.roundToDouble();
+      } else {
+        _dia = v.roundToDouble();
+      }
+    });
+  }
+
   // ── Submit ──────────────────────────────────────────────────────
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    if (_sys <= _dia) {
+      _showError('Systolic (upper number) must be higher than diastolic.');
+      return;
+    }
+
+    double? pulse;
+    final pulseText = _pulseController.text.trim();
+    if (pulseText.isNotEmpty) {
+      pulse = double.tryParse(pulseText);
+      if (pulse == null || !_pulseDef.isInRange(pulse)) {
+        _showError('Enter a pulse between ${_pulseDef.min.toInt()} and '
+            '${_pulseDef.max.toInt()} ${_pulseDef.unit}, or leave it empty.');
+        return;
+      }
+    }
+
+    final when = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+    if (when.isAfter(DateTime.now())) {
+      _showError("The reading time can't be in the future.");
+      return;
+    }
+
     setState(() => _saving = true);
     try {
-      final when = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
-      await Future.wait([
-        widget.onSave(HealthMetric.systolic, _sys, when),
-        widget.onSave(HealthMetric.diastolic, _dia, when),
-        widget.onSave(HealthMetric.heartRate, 70, when),
-      ]);
+      final note = _contextIndex >= 0 ? _contextChips[_contextIndex] : null;
+      await widget.onSave([
+        ReadingEntry(metric: HealthMetric.systolic, value: _sys, note: note),
+        ReadingEntry(metric: HealthMetric.diastolic, value: _dia, note: note),
+        if (pulse != null)
+          ReadingEntry(metric: HealthMetric.heartRate, value: pulse, note: note),
+      ], when);
       if (mounted) Navigator.pop(context, true);
+    } on ReadingSaveException catch (e) {
+      if (mounted) _showError(e.message);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to save reading. Please try again.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
+      if (mounted) _showError('Failed to save reading. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -142,7 +210,14 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded, color: AppColors.primary, size: 20),
-            onPressed: () {},
+            tooltip: 'Past readings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const HistoryScreen(initialMetric: HealthMetric.systolic),
+              ),
+            ),
           ),
         ],
       ),
@@ -163,11 +238,12 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
                     label: 'SYSTOLIC',
                     sub: 'Upper number',
                     value: _sys.toInt(),
+                    onType: () => _typeValue(systolic: true),
                     onInc: () {
-                      if (_sys < 250) { HapticFeedback.selectionClick(); setState(() => _sys++); }
+                      if (_sys < _sysDef.max) { HapticFeedback.selectionClick(); setState(() => _sys++); }
                     },
                     onDec: () {
-                      if (_sys > 50) { HapticFeedback.selectionClick(); setState(() => _sys--); }
+                      if (_sys > _sysDef.min) { HapticFeedback.selectionClick(); setState(() => _sys--); }
                     },
                   ),
                   const SizedBox(height: 10),
@@ -177,13 +253,18 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
                     label: 'DIASTOLIC',
                     sub: 'Lower number',
                     value: _dia.toInt(),
+                    onType: () => _typeValue(systolic: false),
                     onInc: () {
-                      if (_dia < 150) { HapticFeedback.selectionClick(); setState(() => _dia++); }
+                      if (_dia < _diaDef.max) { HapticFeedback.selectionClick(); setState(() => _dia++); }
                     },
                     onDec: () {
-                      if (_dia > 30) { HapticFeedback.selectionClick(); setState(() => _dia--); }
+                      if (_dia > _diaDef.min) { HapticFeedback.selectionClick(); setState(() => _dia--); }
                     },
                   ),
+                  const SizedBox(height: 10),
+
+                  // Optional pulse
+                  _buildPulseCard(),
                   const SizedBox(height: 14),
 
                   // Date/Time
@@ -291,7 +372,7 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text('Healthy range: under 120 / 80 mmHg', style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+          Text(_rangeHint, style: TextStyle(fontSize: 11, color: AppColors.secondary)),
         ],
       ),
     );
@@ -301,6 +382,7 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
     required String label,
     required String sub,
     required int value,
+    required VoidCallback onType,
     required VoidCallback onInc,
     required VoidCallback onDec,
   }) {
@@ -330,7 +412,10 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
                 ],
               ),
               const Spacer(),
-              Text('$value', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: -0.5)),
+              GestureDetector(
+                onTap: onType,
+                child: Text('$value', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: -0.5)),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -347,6 +432,69 @@ class _BloodPressureInputScreenState extends State<BloodPressureInputScreen> {
               ),
               _stepperBtn(Icons.add_rounded, true, onInc),
             ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: onType,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text(
+                  'Type a value',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPulseCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textDark.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('PULSE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: AppColors.secondary)),
+              const SizedBox(height: 2),
+              Text('Optional', style: TextStyle(fontSize: 13, color: AppColors.textDark)),
+            ],
+          ),
+          const Spacer(),
+          SizedBox(
+            width: 120,
+            child: TextField(
+              controller: _pulseController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.primary),
+              decoration: InputDecoration(
+                hintText: '—',
+                hintStyle: TextStyle(fontSize: 22, color: AppColors.secondary.withValues(alpha: 0.5)),
+                suffixText: _pulseDef.unit,
+                suffixStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.secondary),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
           ),
         ],
       ),

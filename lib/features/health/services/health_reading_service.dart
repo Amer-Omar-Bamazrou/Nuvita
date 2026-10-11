@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/health/health_metrics.dart';
 import '../models/health_reading.dart';
 
 class HealthReadingService {
@@ -14,6 +15,45 @@ class HealthReadingService {
     return ref.id;
   }
 
+  // Saves readings taken together (e.g. systolic + diastolic) in one batch so
+  // either all of them are written or none. Returns them with their new IDs.
+  static Future<List<HealthReading>> saveReadings(
+      String uid, List<HealthReading> readings) async {
+    final batch = FirebaseFirestore.instance.batch();
+    final saved = <HealthReading>[];
+    for (final r in readings) {
+      final ref = _col(uid).doc();
+      batch.set(ref, r.toMap());
+      saved.add(HealthReading(
+        id: ref.id,
+        metricType: r.metricType,
+        value: r.value,
+        unit: r.unit,
+        status: r.status,
+        timestamp: r.timestamp,
+        note: r.note,
+        context: r.context,
+      ));
+    }
+    await batch.commit();
+    return saved;
+  }
+
+  // Live query of the newest [limit] readings. Firestore delivers local
+  // writes straight away, so saves, edits and deletes show up without a
+  // reload; changes made elsewhere (e.g. by the doctor) arrive the same way.
+  static Stream<List<HealthReading>> watchReadings(String uid,
+      {required int limit}) {
+    return _col(uid)
+        .orderBy('timestamp', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs
+            .where((d) => d.data()['value'] is num)
+            .map((d) => HealthReading.fromMap(d.id, d.data()))
+            .toList());
+  }
+
   // Live stream of all readings, newest first
   static Stream<List<HealthReading>> getReadings(String uid) {
     return _col(uid)
@@ -22,6 +62,15 @@ class HealthReadingService {
         .map((snap) => snap.docs
             .map((d) => HealthReading.fromMap(d.id, d.data()))
             .toList());
+  }
+
+  // Every reading the user has, newest first (used by data export)
+  static Future<List<HealthReading>> getAllReadings(String uid) async {
+    final snap = await _col(uid).orderBy('timestamp', descending: true).get();
+    return snap.docs
+        .where((d) => d.data()['value'] is num)
+        .map((d) => HealthReading.fromMap(d.id, d.data()))
+        .toList();
   }
 
   // Fetches readings from the last N days, newest first.
@@ -40,12 +89,15 @@ class HealthReadingService {
   }
 
   // Returns the single most recent reading for a given metric type.
-  // Fetches only that metric's documents and picks the latest in Dart
-  // to avoid requiring a (metricType + timestamp) composite index.
+  // Fetches only that metric's documents (legacy keys included) and picks the
+  // latest in Dart to avoid requiring a (metricType + timestamp) composite index.
   static Future<HealthReading?> getLatestReading(
       String uid, String metricType) async {
+    final metric = HealthMetrics.metricForKey(metricType);
+    final keys =
+        metric == null ? [metricType] : HealthMetrics.storedKeysFor(metric);
     final snap = await _col(uid)
-        .where('metricType', isEqualTo: metricType)
+        .where('metricType', whereIn: keys)
         .get();
 
     if (snap.docs.isEmpty) return null;

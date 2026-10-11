@@ -3,6 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
+import '../../../shared/widgets/nuvita_time_picker.dart';
 import '../../../core/services/notification_service.dart';
 import '../../doctor/data/medicine_library.dart';
 import '../models/medication_model.dart';
@@ -131,10 +132,9 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Future<void> _pickTime(int index) async {
-    final picked = await showModalBottomSheet<TimeOfDay>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _TimeScrollPicker(initialTime: _times[index]),
+    final picked = await showNuvitaTimePicker(
+      context,
+      initialTime: _times[index],
     );
     if (picked != null && mounted) {
       setState(() => _times[index] = picked);
@@ -186,33 +186,84 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       startDate: _startDate,
       notes: _notesController.text.trim(),
       pillsRemaining: pills,
-      pillsPerDose: 1,
+      // Settings this form doesn't show are carried over when editing
+      isActive: existing?.isActive ?? true,
+      pillsPerDose: existing?.pillsPerDose ?? 1,
+      reminderEnabled: existing?.reminderEnabled ?? false,
       // Clear the notification flag if the user refilled above threshold
       lowSupplyNotified: resetNotified ? false : (existing?.lowSupplyNotified ?? false),
     );
 
-    await NotificationService.initialize();
-    await NotificationService.requestPermissions();
-
-    if (_isEditMode) {
-      // Cancel old scheduled reminders before re-scheduling with updated times
-      await NotificationService.cancelMedicationReminder(
-          existing!.id, existing.times.length);
-      await MedicationService.update(med);
-      await NotificationService.scheduleMedicationReminder(med);
-
-      // If the user refilled above threshold, cancel any pending supply alert
-      if (resetNotified) {
-        await NotificationService.cancelLowSupplyAlert(med.id);
+    try {
+      if (_isEditMode) {
+        await MedicationService.update(med);
+      } else {
+        await MedicationService.add(med);
       }
-    } else {
-      await MedicationService.add(med);
-      await NotificationService.scheduleMedicationReminder(med);
+    } catch (e) {
+      debugPrint('AddMedicationScreen: save failed: $e');
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showError('Could not save the medication. Please try again.');
+      return;
+    }
+
+    // The medication is stored; reminders are scheduled separately so a
+    // refused permission doesn't lose the user's entry
+    var remindersOk = true;
+    try {
+      await NotificationService.initialize();
+      await NotificationService.requestPermissions();
+
+      if (_isEditMode) {
+        // Cancel everything scheduled for the old times (IDs depend on the
+        // number of times), then schedule again for the new ones
+        await NotificationService.cancelMedicationReminder(
+            existing!.id, existing.times.length);
+        await NotificationService.cancelDailyMedicationReminders(
+            existing.id, existing.times);
+        await NotificationService.scheduleMedicationReminder(med);
+        if (med.reminderEnabled) {
+          await NotificationService.scheduleDailyMedicationReminder(
+            med.id,
+            med.name,
+            med.dosage,
+            med.times,
+            pillsPerDose: med.pillsPerDose,
+          );
+        }
+
+        // If the user refilled above threshold, cancel any pending supply alert
+        if (resetNotified) {
+          await NotificationService.cancelLowSupplyAlert(med.id);
+        }
+      } else {
+        await NotificationService.scheduleMedicationReminder(med);
+      }
+    } catch (e) {
+      debugPrint('AddMedicationScreen: reminder scheduling failed: $e');
+      remindersOk = false;
     }
 
     if (!mounted) return;
+    if (!remindersOk) {
+      _showError('Medication saved, but its reminders could not be set. '
+          'Check that notifications are allowed for Nuvita.');
+    }
     // Pop with the saved model so callers can update their state immediately
     Navigator.of(context).pop(med);
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   String _formatTime(TimeOfDay t) {
@@ -605,192 +656,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Three-wheel time picker (Hour / Minute / AM·PM) ──
-
-class _TimeScrollPicker extends StatefulWidget {
-  final TimeOfDay initialTime;
-  const _TimeScrollPicker({required this.initialTime});
-
-  @override
-  State<_TimeScrollPicker> createState() => _TimeScrollPickerState();
-}
-
-class _TimeScrollPickerState extends State<_TimeScrollPicker> {
-  static const _itemExtent = 52.0;
-  static const _visibleItems = 5;
-
-  late FixedExtentScrollController _hourCtrl;
-  late FixedExtentScrollController _minuteCtrl;
-  late FixedExtentScrollController _periodCtrl;
-
-  late int _hour;   // 1–12 index (0-based: 0 = 1, 11 = 12)
-  late int _minute;  // 0–59
-  late int _period;  // 0 = AM, 1 = PM
-
-  @override
-  void initState() {
-    super.initState();
-    final h12 = widget.initialTime.hourOfPeriod;
-    _hour = (h12 == 0 ? 11 : h12 - 1);
-    _minute = widget.initialTime.minute;
-    _period = widget.initialTime.period == DayPeriod.am ? 0 : 1;
-
-    _hourCtrl = FixedExtentScrollController(initialItem: _hour);
-    _minuteCtrl = FixedExtentScrollController(initialItem: _minute);
-    _periodCtrl = FixedExtentScrollController(initialItem: _period);
-  }
-
-  @override
-  void dispose() {
-    _hourCtrl.dispose();
-    _minuteCtrl.dispose();
-    _periodCtrl.dispose();
-    super.dispose();
-  }
-
-  TimeOfDay _buildResult() {
-    final displayHour = _hour + 1; // 1–12
-    int hour24;
-    if (_period == 0) {
-      hour24 = displayHour == 12 ? 0 : displayHour;
-    } else {
-      hour24 = displayHour == 12 ? 12 : displayHour + 12;
-    }
-    return TimeOfDay(hour: hour24, minute: _minute);
-  }
-
-  Widget _buildWheel({
-    required FixedExtentScrollController controller,
-    required int itemCount,
-    required String Function(int index) labelBuilder,
-    required ValueChanged<int> onChanged,
-    required int selected,
-    double width = 70,
-  }) {
-    return SizedBox(
-      width: width,
-      height: _itemExtent * _visibleItems,
-      child: ListWheelScrollView.useDelegate(
-        controller: controller,
-        itemExtent: _itemExtent,
-        physics: const FixedExtentScrollPhysics(),
-        diameterRatio: 6,
-        perspective: 0.003,
-        onSelectedItemChanged: onChanged,
-        childDelegate: ListWheelChildBuilderDelegate(
-          childCount: itemCount,
-          builder: (context, i) {
-            final isSelected = i == selected;
-            return Center(
-              child: Text(
-                labelBuilder(i),
-                style: TextStyle(
-                  fontSize: isSelected ? 26 : 18,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
-                  color: isSelected ? Colors.white : Colors.white38,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3C3C3C),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          SizedBox(
-            height: _itemExtent * _visibleItems,
-            child: Stack(
-              children: [
-                Center(
-                  child: Container(
-                    height: _itemExtent,
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      border: Border.symmetric(
-                        horizontal: BorderSide(color: Colors.white24, width: 1),
-                      ),
-                    ),
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildWheel(
-                      controller: _hourCtrl,
-                      itemCount: 12,
-                      labelBuilder: (i) => (i + 1).toString().padLeft(2, '0'),
-                      onChanged: (i) => setState(() => _hour = i),
-                      selected: _hour,
-                    ),
-                    Text(
-                      ':',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    _buildWheel(
-                      controller: _minuteCtrl,
-                      itemCount: 60,
-                      labelBuilder: (i) => i.toString().padLeft(2, '0'),
-                      onChanged: (i) => setState(() => _minute = i),
-                      selected: _minute,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildWheel(
-                      controller: _periodCtrl,
-                      itemCount: 2,
-                      labelBuilder: (i) => i == 0 ? 'AM' : 'PM',
-                      onChanged: (i) => setState(() => _period = i),
-                      selected: _period,
-                      width: 60,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context, _buildResult()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('OK'),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

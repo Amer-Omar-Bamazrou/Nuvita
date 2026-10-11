@@ -1,28 +1,21 @@
 import 'package:flutter/material.dart';
+import '../../../core/health/health_metrics.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 
-// All tracked health metrics across disease types
-enum HealthMetric {
-  bloodSugar,
-  bloodSugarBefore,
-  bloodSugarAfter,
-  systolic,
-  diastolic,
-  heartRate,
-  weight,
-  steps,
-  temperature,
-}
-
-// Reading status bands — weight and steps have no threshold so they return null
-enum MetricStatus { normal, warning, criticalLow, criticalHigh }
-
+// Latest value per metric for the current session. Thresholds live in
+// HealthMetrics; this provider only remembers what was entered or loaded.
 class HealthProvider extends ChangeNotifier {
   // All values start null (no reading entered yet)
   final Map<HealthMetric, double?> _values = {
     for (final m in HealthMetric.values) m: null,
   };
+
+  // Context of the latest blood sugar value, so its status uses the right bands
+  final Map<HealthMetric, GlucoseContext?> _contexts = {};
+
+  // When each current value was taken, so a backdated entry doesn't replace it
+  final Map<HealthMetric, DateTime> _takenAt = {};
 
   // Holds the Firebase-loaded baseline so trend arrows can compare against it.
   // These are set once on load and not updated when the user enters new readings.
@@ -32,104 +25,87 @@ class HealthProvider extends ChangeNotifier {
 
   double? getValue(HealthMetric metric) => _values[metric];
 
+  GlucoseContext? getContext(HealthMetric metric) => _contexts[metric];
+
   double? getPreviousValue(HealthMetric metric) => _previousValues[metric];
 
-  void updateValue(HealthMetric metric, double value) {
+  void updateValue(HealthMetric metric, double value, {GlucoseContext? context}) {
     _values[metric] = value;
+    _contexts[metric] = context;
     notifyListeners();
   }
 
-  // Returns a short contextual tip when a reading is outside the healthy range.
-  // Blood sugar thresholds are in mg/dL (the app's stored unit).
-  String? getSuggestionForMetric(String metricKey, double value) {
-    switch (metricKey) {
-      case 'bloodSugar':
-        if (value > 180) return 'Blood sugar is high — reduce sugary drinks and rest';
-        if (value < 72) return 'Blood sugar is low — eat something small now';
-        return null;
-      case 'bloodSugarBefore':
-        if (value > 125) return 'Fasting glucose is high — avoid late-night snacks';
-        if (value < 70) return 'Fasting glucose is low — eat something small now';
-        return null;
-      case 'bloodSugarAfter':
-        if (value > 199) return 'Post-meal glucose is very high — limit carbs next meal';
-        if (value > 140) return 'Post-meal glucose is elevated — consider a short walk';
-        if (value < 70) return 'Post-meal glucose is low — drink juice or eat a snack';
-        return null;
-      case 'systolic':
-        if (value > 140) return 'BP is elevated — avoid caffeine and rest quietly';
-        return null;
-      case 'heartRate':
-        if (value > 100) return 'Heart rate is high — try slow deep breathing';
-        if (value < 55) return 'Heart rate is low — avoid overexertion today';
-        return null;
-      case 'steps':
-        if (value < 3000) return 'Low steps today — a short walk would help';
-        return null;
-      case 'weight':
-        return 'Stay hydrated — drink water regularly';
-      case 'temperature':
-        if (value > 38.5) return 'Fever detected — rest, stay hydrated, seek care if it persists';
-        if (value > 37.5) return 'Slightly elevated temperature — monitor closely';
-        if (value < 35.5) return 'Temperature is low — warm up and monitor';
-        return null;
-      default:
-        return null;
-    }
+  // Takes a saved reading as the metric's current value unless a newer one
+  // is already known (the user may have backdated the entry).
+  void recordReading(HealthReading reading) {
+    final metric = reading.metric;
+    if (metric == null) return;
+    final current = _takenAt[metric];
+    if (current != null && reading.timestamp.isBefore(current)) return;
+    _takenAt[metric] = reading.timestamp;
+    updateValue(metric, reading.value, context: reading.context);
   }
 
-  // Evaluates a reading against clinical thresholds.
-  // Returns null for metrics that have no status evaluation.
-  MetricStatus? getStatus(HealthMetric metric, double value) {
+  // Returns a short contextual tip when a reading is outside the healthy range.
+  // The range itself comes from HealthMetrics so tips and statuses always agree.
+  String? getSuggestionForMetric(
+    String metricKey,
+    double value, {
+    GlucoseContext? context,
+  }) {
+    final metric = HealthMetrics.metricForKey(metricKey);
+    if (metric == null) return null;
+    context ??= HealthMetrics.legacyContextForKey(metricKey);
+    final status = HealthMetrics.evaluate(metric, value, context: context);
+    final high = status == MetricStatus.criticalHigh;
+    final aboveNormal = high || status == MetricStatus.warning;
+    final low = status == MetricStatus.criticalLow;
+
     switch (metric) {
       case HealthMetric.bloodSugar:
-        if (value < 70) return MetricStatus.criticalLow;
-        if (value <= 180) return MetricStatus.normal;
-        if (value <= 300) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
-      case HealthMetric.bloodSugarBefore:
-        if (value < 70) return MetricStatus.criticalLow;
-        if (value <= 99) return MetricStatus.normal;
-        if (value <= 125) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
-      case HealthMetric.bloodSugarAfter:
-        if (value < 70) return MetricStatus.criticalLow;
-        if (value <= 140) return MetricStatus.normal;
-        if (value <= 199) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
+        switch (context) {
+          case GlucoseContext.fasting:
+          case GlucoseContext.beforeMeal:
+            if (high) return 'Fasting glucose is high — avoid late-night snacks';
+            if (low) return 'Fasting glucose is low — eat something small now';
+            return null;
+          case GlucoseContext.afterMeal:
+            if (high) return 'Post-meal glucose is very high — limit carbs next meal';
+            if (aboveNormal) return 'Post-meal glucose is elevated — consider a short walk';
+            if (low) return 'Post-meal glucose is low — drink juice or eat a snack';
+            return null;
+          case GlucoseContext.random:
+          case null:
+            if (aboveNormal) return 'Blood sugar is high — reduce sugary drinks and rest';
+            if (low) return 'Blood sugar is low — eat something small now';
+            return null;
+        }
       case HealthMetric.systolic:
-        if (value < 90) return MetricStatus.criticalLow;
-        if (value <= 120) return MetricStatus.normal;
-        if (value <= 140) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
-      case HealthMetric.diastolic:
-        if (value < 60) return MetricStatus.criticalLow;
-        if (value <= 80) return MetricStatus.normal;
-        if (value <= 90) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
+        if (high) return 'BP is elevated — avoid caffeine and rest quietly';
+        return null;
       case HealthMetric.heartRate:
-        if (value < 50) return MetricStatus.criticalLow;
-        if (value <= 100) return MetricStatus.normal;
-        if (value <= 120) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
-      case HealthMetric.temperature:
-        if (value < 35.5) return MetricStatus.criticalLow;
-        if (value <= 37.5) return MetricStatus.normal;
-        if (value <= 38.5) return MetricStatus.warning;
-        return MetricStatus.criticalHigh;
-
-      // No evaluation needed for these
+        if (aboveNormal) return 'Heart rate is high — try slow deep breathing';
+        if (low) return 'Heart rate is low — avoid overexertion today';
+        return null;
       case HealthMetric.weight:
-      case HealthMetric.steps:
+        return 'Stay hydrated — drink water regularly';
+      case HealthMetric.temperature:
+        if (high) return 'Fever detected — rest, stay hydrated, seek care if it persists';
+        if (aboveNormal) return 'Slightly elevated temperature — monitor closely';
+        if (low) return 'Temperature is low — warm up and monitor';
+        return null;
+      case HealthMetric.diastolic:
+      case HealthMetric.walkingMinutes:
         return null;
     }
   }
+
+  MetricStatus? getStatus(
+    HealthMetric metric,
+    double value, {
+    GlucoseContext? context,
+  }) =>
+      HealthMetrics.evaluate(metric, value, context: context);
 
   // Restores the latest reading per metric from Firestore so cards
   // show previous values when the app restarts. Also populates _previousValues
@@ -141,6 +117,8 @@ class HealthProvider extends ChangeNotifier {
             await HealthReadingService.getLatestReading(uid, metric.name);
         if (reading != null) {
           _values[metric] = reading.value;
+          _contexts[metric] = reading.context;
+          _takenAt[metric] = reading.timestamp;
           _previousValues[metric] = reading.value;
         }
       }
@@ -164,27 +142,12 @@ class HealthProvider extends ChangeNotifier {
         metricType: metric.name,
         value: value,
         unit: unit,
-        status: _statusString(status),
+        status: HealthMetrics.statusLabel(status),
         timestamp: DateTime.now(),
       );
       await HealthReadingService.saveReading(uid, reading);
     } catch (e) {
       debugPrint('HealthProvider: saveReading failed: $e');
-    }
-  }
-
-  String _statusString(MetricStatus? status) {
-    switch (status) {
-      case MetricStatus.normal:
-        return 'Normal';
-      case MetricStatus.warning:
-        return 'Warning';
-      case MetricStatus.criticalLow:
-        return 'Low';
-      case MetricStatus.criticalHigh:
-        return 'High';
-      case null:
-        return 'Logged';
     }
   }
 }

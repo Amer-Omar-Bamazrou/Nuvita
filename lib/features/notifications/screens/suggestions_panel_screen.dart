@@ -22,7 +22,6 @@ class SuggestionsPanelScreen extends StatefulWidget {
 }
 
 class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
-  bool _isGuest = false;
   final PatientSuggestionService _service = PatientSuggestionService();
   final Set<String> _expandedIds = {};
   // Cached once so StreamBuilder doesn't resubscribe on every setState rebuild
@@ -31,11 +30,8 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
   @override
   void initState() {
     super.initState();
-    _isGuest = FirebaseAuth.instance.currentUser == null;
-    if (!_isGuest) {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      _stream = _service.listenToAllSuggestions(uid);
-    }
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) _stream = _service.listenToAllSuggestions(uid);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -54,14 +50,14 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
         title: Text('Notifications', style: AppTextStyles.heading2),
         centerTitle: true,
       ),
-      body: _isGuest ? _buildGuestState() : _buildStream(),
+      body: _buildStream(),
     );
   }
 
   // ── Stream ─────────────────────────────────────────────────────────────────
 
   Widget _buildStream() {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _stream,
       builder: (context, snap) {
@@ -320,42 +316,6 @@ class _SuggestionsPanelScreenState extends State<SuggestionsPanelScreen> {
               isError
                   ? 'Check your connection and try again.'
                   : 'Messages from your doctor\nwill appear here.',
-              style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuestState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.notifications_none_rounded,
-                size: 48,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Sign in to see notifications',
-                style: AppTextStyles.heading3,
-                textAlign: TextAlign.center),
-            const SizedBox(height: 10),
-            Text(
-              'Doctor messages and health alerts\nwill appear here once you sign in.',
               style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
             ),

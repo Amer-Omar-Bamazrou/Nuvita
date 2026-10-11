@@ -2,11 +2,13 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../charts/models/metric_thresholds.dart';
+import '../../../core/health/health_metrics.dart';
+import '../../health/models/blood_pressure_pair.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../medication/models/medication_model.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/adherence.dart';
 
 class ReportService {
   static final _primary = PdfColor.fromHex('004346');
@@ -29,6 +31,18 @@ class ReportService {
     final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
     final medications = await MedicationService.loadAll();
     final adherence = await MedicationService.getAdherenceHistory(uid, 30);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final adherenceCounts = calculateAdherence(
+      medications: medications,
+      takenDoses: {
+        for (final e in adherence.entries)
+          if (e.value) e.key,
+      },
+      from: DateTime(today.year, today.month, today.day - 29),
+      to: today,
+      now: now,
+    ).total;
 
     final doc = pw.Document();
 
@@ -45,7 +59,7 @@ class ReportService {
           pw.SizedBox(height: 24),
           ..._buildReadingsWidgets(readings),
           pw.SizedBox(height: 24),
-          ..._buildMedicationsWidgets(medications, adherence),
+          ..._buildMedicationsWidgets(medications, adherenceCounts),
           pw.SizedBox(height: 24),
           _buildDisclaimer(),
         ],
@@ -144,11 +158,7 @@ class ReportService {
       return list.first.value.toStringAsFixed(1);
     }
 
-    String latestUnit(String type) {
-      final list = grouped[type];
-      if (list == null || list.isEmpty) return '';
-      return list.first.unit;
-    }
+    String latestUnit(String type) => _unitFor(type);
 
     final sys = latest('systolic');
     final dia = latest('diastolic');
@@ -156,11 +166,15 @@ class ReportService {
     final hrUnit = latestUnit('heartRate');
     final bs = latest('bloodSugar');
     final bsUnit = latestUnit('bloodSugar');
+    final bsContext = grouped['bloodSugar']?.first.context;
+    final bsSuffix =
+        bsContext == null ? '' : ' (${HealthMetrics.contextLabel(bsContext)})';
     final temp = latest('temperature');
     final tempUnit = latestUnit('temperature');
     final weight = latest('weight');
     final weightUnit = latestUnit('weight');
-    final steps = latest('steps');
+    final walking = latest('walkingMinutes');
+    final walkingUnit = latestUnit('walkingMinutes');
 
     final labelStyle = pw.TextStyle(
       fontSize: 12,
@@ -210,20 +224,29 @@ class ReportService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               vitalRow('SYS / DIA', '$sys / $dia${sys != '--' ? ' mmHg' : ''}'),
-              vitalRow('Heart Rate', hr != '--' ? '$hr $hrUnit' : '--'),
-              vitalRow('Blood Sugar', bs != '--' ? '$bs $bsUnit' : '--'),
-              vitalRow('Temperature', temp != '--' ? '$temp $tempUnit' : '--'),
-              vitalRow('Weight', weight != '--' ? '$weight $weightUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('heartRate'),
+                  hr != '--' ? '$hr $hrUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('bloodSugar'),
+                  bs != '--' ? '$bs $bsUnit$bsSuffix' : '--'),
+              vitalRow(HealthMetrics.labelForKey('temperature'),
+                  temp != '--' ? '$temp $tempUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('weight'),
+                  weight != '--' ? '$weight $weightUnit' : '--'),
               pw.Padding(
                 padding: pw.EdgeInsets.zero,
                 child: pw.Row(
                   children: [
                     pw.SizedBox(
                       width: 130,
-                      child: pw.Text('Steps', style: labelStyle),
+                      child: pw.Text(
+                        HealthMetrics.labelForKey('walkingMinutes'),
+                        style: labelStyle,
+                      ),
                     ),
                     pw.Text(
-                      steps != '--' ? '${double.parse(steps).toInt()}' : '--',
+                      walking != '--'
+                          ? '${double.parse(walking).toInt()} $walkingUnit'
+                          : '--',
                       style: valueStyle,
                     ),
                   ],
@@ -236,7 +259,7 @@ class ReportService {
     );
   }
 
-  // ── Readings section (no systolic/diastolic standalone) ────────────────
+  // ── Readings section (systolic/diastolic shown as one BP table) ────────
 
   static List<pw.Widget> _buildReadingsWidgets(List<HealthReading> readings) {
     final sectionTitle = pw.Text(
@@ -277,6 +300,30 @@ class ReportService {
 
     final result = <pw.Widget>[sectionTitle, pw.SizedBox(height: 10)];
 
+    final bpPairs = pairBloodPressure(
+      readings.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp)),
+    );
+    if (bpPairs.isNotEmpty) {
+      result.add(pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            HealthMetrics.bloodPressureLabel,
+            style: pw.TextStyle(
+              fontSize: 15,
+              fontWeight: pw.FontWeight.bold,
+              color: _textDark,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          _buildBPTable(bpPairs),
+          pw.SizedBox(height: 6),
+          _buildBPStats(bpPairs),
+          pw.SizedBox(height: 16),
+        ],
+      ));
+    }
+
     for (final entry in grouped.entries) {
       if (skipMetrics.contains(entry.key)) continue;
 
@@ -285,7 +332,7 @@ class ReportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            _readableName(entry.key),
+            HealthMetrics.labelForKey(entry.key),
             style: pw.TextStyle(
               fontSize: 15,
               fontWeight: pw.FontWeight.bold,
@@ -299,7 +346,7 @@ class ReportService {
           pw.SizedBox(height: 8),
           _buildMetricChart(
             entry.value,
-            _readableName(entry.key),
+            HealthMetrics.labelForKey(entry.key),
             entry.key,
           ),
           pw.SizedBox(height: 16),
@@ -327,9 +374,13 @@ class ReportService {
     var minY = sorted.map((r) => r.value).reduce(min);
     var maxY = sorted.map((r) => r.value).reduce(max);
 
-    final (normalMin, normalMax) = MetricThresholds.getNormalRange(metricType);
-    final (_, warningMax) = MetricThresholds.getWarningRange(metricType);
-    final hasZones = normalMin > 0 || normalMax > 0;
+    // Zones are drawn only for metrics that have status bands
+    final metric = HealthMetrics.metricForKey(metricType);
+    final bands = metric == null ? null : HealthMetrics.bandsFor(metric);
+    final hasZones = bands != null;
+    final normalMin = bands?.low ?? 0;
+    final normalMax = bands?.normalMax ?? 0;
+    final warningMax = bands?.warningMax ?? 0;
     if (hasZones) {
       minY = min(minY, normalMin);
       maxY = max(maxY, warningMax);
@@ -505,6 +556,8 @@ class ReportService {
 
   static pw.Widget _buildTable(List<HealthReading> readings) {
     final hasNotes = readings.any((r) => r.note != null && r.note!.isNotEmpty);
+    // Blood sugar statuses depend on when the reading was taken, so show it
+    final hasContext = readings.any((r) => r.context != null);
 
     final headerStyle = pw.TextStyle(
       color: PdfColors.white,
@@ -519,6 +572,7 @@ class ReportService {
         );
 
     final headers = ['Date', 'Value', 'Unit', 'Status'];
+    if (hasContext) headers.add('Context');
     if (hasNotes) headers.add('Note');
 
     final columnWidths = <int, pw.TableColumnWidth>{
@@ -527,8 +581,11 @@ class ReportService {
       2: const pw.FlexColumnWidth(1.2),
       3: const pw.FlexColumnWidth(1.5),
     };
+    if (hasContext) {
+      columnWidths[columnWidths.length] = const pw.FlexColumnWidth(1.8);
+    }
     if (hasNotes) {
-      columnWidths[4] = const pw.FlexColumnWidth(2.5);
+      columnWidths[columnWidths.length] = const pw.FlexColumnWidth(2.5);
     }
 
     return pw.Table(
@@ -544,9 +601,15 @@ class ReportService {
             final cells = [
               cell(_fmt(r.timestamp), cellStyle),
               cell(r.value.toStringAsFixed(1), cellStyle),
-              cell(r.unit, cellStyle),
+              cell(_unitFor(r.metricType, fallback: r.unit), cellStyle),
               cell(r.status, cellStyle),
             ];
+            if (hasContext) {
+              cells.add(cell(
+                r.context == null ? '' : HealthMetrics.contextLabel(r.context!),
+                cellStyle,
+              ));
+            }
             if (hasNotes) {
               cells.add(cell(r.note ?? '', cellStyle));
             }
@@ -557,12 +620,98 @@ class ReportService {
     );
   }
 
+  static pw.Widget _buildBPTable(List<BloodPressurePair> pairs) {
+    final hasNotes = pairs.any((p) => p.note != null && p.note!.isNotEmpty);
+    final unit = HealthMetrics.of(HealthMetric.systolic).unit;
+
+    final headerStyle = pw.TextStyle(
+      color: PdfColors.white,
+      fontWeight: pw.FontWeight.bold,
+      fontSize: 12,
+    );
+    final cellStyle = pw.TextStyle(color: _textDark, fontSize: 12);
+
+    pw.Widget cell(String text, pw.TextStyle style) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(text, style: style),
+        );
+
+    String value(HealthReading? r) =>
+        r == null ? '--' : r.value.toStringAsFixed(0);
+
+    final headers = ['Date', 'Systolic', 'Diastolic', 'Unit', 'Status'];
+    if (hasNotes) headers.add('Note');
+
+    final columnWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FlexColumnWidth(2.2),
+      1: const pw.FlexColumnWidth(1.4),
+      2: const pw.FlexColumnWidth(1.4),
+      3: const pw.FlexColumnWidth(1.2),
+      4: const pw.FlexColumnWidth(1.5),
+    };
+    if (hasNotes) columnWidths[5] = const pw.FlexColumnWidth(2.2);
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: _dividerColor, width: 0.5),
+      columnWidths: columnWidths,
+      children: [
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: _primary),
+          children: headers.map((h) => cell(h, headerStyle)).toList(),
+        ),
+        ...pairs.map((p) {
+          final cells = [
+            cell(_fmt(p.timestamp), cellStyle),
+            cell(value(p.systolic), cellStyle),
+            cell(value(p.diastolic), cellStyle),
+            cell(unit, cellStyle),
+            cell(p.status, cellStyle),
+          ];
+          if (hasNotes) cells.add(cell(p.note ?? '', cellStyle));
+          return pw.TableRow(children: cells);
+        }),
+      ],
+    );
+  }
+
+  static pw.Widget _buildBPStats(List<BloodPressurePair> pairs) {
+    final unit = HealthMetrics.of(HealthMetric.systolic).unit;
+    final sys =
+        pairs.map((p) => p.systolic?.value).whereType<double>().toList();
+    final dia =
+        pairs.map((p) => p.diastolic?.value).whereType<double>().toList();
+
+    String avg(List<double> v) => v.isEmpty
+        ? '--'
+        : (v.reduce((a, b) => a + b) / v.length).toStringAsFixed(0);
+    String top(List<double> v) =>
+        v.isEmpty ? '--' : v.reduce(max).toStringAsFixed(0);
+    String bottom(List<double> v) =>
+        v.isEmpty ? '--' : v.reduce(min).toStringAsFixed(0);
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: pw.BoxDecoration(
+        color: _cardBg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          _statChip('Average', '${avg(sys)}/${avg(dia)} $unit'),
+          _statChip('Highest', '${top(sys)}/${top(dia)} $unit'),
+          _statChip('Lowest', '${bottom(sys)}/${bottom(dia)} $unit'),
+        ],
+      ),
+    );
+  }
+
   static pw.Widget _buildStats(List<HealthReading> readings) {
     final values = readings.map((r) => r.value).toList();
     final avg = values.reduce((a, b) => a + b) / values.length;
     final high = values.reduce((a, b) => a > b ? a : b);
     final low = values.reduce((a, b) => a < b ? a : b);
-    final unit = readings.first.unit;
+    final unit = _unitFor(readings.first.metricType, fallback: readings.first.unit);
 
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -602,7 +751,7 @@ class ReportService {
 
   static List<pw.Widget> _buildMedicationsWidgets(
     List<MedicationModel> medications,
-    Map<String, bool> adherence,
+    AdherenceCounts adherence,
   ) {
     final sectionTitle = pw.Text(
       'Medications',
@@ -684,11 +833,12 @@ class ReportService {
 
     final result = <pw.Widget>[medTable];
 
-    // Adherence summary
-    if (adherence.isNotEmpty) {
-      final taken = adherence.values.where((v) => v).length;
-      final total = adherence.length;
-      final pct = total > 0 ? (taken / total * 100).toStringAsFixed(0) : '0';
+    // Adherence over the report period: doses due vs doses recorded as taken.
+    // "As needed" medications and doses not due yet are left out.
+    if (adherence.expected > 0) {
+      final taken = adherence.taken;
+      final total = adherence.expected;
+      final pct = (taken / total * 100).toStringAsFixed(0);
 
       result.add(pw.SizedBox(height: 12));
       result.add(pw.Container(
@@ -703,7 +853,7 @@ class ReportService {
           children: [
             _statChip('Doses Taken', '$taken / $total'),
             _statChip('Adherence Rate', '$pct%'),
-            _statChip('Missed', '${total - taken} doses'),
+            _statChip('Missed', '${adherence.missed} doses'),
           ],
         ),
       ));
@@ -771,17 +921,9 @@ class ReportService {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  static String _readableName(String metricType) {
-    final spaced = metricType.replaceAllMapped(
-      RegExp(r'([A-Z])'),
-      (m) => ' ${m.group(0)!}',
-    );
-    if (spaced.isEmpty) return metricType;
-    return spaced
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0].toUpperCase() + w.substring(1))
-        .join(' ');
+  static String _unitFor(String metricType, {String fallback = ''}) {
+    final unit = HealthMetrics.unitForKey(metricType);
+    return unit.isEmpty ? fallback : unit;
   }
 
   static String _fmt(DateTime dt) {
