@@ -191,7 +191,7 @@ class _HomeBodyState extends State<_HomeBody> {
       }
       if (mounted) {
         context.read<HealthProvider>().loadReadingsFromFirebase(uid);
-        context.read<HealthHistoryProvider>().loadReadings(uid);
+        context.read<HealthHistoryProvider>().watch(uid);
         TrendWarningService.checkBPTrend(context, uid);
       }
     } catch (_) {
@@ -1715,7 +1715,6 @@ class _HomeBodyState extends State<_HomeBody> {
     }
 
     final provider = context.read<HealthProvider>();
-    final historyProvider = context.read<HealthHistoryProvider>();
 
     final drafts = entries.map((e) {
       final status = HealthMetrics.evaluate(e.metric, e.value, context: e.context);
@@ -1733,9 +1732,10 @@ class _HomeBodyState extends State<_HomeBody> {
 
     final saved = await HealthReadingService.saveReadings(uid, drafts);
 
+    // History picks the new readings up from its live query, with their
+    // Firestore IDs and the time the user chose
     for (final reading in saved) {
       provider.recordReading(reading);
-      historyProvider.addReading(reading);
 
       if (reading.status == 'High' || reading.status == 'Low') {
         NotificationService.showCriticalReadingNotification(

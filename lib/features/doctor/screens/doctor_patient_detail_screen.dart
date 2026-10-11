@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/health/health_metrics.dart';
 import '../../../core/health/conditions.dart';
@@ -69,6 +70,7 @@ class _DoctorPatientDetailScreenState
 
   final _suggestionCtrl = TextEditingController();
   bool _sendingSuggestion = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _readingsSub;
 
   static const _primary = Color(0xFF004346);
 
@@ -99,23 +101,34 @@ class _DoctorPatientDetailScreenState
 
   @override
   void dispose() {
+    _readingsSub?.cancel();
     _suggestionCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadReadings() async {
+  // Live: the readings table and measurement cards update when the patient
+  // adds, edits or deletes a reading, and the chart is refreshed with them
+  void _loadReadings() {
     setState(() => _loadingReadings = true);
-    try {
-      final r = await _service.getPatientReadings(_uid);
-      if (!mounted) return;
-      setState(() {
-        _readings = r;
-        _loadingReadings = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingReadings = false);
-    }
+    var first = true;
+    _readingsSub?.cancel();
+    _readingsSub = _service.watchPatientReadings(_uid).listen(
+      (r) {
+        if (!mounted) return;
+        setState(() {
+          _readings = r;
+          _loadingReadings = false;
+        });
+        // initState already loads the chart once
+        if (!first) _loadChart();
+        first = false;
+      },
+      onError: (Object e) {
+        debugPrint('DoctorPatientDetail: live readings failed: $e');
+        if (!mounted) return;
+        setState(() => _loadingReadings = false);
+      },
+    );
   }
 
   Future<void> _loadMedications() async {

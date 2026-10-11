@@ -39,6 +39,21 @@ class HealthReadingService {
     return saved;
   }
 
+  // Live query of the newest [limit] readings. Firestore delivers local
+  // writes straight away, so saves, edits and deletes show up without a
+  // reload; changes made elsewhere (e.g. by the doctor) arrive the same way.
+  static Stream<List<HealthReading>> watchReadings(String uid,
+      {required int limit}) {
+    return _col(uid)
+        .orderBy('timestamp', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs
+            .where((d) => d.data()['value'] is num)
+            .map((d) => HealthReading.fromMap(d.id, d.data()))
+            .toList());
+  }
+
   // Live stream of all readings, newest first
   static Stream<List<HealthReading>> getReadings(String uid) {
     return _col(uid)

@@ -41,6 +41,20 @@ class DoctorService {
     return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
   }
 
+  // Same as getPatientReadings, kept live so the patient detail updates when
+  // a reading is added, edited or deleted
+  Stream<List<Map<String, dynamic>>> watchPatientReadings(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('readings')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+  }
+
   // All active medications for a patient
   Future<List<Map<String, dynamic>>> getPatientMedications(String uid) async {
     final snap = await _db

@@ -54,7 +54,6 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   final Set<int> _activeFilters = {};
   bool _showHint = false;
-  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -68,7 +67,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (!mounted) return;
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        context.read<HealthHistoryProvider>().loadReadings(uid);
+        context.read<HealthHistoryProvider>().watch(uid);
       }
     });
     _checkHint();
@@ -360,29 +359,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  // The live query picks the change up; nothing to patch locally
   Future<void> _saveEdit(
       HealthReading reading, double newValue, DateTime newTimestamp) async {
     final newStatus = _statusForValue(reading, newValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final provider = context.read<HealthHistoryProvider>();
+    if (uid == null || reading.id.isEmpty) return;
 
     final timestampChanged = reading.timestamp != newTimestamp;
-    provider.patchReading(reading, newValue, newStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-
-    if (uid != null && reading.id.isNotEmpty) {
-      try {
-        await HealthReadingService.updateReading(
-          uid,
-          reading.id,
-          newValue,
-          newStatus,
-          timestamp: timestampChanged ? newTimestamp : null,
-        );
-      } catch (e) {
-        debugPrint('HistoryScreen._saveEdit: $e');
-      }
+    try {
+      await HealthReadingService.updateReading(
+        uid,
+        reading.id,
+        newValue,
+        newStatus,
+        timestamp: timestampChanged ? newTimestamp : null,
+      );
+    } catch (e) {
+      debugPrint('HistoryScreen._saveEdit: $e');
+      _showEditFailed();
     }
+  }
+
+  void _showEditFailed() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Couldn't save the change. Please try again."),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _showEditBPSheet(_DisplayItem item) async {
@@ -414,14 +421,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final sysStatus = _statusForValue(item.systolic, sysValue);
     final diaStatus = _statusForValue(item.diastolic, diaValue);
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final provider = context.read<HealthHistoryProvider>();
 
     final timestampChanged = item.systolic.timestamp != newTimestamp;
-    provider.patchReading(item.systolic, sysValue, sysStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-    provider.patchReading(item.diastolic, diaValue, diaStatus,
-        newTimestamp: timestampChanged ? newTimestamp : null);
-
     if (uid != null) {
       try {
         final futures = <Future>[];
@@ -440,6 +441,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         await Future.wait(futures);
       } catch (e) {
         debugPrint('HistoryScreen._saveBPEdit: $e');
+        _showEditFailed();
       }
     }
   }
@@ -458,33 +460,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return [def.min, def.max];
   }
 
-  // ── Pull to refresh ──
-
-  Future<void> _onRefresh() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    await context.read<HealthHistoryProvider>().forceReload(uid);
-  }
-
-  // ── Load more ──
-
-  Future<void> _onLoadMore() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    setState(() => _loadingMore = true);
-    final ok = await context.read<HealthHistoryProvider>().loadMore(uid);
-    if (!mounted) return;
-    setState(() => _loadingMore = false);
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Couldn't load older readings. Please try again."),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
 
   // ── Chart filter pass ──
 
@@ -559,13 +534,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           color: AppColors.primary,
                         ),
                       )
-                    : RefreshIndicator(
-                        color: AppColors.primary,
-                        onRefresh: _onRefresh,
-                        child: filtered.isEmpty
-                            ? _buildEmptyState()
-                            : _buildReadingsList(filtered, provider),
-                      ),
+                    : filtered.isEmpty
+                        ? _buildEmptyState()
+                        : _buildReadingsList(filtered, provider),
               ),
               if (_showHint)
                 Padding(
@@ -767,8 +738,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
             const SizedBox(height: 24),
             OutlinedButton(
-              onPressed: () =>
-                  context.read<HealthHistoryProvider>().loadReadings(uid),
+              onPressed: () => context.read<HealthHistoryProvider>().retry(),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary, width: 1.5),
@@ -857,12 +827,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       itemBuilder: (context, index) {
         final dataCount = _countItems(grouped);
 
-        // "Load older readings" button
+        // "Load older readings" button (or Retry if the live query failed)
         if (index == dataCount) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Center(
-              child: _loadingMore
+              child: provider.loadingMore
                   ? const SizedBox(
                       width: 24,
                       height: 24,
@@ -872,7 +842,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     )
                   : OutlinedButton(
-                      onPressed: _onLoadMore,
+                      onPressed: provider.loadFailed
+                          ? provider.retry
+                          : provider.loadMore,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
                         side: const BorderSide(color: AppColors.primary, width: 1.5),
@@ -882,8 +854,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 24, vertical: 12),
                       ),
-                      child: const Text(
-                        'Load older readings',
+                      child: Text(
+                        provider.loadFailed
+                            ? "Couldn't load readings. Retry"
+                            : 'Load older readings',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
