@@ -460,7 +460,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'These contacts are notified automatically when you trigger SOS.',
+                    'Nuvita does not contact these people automatically, '
+                    'including when you use SOS. Use the call button to reach them.',
                     style: AppTextStyles.bodySmall.copyWith(
                       fontSize: 13,
                       color: AppColors.textDark,

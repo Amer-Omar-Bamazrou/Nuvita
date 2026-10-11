@@ -6,10 +6,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/services/preferences_service.dart';
 
+// SOS currently only records an alert that the care team sees in the doctor
+// portal. It does not call emergency services or the user's emergency
+// contacts, and the wording below must not suggest otherwise.
 class EmergencyService {
   // The 10-second cancellation window exists so the user can abort a
-  // panic tap before anything is actually sent. This mirrors how real
-  // emergency systems (e.g. iPhone SOS) give a brief grace period.
+  // panic tap before anything is recorded.
   static void showEmergencyFlow(
     BuildContext context, {
     String triggerType = 'manual',
@@ -72,8 +74,9 @@ class _CountdownDialogState extends State<_CountdownDialog> {
     }
   }
 
-  Future<void> _logAlert({required bool cancelled}) async {
-    if (_uid == null) return;
+  // Returns true only when the alert document was written
+  Future<bool> _logAlert({required bool cancelled}) async {
+    if (_uid == null) return false;
     try {
       await FirebaseFirestore.instance
           .collection('users')
@@ -87,8 +90,10 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         'patientId': _patientId,
         'diseaseType': _diseaseType,
       });
+      return true;
     } catch (e) {
       debugPrint('EmergencyService._logAlert: $e');
+      return false;
     }
   }
 
@@ -107,11 +112,19 @@ class _CountdownDialogState extends State<_CountdownDialog> {
     });
   }
 
-  void _onCountdownComplete() {
+  Future<void> _onCountdownComplete() async {
     if (!mounted) return;
-    _logAlert(cancelled: false);
-    Navigator.of(context).pop();
-    _showAlertSentDialog(context);
+    final navigator = Navigator.of(context);
+    final rootContext = navigator.context;
+    final signedIn = _uid != null;
+    final recorded = await _logAlert(cancelled: false);
+    navigator.pop();
+    if (!rootContext.mounted) return;
+    _showAlertResultDialog(
+      rootContext,
+      recorded: recorded,
+      signedIn: signedIn,
+    );
   }
 
   void _cancel() {
@@ -141,7 +154,11 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Help will be notified in $_secondsLeft seconds',
+            _uid == null
+                ? 'You are not signed in, so no alert can be recorded. '
+                    'Call your local emergency number if you need urgent help.'
+                : 'An alert will be recorded for your care team in '
+                    '$_secondsLeft seconds',
             style: AppTextStyles.body,
             textAlign: TextAlign.center,
           ),
@@ -190,9 +207,31 @@ class _CountdownDialogState extends State<_CountdownDialog> {
   }
 }
 
-// ── Alert sent confirmation dialog ───────────────────────────────────────────
+// ── Result dialog ────────────────────────────────────────────────────────────
 
-void _showAlertSentDialog(BuildContext context) {
+void _showAlertResultDialog(
+  BuildContext context, {
+  required bool recorded,
+  required bool signedIn,
+}) {
+  final String title;
+  final String message;
+  if (recorded) {
+    title = 'Alert recorded';
+    message = 'Your care team can see this alert in the Nuvita doctor portal. '
+        'Nuvita does not call emergency services or your emergency contacts. '
+        'If you need urgent help, call your local emergency number now.';
+  } else if (!signedIn) {
+    title = 'No alert sent';
+    message = 'You are not signed in, so no alert was recorded and nobody '
+        'was contacted. If you need urgent help, call your local emergency '
+        'number now.';
+  } else {
+    title = 'Alert not recorded';
+    message = 'We could not record the alert. Check your connection. '
+        'If you need urgent help, call your local emergency number now.';
+  }
+
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -205,25 +244,26 @@ void _showAlertSentDialog(BuildContext context) {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.12),
+              color: (recorded ? AppColors.success : AppColors.error)
+                  .withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.check_circle_rounded,
-              color: AppColors.success,
+            child: Icon(
+              recorded ? Icons.check_circle_rounded : Icons.error_rounded,
+              color: recorded ? AppColors.success : AppColors.error,
               size: 44,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            'Alert Sent',
+            title,
             style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
             textAlign: TextAlign.center,
           ),
         ],
       ),
       content: Text(
-        'Help has been notified (simulated).\nStay calm, assistance is on the way.',
+        message,
         style: AppTextStyles.body,
         textAlign: TextAlign.center,
       ),
