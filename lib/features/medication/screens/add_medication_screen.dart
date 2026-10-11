@@ -186,7 +186,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       startDate: _startDate,
       notes: _notesController.text.trim(),
       pillsRemaining: pills,
-      pillsPerDose: 1,
+      // Settings this form doesn't show are carried over when editing
+      isActive: existing?.isActive ?? true,
+      pillsPerDose: existing?.pillsPerDose ?? 1,
+      reminderEnabled: existing?.reminderEnabled ?? false,
       // Clear the notification flag if the user refilled above threshold
       lowSupplyNotified: resetNotified ? false : (existing?.lowSupplyNotified ?? false),
     );
@@ -195,11 +198,23 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     await NotificationService.requestPermissions();
 
     if (_isEditMode) {
-      // Cancel old scheduled reminders before re-scheduling with updated times
+      // Cancel everything scheduled for the old times (IDs depend on the
+      // number of times), then schedule again for the new ones
       await NotificationService.cancelMedicationReminder(
           existing!.id, existing.times.length);
+      await NotificationService.cancelDailyMedicationReminders(
+          existing.id, existing.times);
       await MedicationService.update(med);
       await NotificationService.scheduleMedicationReminder(med);
+      if (med.reminderEnabled) {
+        await NotificationService.scheduleDailyMedicationReminder(
+          med.id,
+          med.name,
+          med.dosage,
+          med.times,
+          pillsPerDose: med.pillsPerDose,
+        );
+      }
 
       // If the user refilled above threshold, cancel any pending supply alert
       if (resetNotified) {
