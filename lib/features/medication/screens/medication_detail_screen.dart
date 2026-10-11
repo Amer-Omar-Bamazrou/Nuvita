@@ -6,6 +6,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/notification_service.dart';
 import '../models/medication_model.dart';
 import '../services/medication_service.dart';
+import '../services/dose_service.dart';
 import 'add_medication_screen.dart';
 
 const _orange = Color(0xFFFF6F00);
@@ -54,67 +55,63 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
 
   // ── Take Now ──────────────────────────────────────────────────────────────
 
+  // Records the earliest of today's doses that isn't taken yet, through the
+  // same path as Home and the Medication screen
   Future<void> _onTakeNow() async {
     if (_isTaking) return;
 
-    // No pill tracking — just record the tap and warn if overdosing
-    if (_med.pillsRemaining == null) {
-      setState(() {
-        _takenTodayCount++;
-        _allDosesTaken = _takenTodayCount >= _med.times.length;
-      });
-      if (_takenTodayCount > _med.times.length) {
-        _showOverdoseWarning();
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dose marked as taken')),
-        );
-      }
-      return;
-    }
-
-    // Guard: pill count exhausted
-    if (_med.pillsRemaining! <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Out of pills. Please refill.')),
-        );
-      }
+    // Guard: tracked pill count exhausted
+    if (_med.pillsRemaining != null && _med.pillsRemaining! <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Out of pills. Please refill.')),
+      );
       return;
     }
 
     setState(() => _isTaking = true);
-
-    final updated = await MedicationService.takeMedication(_med.id);
-    if (updated == null || !mounted) {
+    final slot = await DoseService.nextUntakenSlot(_med);
+    if (!mounted) return;
+    if (slot == null) {
       setState(() => _isTaking = false);
+      _showOverdoseWarning();
       return;
     }
 
-    _takenTodayCount++;
+    final day = DateTime.now();
+    final updated = await DoseService.markTaken(
+      medicationId: _med.id,
+      timeSlot: slot,
+      day: day,
+    );
+    if (!mounted) return;
+    setState(() {
+      if (updated != null) _med = updated;
+      _isTaking = false;
+    });
+    await _checkTodayDoses();
+    if (!mounted) return;
 
-    // Fire low-supply alert once when count crosses the 7-pill threshold
-    if (MedicationService.checkLowSupply(updated) && !updated.lowSupplyNotified) {
-      await NotificationService.scheduleLowSupplyAlert(
-        updated.id,
-        updated.name,
-        updated.pillsRemaining!,
-      );
-      final notified = updated.copyWith(lowSupplyNotified: true);
-      await MedicationService.update(notified);
-      setState(() {
-        _med = notified;
-        _isTaking = false;
-      });
-    } else {
-      setState(() {
-        _med = updated;
-        _isTaking = false;
-      });
-    }
-
-    _allDosesTaken = _takenTodayCount >= _med.times.length;
-    if (_takenTodayCount > _med.times.length) _showOverdoseWarning();
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${_med.name} dose at $slot marked as taken'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AppColors.white,
+          onPressed: () async {
+            final restored = await DoseService.undo(
+              medicationId: _med.id,
+              timeSlot: slot,
+              day: day,
+            );
+            if (!mounted) return;
+            if (restored != null) setState(() => _med = restored);
+            await _checkTodayDoses();
+          },
+        ),
+      ),
+    );
   }
 
   void _showOverdoseWarning() {
@@ -122,7 +119,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'You\'ve taken $_takenTodayCount doses today. '
+          'All $_takenTodayCount of today\'s doses are already marked as taken. '
           'This medication is scheduled ${_med.frequency.toLowerCase()}.',
         ),
         backgroundColor: AppColors.warning,

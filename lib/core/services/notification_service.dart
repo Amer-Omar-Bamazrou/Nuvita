@@ -4,10 +4,10 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_10y.dart' as tz_data;
 import 'package:firebase_core/firebase_core.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../firebase_options.dart';
 import '../../features/medication/models/medication_model.dart';
 import '../../features/medication/services/medication_service.dart';
+import '../../features/medication/services/dose_service.dart';
 import '../../features/appointments/services/appointment_service.dart';
 import 'reminder_time.dart';
 
@@ -147,7 +147,10 @@ class NotificationService {
     }
 
     if (payload.startsWith('med:')) {
-      _handleMedicationTap(payload.split(':')[1]);
+      final parts = payload.split(':');
+      // med:{medId}:{HH}:{mm} — the slot itself contains a colon
+      final slot = parts.length >= 4 ? '${parts[2]}:${parts[3]}' : null;
+      _handleMedicationTap(parts[1], slot);
     } else if (payload.startsWith('appt:') || payload.startsWith('tomorrow:')) {
       _appointmentTapHandler?.call(payload.split(':')[1]);
     } else if (payload.startsWith('missed:')) {
@@ -162,7 +165,8 @@ class NotificationService {
     }
   }
 
-  static Future<void> _handleMedicationTap(String medicationId) async {
+  static Future<void> _handleMedicationTap(
+      String medicationId, String? timeSlot) async {
     await Future.delayed(const Duration(milliseconds: 500));
 
     if (_navigatorKey?.currentContext == null) return;
@@ -192,7 +196,10 @@ class NotificationService {
     );
 
     if (confirmed == true) {
-      await MedicationService.takeMedication(medicationId);
+      final slot = timeSlot ?? await DoseService.nextUntakenSlot(med);
+      if (slot != null) {
+        await DoseService.markTaken(medicationId: medicationId, timeSlot: slot);
+      }
       final ctx = _navigatorKey?.currentContext;
       if (ctx != null && ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
@@ -233,6 +240,9 @@ class NotificationService {
       case 'med_snooze':
         await _bgMedSnooze(payload);
         break;
+      case 'med_undo':
+        await _bgMedUndo(payload);
+        break;
       case 'supply_refilled':
         await _bgSupplyRefilled(payload);
         break;
@@ -245,41 +255,37 @@ class NotificationService {
     }
   }
 
-  // payload: med:{medId}:{time}
+  // payload: med:{medId}:{HH}:{mm}
   static Future<void> _bgMedTaken(String payload) async {
     final parts = payload.split(':');
-    if (parts.length < 3) return;
+    if (parts.length < 4) return;
     final medId = parts[1];
-    final time = parts[2];
+    final time = '${parts[2]}:${parts[3]}';
+    final date = DoseService.dateKey(DateTime.now());
 
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final prefKey = 'taken_${medId}_${time}_$todayStr';
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefKey, 'true');
-
-    final updated = await MedicationService.takeMedication(medId);
+    final updated = await DoseService.markTaken(medicationId: medId, timeSlot: time);
     if (updated == null) return;
 
-    // Save adherence to Firestore
-    MedicationService.saveDoseToFirebase(
-      medicationId: medId,
-      medicationName: updated.name,
-      dosage: updated.dosage,
-      timeSlot: time,
-      date: todayStr,
+    // Follow-up confirmation with a way to take it back
+    await _showFollowUp(
+      '${updated.name} marked as taken ✅',
+      payload: 'taken:$medId:$time:$date',
+      actions: _takenFollowUpActions,
     );
+  }
 
-    // Check low supply
-    if (MedicationService.checkLowSupply(updated) && !updated.lowSupplyNotified) {
-      await scheduleLowSupplyAlert(updated.id, updated.name, updated.pillsRemaining!);
-      await MedicationService.update(updated.copyWith(lowSupplyNotified: true));
-    }
-
-    // Follow-up confirmation
-    await _showFollowUp('${updated.name} marked as taken ✅');
+  // payload: taken:{medId}:{HH}:{mm}:{yyyy-MM-dd}
+  static Future<void> _bgMedUndo(String payload) async {
+    final parts = payload.split(':');
+    if (parts.length < 5) return;
+    final day = DateTime.tryParse(parts[4]);
+    final med = await DoseService.undo(
+      medicationId: parts[1],
+      timeSlot: '${parts[2]}:${parts[3]}',
+      day: day,
+    );
+    if (med == null) return;
+    await _showFollowUp('${med.name} dose undone');
   }
 
   // payload: med:{medId}:{time}
@@ -386,7 +392,11 @@ class NotificationService {
     await _showFollowUp('Appointment confirmed — See you at $hour:$minute ✅');
   }
 
-  static Future<void> _showFollowUp(String message) async {
+  static Future<void> _showFollowUp(
+    String message, {
+    String? payload,
+    List<AndroidNotificationAction>? actions,
+  }) async {
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -394,6 +404,7 @@ class NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       icon: '@mipmap/ic_launcher',
+      actions: actions,
     );
 
     await _plugin.show(
@@ -401,6 +412,7 @@ class NotificationService {
       'Nuvita',
       message,
       NotificationDetails(android: androidDetails),
+      payload: payload,
     );
   }
 
@@ -415,6 +427,14 @@ class NotificationService {
     AndroidNotificationAction(
       'med_snooze',
       '⏰ Snooze',
+      showsUserInterface: false,
+    ),
+  ];
+
+  static const _takenFollowUpActions = <AndroidNotificationAction>[
+    AndroidNotificationAction(
+      'med_undo',
+      '↩ Undo',
       showsUserInterface: false,
     ),
   ];

@@ -14,6 +14,7 @@ import '../../notifications/screens/suggestions_panel_screen.dart';
 import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/dose_service.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/models/reading_entry.dart';
@@ -1260,24 +1261,15 @@ class _HomeBodyState extends State<_HomeBody> {
   // ── Task actions ──────────────────────────────────────────────────────────
 
   Future<void> _markMedTaken(DailyTask task) async {
-    final today = DateTime.now();
-    final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    final prefKey = 'taken_${task.medicationId}_${task.timeOfDay}_$todayStr';
+    final medId = task.medicationId;
+    if (medId == null) return;
+    final day = DateTime.now();
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefKey, 'true');
-
-    if (task.medicationId != null) {
-      await MedicationService.takeMedication(task.medicationId!);
-      MedicationService.saveDoseToFirebase(
-        medicationId: task.medicationId!,
-        medicationName: task.displayName,
-        dosage: task.subtitle ?? '',
-        timeSlot: task.timeOfDay,
-        date: todayStr,
-      );
-    }
+    await DoseService.markTaken(
+      medicationId: medId,
+      timeSlot: task.timeOfDay,
+      day: day,
+    );
 
     if (mounted) {
       setState(() {
@@ -1297,14 +1289,11 @@ class _HomeBodyState extends State<_HomeBody> {
             label: 'Undo',
             textColor: Colors.white,
             onPressed: () async {
-              await prefs.remove(prefKey);
-              if (task.medicationId != null) {
-                MedicationService.removeDoseFromFirebase(
-                  medicationId: task.medicationId!,
-                  timeSlot: task.timeOfDay,
-                  date: todayStr,
-                );
-              }
+              await DoseService.undo(
+                medicationId: medId,
+                timeSlot: task.timeOfDay,
+                day: day,
+              );
               if (mounted) {
                 setState(() {
                   task.isCompleted = false;
