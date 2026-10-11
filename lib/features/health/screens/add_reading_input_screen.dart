@@ -53,7 +53,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return 70;
       case HealthMetric.temperature:
         return 36.5;
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return 30;
     }
   }
@@ -104,7 +104,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return Icons.monitor_heart_rounded;
       case HealthMetric.bloodSugar:
         return Icons.water_drop_rounded;
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return Icons.directions_walk_rounded;
       default:
         return Icons.monitor_heart_rounded;
@@ -121,7 +121,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         return const Color(0xFFE64A19);
       case HealthMetric.bloodSugar:
         return const Color(0xFF1976D2);
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return const Color(0xFF7B1FA2);
       default:
         return AppColors.primary;
@@ -147,7 +147,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
           case GlucoseContext.random:
             return 'RANDOM BLOOD SUGAR';
         }
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return 'WALKING MINUTES';
       default:
         return _def.label.toUpperCase();
@@ -158,7 +158,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
       HealthMetrics.evaluate(_metric, _value, context: _readingContext));
 
   String? get _rangeHint {
-    if (_metric == HealthMetric.steps) return 'Aim for at least 30 minutes daily';
+    if (_metric == HealthMetric.walkingMinutes) return 'Aim for at least 30 minutes daily';
     return normalRangeHint(
         _def, HealthMetrics.bandsFor(_metric, context: _readingContext));
   }
@@ -179,7 +179,7 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
           case GlucoseContext.random:
             return [];
         }
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return ['Walking', 'Jogging', 'Errands', 'Exercise'];
       default:
         return [];

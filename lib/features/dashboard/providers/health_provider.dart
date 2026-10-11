@@ -81,7 +81,7 @@ class HealthProvider extends ChangeNotifier {
         if (low) return 'Temperature is low — warm up and monitor';
         return null;
       case HealthMetric.diastolic:
-      case HealthMetric.steps:
+      case HealthMetric.walkingMinutes:
         return null;
     }
   }

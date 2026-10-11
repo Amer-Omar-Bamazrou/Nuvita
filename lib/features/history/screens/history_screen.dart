@@ -24,7 +24,7 @@ const _filterOptions = [
   _FilterOption('Blood Pressure', {HealthMetric.systolic, HealthMetric.diastolic}),
   _FilterOption('Heart Rate', {HealthMetric.heartRate}),
   _FilterOption('Weight', {HealthMetric.weight}),
-  _FilterOption('Steps', {HealthMetric.steps}),
+  _FilterOption('Walking', {HealthMetric.walkingMinutes}),
 ];
 
 class _DisplayItem {
@@ -98,7 +98,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return Icons.monitor_heart_rounded;
       case 'weight':
         return Icons.scale_rounded;
-      case 'steps':
+      case 'walkingMinutes':
         return Icons.directions_walk_rounded;
       default:
         return Icons.health_and_safety_rounded;
@@ -116,7 +116,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return const Color(0xFFE64A19);
       case 'weight':
         return const Color(0xFF388E3C);
-      case 'steps':
+      case 'walkingMinutes':
         return const Color(0xFF7B1FA2);
       default:
         return AppColors.secondary;

@@ -160,7 +160,8 @@ class ReportService {
     final tempUnit = latestUnit('temperature');
     final weight = latest('weight');
     final weightUnit = latestUnit('weight');
-    final steps = latest('steps');
+    final walking = latest('walkingMinutes');
+    final walkingUnit = latestUnit('walkingMinutes');
 
     final labelStyle = pw.TextStyle(
       fontSize: 12,
@@ -220,10 +221,15 @@ class ReportService {
                   children: [
                     pw.SizedBox(
                       width: 130,
-                      child: pw.Text('Steps', style: labelStyle),
+                      child: pw.Text(
+                        HealthMetrics.labelForKey('walkingMinutes'),
+                        style: labelStyle,
+                      ),
                     ),
                     pw.Text(
-                      steps != '--' ? '${double.parse(steps).toInt()}' : '--',
+                      walking != '--'
+                          ? '${double.parse(walking).toInt()} $walkingUnit'
+                          : '--',
                       style: valueStyle,
                     ),
                   ],

@@ -6,7 +6,7 @@ enum HealthMetric {
   diastolic,
   heartRate,
   weight,
-  steps,
+  walkingMinutes, // stored as 'steps' before it was renamed
   temperature,
 }
 

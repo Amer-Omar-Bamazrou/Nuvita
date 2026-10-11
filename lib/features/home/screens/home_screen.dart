@@ -1438,7 +1438,7 @@ class _HomeBodyState extends State<_HomeBody> {
                     _buildQuickChip(Icons.favorite_rounded, const Color(0xFFD32F2F), 'BP', sheetCtx, null),
                     _buildQuickChip(Icons.monitor_heart_rounded, const Color(0xFFE64A19), 'Heart', sheetCtx, HealthMetric.heartRate),
                     _buildQuickChip(Icons.scale_rounded, const Color(0xFF388E3C), 'Weight', sheetCtx, HealthMetric.weight),
-                    _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Steps', sheetCtx, HealthMetric.steps),
+                    _buildQuickChip(Icons.directions_walk_rounded, const Color(0xFF7B1FA2), 'Walking', sheetCtx, HealthMetric.walkingMinutes),
                     _buildQuickChip(Icons.thermostat_rounded, const Color(0xFF0097A7), 'Temp', sheetCtx, HealthMetric.temperature),
                   ],
                 ),

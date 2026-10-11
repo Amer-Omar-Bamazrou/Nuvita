@@ -558,7 +558,7 @@ class _DoctorPatientDetailScreenState
       HealthMetric.bloodSugar,
       HealthMetric.weight,
       HealthMetric.temperature,
-      HealthMetric.steps,
+      HealthMetric.walkingMinutes,
     ].map((m) {
       final def = HealthMetrics.of(m);
       // Blood sugar shows when the latest reading was taken, e.g. (Fasting)

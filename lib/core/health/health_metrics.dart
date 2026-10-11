@@ -125,8 +125,8 @@ class HealthMetrics {
       max: 300,
       step: 0.1,
     ),
-    HealthMetric.steps: MetricDefinition(
-      metric: HealthMetric.steps,
+    HealthMetric.walkingMinutes: MetricDefinition(
+      metric: HealthMetric.walkingMinutes,
       label: 'Walking',
       unit: 'min',
       min: 0,
@@ -147,6 +147,8 @@ class HealthMetrics {
   static const _legacyKeys = <String, (HealthMetric, GlucoseContext?)>{
     'bloodSugarBefore': (HealthMetric.bloodSugar, GlucoseContext.beforeMeal),
     'bloodSugarAfter': (HealthMetric.bloodSugar, GlucoseContext.afterMeal),
+    // Walking minutes were stored as 'steps' even though they were minutes
+    'steps': (HealthMetric.walkingMinutes, null),
   };
 
   static MetricDefinition of(HealthMetric metric) => _definitions[metric]!;
