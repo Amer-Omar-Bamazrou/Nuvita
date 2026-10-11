@@ -85,7 +85,7 @@ class HealthChartWidget extends StatelessWidget {
                     final point = dataPoints[idx];
                     final date = _fmtDate(point.date);
                     final context =
-                        point.context == null ? '' : '\n${point.context}';
+                        point.detail == null ? '' : '\n${point.detail}';
                     return LineTooltipItem(
                       '$date\n${point.value.toStringAsFixed(1)} $unit$context',
                       const TextStyle(
@@ -276,6 +276,9 @@ class HealthChartWidget extends StatelessWidget {
     final lines = <String>[date];
     if (sysVal.isNotEmpty) lines.add('Sys: $sysVal $unit');
     if (diaVal.isNotEmpty) lines.add('Dia: $diaVal $unit');
+    final detail =
+        idx >= 0 && idx < dataPoints.length ? dataPoints[idx].detail : null;
+    if (detail != null) lines.add(detail);
 
     // Show tooltip on first touched spot only
     return [

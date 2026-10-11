@@ -30,6 +30,7 @@ class ChartDataService {
         value: r.value,
         status: r.status,
         context: r.context == null ? null : HealthMetrics.contextLabel(r.context!),
+        note: r.note,
       );
 
   /// Fetches readings for a given metricType from the last [days] days.

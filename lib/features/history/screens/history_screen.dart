@@ -42,7 +42,10 @@ class _DisplayItem {
 }
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({super.key, this.initialMetric});
+
+  // Opened from a reading screen: start filtered to that metric
+  final HealthMetric? initialMetric;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -56,6 +59,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
+    final metric = widget.initialMetric;
+    if (metric != null) {
+      final i = _filterOptions.indexWhere((o) => o.metrics!.contains(metric));
+      if (i != -1) _activeFilters.add(i);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -999,25 +1007,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        reading.status,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
+                    _statusWithNote(reading.status, statusColor, reading.note),
                   ],
                 ),
               ),
@@ -1061,6 +1051,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Status pill, followed by the context chip picked when the reading was
+  // taken (e.g. "After exercise")
+  Widget _statusWithNote(String status, Color statusColor, String? note) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+          ),
+          child: Text(
+            status,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: statusColor,
+            ),
+          ),
+        ),
+        if (note != null && note.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              note,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppColors.secondary),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1138,25 +1164,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        status,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
+                    _statusWithNote(status, statusColor, sys.note ?? dia.note),
                   ],
                 ),
               ),

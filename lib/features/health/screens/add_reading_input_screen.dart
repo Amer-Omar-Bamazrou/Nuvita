@@ -8,6 +8,7 @@ import '../../../shared/widgets/nuvita_time_picker.dart';
 import '../models/reading_entry.dart';
 import '../widgets/status_display.dart';
 import '../widgets/value_entry_dialog.dart';
+import '../../history/screens/history_screen.dart';
 
 class AddReadingInputScreen extends StatefulWidget {
   final HealthMetric metric;
@@ -311,7 +312,13 @@ class _AddReadingInputScreenState extends State<AddReadingInputScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded, color: AppColors.primary, size: 20),
-            onPressed: () {},
+            tooltip: 'Past readings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => HistoryScreen(initialMetric: _metric),
+              ),
+            ),
           ),
         ],
       ),

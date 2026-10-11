@@ -1061,8 +1061,17 @@ class _DoctorPatientDetailScreenState
                   style: const TextStyle(fontSize: 12))),
           Expanded(
               flex: 3,
-              child: Text(metric,
-                  style: const TextStyle(fontSize: 12))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(metric, style: const TextStyle(fontSize: 12)),
+                  // Context chip the patient picked, e.g. "After exercise"
+                  if (reading?.note != null && reading!.note!.isNotEmpty)
+                    Text(reading.note!,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF9AA3AB))),
+                ],
+              )),
           Expanded(
               flex: 2,
               child: Text('$value $unit',
