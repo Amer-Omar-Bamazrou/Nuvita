@@ -22,9 +22,19 @@ flutter analyze
 # Get / update dependencies
 flutter pub get
 flutter pub upgrade
+
+# Run all tests
+flutter test
+
+# Run one test file
+flutter test test/path/to/file_test.dart
 ```
 
-No test suite exists — `flutter test` will find nothing.
+### Tests
+
+Unit tests live under `test/`, mirroring the `lib/` layout (for example `test/core/...` for code in `lib/core/`). They are plain Dart tests run with `flutter test` and do not need a device, emulator or Firebase connection, so keep tested logic free of Firebase and plugin calls.
+
+CI (`.github/workflows/ci.yml`) runs `flutter pub get`, `flutter analyze` and `flutter test` on every push and pull request. Both analyze and test must pass.
 
 ## Architecture
 
@@ -138,21 +148,23 @@ Systolic and diastolic readings are stored as separate Firestore documents but d
 
 ## Firestore Security Rules
 - Rules file: `firestore.rules` in project root
-- Must be manually copied into Firebase Console → Firestore Database → Rules tab and published
+- `firebase.json` points at `firestore.rules` and `firestore.indexes.json` (currently empty), so `firebase deploy --only firestore` publishes both; copying the rules into Firebase Console → Firestore Database → Rules also works
 - Coverage: /users/{userId} (owner + isDoctor()), all sub-collections, /doctors (read own), /bugReports (anyone write, doctor read), collectionGroup (readings, suggestions, alerts, messages — doctor read)
 
 ## Notification ID Ranges
-- 0–99,999: base notifications
-- 100,000–199,999: missed dose alerts
-- 200,000–299,999: low supply alerts
-- 1,000,000–1,099,999: medication reminders
-- 1,100,000–1,199,999: daily medication reminders
+Source of truth: the ID helpers at the bottom of `lib/core/services/notification_service.dart`. Most IDs are `base + (id.hashCode.abs() % 99990)`, plus the time-slot index for per-dose reminders.
+- 0–99,999: isActive medication reminders (`scheduleMedicationReminder`)
+- 0–999,989: legacy one-time notifications (`scheduleNotification`) — overlaps the range above
+- 999,991–1,099,980: low supply alerts
+- 1,100,000–1,199,999: daily medication reminders (reminderEnabled)
 - 1,200,001: daily wellness reminder
-- 1,200,002: weekly health summary
-- 1,300,000–1,399,999: appointment tomorrow reminders
-- 1,400,000–1,499,999: doctor-assigned med notifications
-- 1,500,000–1,599,999: doctor suggestion notifications
-- 1,600,000–1,699,999: follow-up notifications
+- 1,300,000–1,399,999: missed dose alerts
+- 1,400,000–1,499,999: appointment tomorrow reminders
+- 1,500,001: weekly health summary
+- 1,600,000–1,699,999: follow-up confirmations
+- 1,700,000–1,799,999: critical reading alerts
+- 1,800,000–1,899,999: doctor-assigned medication notifications
+- 1,900,000–1,999,999: doctor suggestion notifications
 - 2,000,000–2,099,999: snoozed medication reminders
 - 2,100,000–2,199,999: appointment reminders
 
@@ -161,7 +173,7 @@ lib/core/theme/ — app_colors, app_text_styles, app_theme
 lib/core/services/ — preferences_service, notification_service
 lib/features/auth/ — login_screen, register_screen, change_password_screen, forgot_password_sent_screen, auth_service
 lib/features/onboarding/ — onboarding_screen
-lib/features/disease/ — disease_selection (dormant)
+lib/features/disease/ — disease_selection_screen, patient_service, patient_model
 lib/features/home/ — home_screen, main_shell
 lib/features/medication/ — medication_screen, add_medication, medication_detail_screen, medication_history_screen, model, service
 lib/features/tracking/ — tracking_screen
@@ -169,9 +181,8 @@ lib/features/history/ — history_screen
 lib/features/profile/ — profile_screen
 lib/features/dashboard/ — health_provider, health_history_provider
 lib/features/health/models/ — health_reading, metric_config
-lib/features/health/screens/ — add_reading_list_screen (legacy), add_reading_input_screen, blood_pressure_input_screen
-lib/features/health/services/ — health_reading_service, health_log_service (legacy)
-lib/features/health/widgets/ — ruler_picker (legacy — replaced by stepper buttons)
+lib/features/health/screens/ — add_reading_input_screen, blood_pressure_input_screen
+lib/features/health/services/ — health_reading_service
 lib/features/notifications/screens/ — suggestions_panel_screen
 lib/features/emergency/ — emergency_service, trend_warning_service, models/emergency_contact
 lib/features/emergency/screens/ — emergency_contacts_screen
@@ -183,7 +194,8 @@ lib/features/report/ — report_service, report_screen
 lib/features/doctor/data/ — medicine_library
 lib/features/doctor/screens/ — doctor_login_screen, doctor_dashboard_screen, doctor_overview_screen, doctor_patients_screen, doctor_patient_detail_screen, doctor_settings_screen, doctor_messages_screen, doctor_suggestions_history_screen, critical_alerts_screen, deleted_patients_screen
 lib/features/doctor/services/ — doctor_service, patient_suggestion_service
-lib/shared/widgets/ — nuvita_text_field, nuvita_button, health_metric_card, nuvita_time_picker
+lib/features/doctor/widgets/ — status_badge (shared status pill)
+lib/shared/widgets/ — nuvita_text_field, nuvita_button, nuvita_time_picker
 
 ## Coding Rules — ALWAYS FOLLOW
 - Natural developer style comments only
