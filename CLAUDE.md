@@ -104,7 +104,6 @@ Systolic and diastolic readings are stored as separate Firestore documents but d
 - Developer: Amer Omar Bamazrrou
 - University: De Montfort University Leicester
 - Module: CTEC3451 Final Year Project
-- Deadline: 22 May 2026
 
 ## Tech Stack
 - Flutter + Dart
@@ -198,16 +197,11 @@ lib/features/doctor/widgets/ — status_badge (shared status pill)
 lib/shared/widgets/ — nuvita_text_field, nuvita_button, nuvita_time_picker
 
 ## Coding Rules — ALWAYS FOLLOW
-- Natural developer style comments only
-- Never AI style comments
-- Clean modular code
-- Follow existing folder structure
-- Never change UI unless asked
-- Scan for errors after every file
-- Tell me each file created or updated
-- Build one feature at a time
-- Never regenerate existing working code
-- Always ask about modifications after building
+- Work in batches on a feature branch; never commit directly to main.
+- Change only what the task lists. If something listed is wrong or risky, stop and report.
+- UI changes are allowed only where the task says so.
+- Every batch ends with `flutter analyze` and `flutter test` passing.
+- Natural developer-style comments only.
 
 ## Git Strategy
 - main: stable code only
