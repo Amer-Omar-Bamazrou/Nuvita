@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../../../core/health/conditions.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../home/screens/main_shell.dart';
+import 'login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -156,6 +157,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // "Already have an account?" used to lead back into onboarding
+  void _goToLogin() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -271,7 +279,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         Text('Already have an account?', style: AppTextStyles.bodySmall),
         TextButton(
-          onPressed: _goBackToOnboarding,
+          onPressed: _goToLogin,
           child: const Text('Sign In'),
         ),
       ],

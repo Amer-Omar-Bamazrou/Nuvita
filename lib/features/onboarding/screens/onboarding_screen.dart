@@ -5,10 +5,10 @@ import '../../../shared/widgets/nuvita_button.dart';
 import '../../../shared/widgets/nuvita_text_field.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../home/screens/main_shell.dart';
 import '../widgets/service_option_card.dart';
 import '../../../core/health/conditions.dart';
 import '../../disease/screens/disease_selection_screen.dart';
+import '../../auth/screens/register_screen.dart';
 
 // ─── Local data classes ───────────────────────────────────────────────────────
 
@@ -154,11 +154,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Future<void> _skipToGuest() async {
+  // There is no guest mode: finishing onboarding means creating an account
+  Future<void> _navigateToRegister() async {
     await PreferencesService.setOnboardingComplete();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainShell()),
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
   }
 
@@ -830,17 +831,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in to protect and sync your health data',
+            'Create an account to protect and sync your health data',
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
           const Spacer(),
-          NuvitaButton(label: 'Sign In', onPressed: _navigateToLogin),
+          NuvitaButton(label: 'Create Account', onPressed: _navigateToRegister),
           const SizedBox(height: 28),
           GestureDetector(
-            onTap: _skipToGuest,
+            onTap: _navigateToLogin,
             child: const Text(
-              'Skip for now →',
+              'I already have an account →',
               style: TextStyle(
                 fontSize: 15,
                 color: AppColors.secondary,

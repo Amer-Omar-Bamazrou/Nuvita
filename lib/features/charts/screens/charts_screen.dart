@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../core/health/health_metrics.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../auth/screens/register_screen.dart';
 import '../../dashboard/providers/health_history_provider.dart';
 import '../../home/screens/main_shell.dart';
 import '../models/chart_data_point.dart';
@@ -285,10 +284,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid == null) return _buildGuestView();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -1070,94 +1065,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Guest view ────────────────────────────────────────────────────────────
-
-  Widget _buildGuestView() {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.textDark),
-        title: const Text(
-          'Health Trends',
-          style: TextStyle(
-            color: AppColors.textDark,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 48,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Charts available for registered users',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Create an account to track your health trends over time',
-                style: TextStyle(fontSize: 14, color: AppColors.secondary),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 28),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const RegisterScreen(),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 36,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('Create Account'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

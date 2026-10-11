@@ -1201,10 +1201,6 @@ class _HomeBodyState extends State<_HomeBody> {
   // ── Task list ─────────────────────────────────────────────────────────────
 
   Widget _buildTaskList() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid == null) return _buildGuestTaskPrompt();
-
     if (_isLoadingTasks) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
@@ -1317,32 +1313,6 @@ class _HomeBodyState extends State<_HomeBody> {
             const SizedBox(height: 8),
             Text(
               'No outstanding tasks for today. Great job!',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuestTaskPrompt() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Column(
-          children: [
-            const Icon(Icons.task_alt_outlined,
-                color: AppColors.primary, size: 56),
-            const SizedBox(height: 16),
-            Text(
-              'Sign in to see your daily tasks',
-              style: AppTextStyles.heading3,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your medications and readings\nwill appear here',
               style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),

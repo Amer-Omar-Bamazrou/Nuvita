@@ -32,7 +32,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
-  bool _isGuest = false;
   String _name = '';
   String _patientId = '';
   String _gender = '';
@@ -49,10 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      setState(() {
-        _isGuest = true;
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       return;
     }
 
@@ -445,16 +441,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             Future<void> send() async {
-              if (_isGuest) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sign in to message your doctor'),
-                  ),
-                );
-                return;
-              }
-
               final text = ctrl.text.trim();
               if (text.isEmpty) return;
 
@@ -727,61 +713,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    return _isGuest ? _buildGuestView() : _buildProfileView();
-  }
-
-  Widget _buildGuestView() {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person_outline_rounded,
-                  color: AppColors.primary,
-                  size: 44,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text('Your Profile', style: AppTextStyles.heading1),
-              const SizedBox(height: 10),
-              Text(
-                'Sign in to access your profile, health reports and appointments.',
-                style: AppTextStyles.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-              const Spacer(),
-              NuvitaButton(
-                label: 'Sign In',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ),
-              ),
-              const SizedBox(height: 14),
-              NuvitaButton(
-                label: 'Create Account',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-                ),
-                isOutlined: true,
-              ),
-              const SizedBox(height: 36),
-            ],
-          ),
-        ),
-      ),
-    );
+    return _buildProfileView();
   }
 
   Widget _buildProfileView() {

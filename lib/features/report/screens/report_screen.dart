@@ -20,7 +20,6 @@ class ReportScreen extends StatefulWidget {
 class _ReportScreenState extends State<ReportScreen> {
   bool _isLoading = true;
   bool _isGenerating = false;
-  bool _isGuest = false;
 
   String _name = '';
   int _readingsCount = 0;
@@ -38,10 +37,7 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _loadData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      setState(() {
-        _isGuest = true;
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       return;
     }
 
@@ -149,41 +145,7 @@ class _ReportScreenState extends State<ReportScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
-          : _isGuest
-              ? _buildGuestMessage()
-              : _buildContent(),
-    );
-  }
-
-  Widget _buildGuestMessage() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.description_rounded,
-                  size: 48, color: AppColors.primary),
-            ),
-            const SizedBox(height: 24),
-            Text('Sign in to generate reports',
-                style: AppTextStyles.heading3, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(
-              'Create an account to generate your health report.',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+          : _buildContent(),
     );
   }
 

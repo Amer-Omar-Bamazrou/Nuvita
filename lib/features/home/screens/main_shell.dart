@@ -5,6 +5,8 @@ import 'home_screen.dart';
 import '../../tracking/screens/tracking_screen.dart';
 import '../../history/screens/history_screen.dart';
 import '../../profile/screens/profile_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../auth/screens/register_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -15,6 +17,20 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // The app has no guest mode; a signed-out user is sent to registration
+    if (FirebaseAuth.instance.currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+        );
+      });
+    }
+  }
 
   // IndexedStack keeps all screens alive — state survives tab switches
   static const _screens = [

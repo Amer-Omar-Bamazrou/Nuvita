@@ -25,7 +25,6 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
-  bool _isGuest = false;
   bool _isLoading = true;
 
   List<MedicationModel> _medications = [];
@@ -41,7 +40,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
   @override
   void initState() {
     super.initState();
-    _isGuest = FirebaseAuth.instance.currentUser == null;
     _loadData();
     CareServices.changes.addListener(_loadData);
   }
@@ -86,11 +84,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
     List<AppointmentModel> upcoming = [];
     int readingsCount = 0;
 
-    if (!_isGuest) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
       upcoming = await AppointmentService.getUpcomingAppointments();
 
       // Count readings in last 30 days
-      final uid = FirebaseAuth.instance.currentUser!.uid;
       try {
         final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
         readingsCount = readings.length;
@@ -147,12 +145,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Guest sign-in prompt
-                if (_isGuest) ...[
-                  _buildGuestBanner(),
-                  const SizedBox(height: 20),
-                ],
-
                 // Medications card
                 if (_services.contains(CareServices.medications)) ...[
                   _buildSectionLabel('MEDICATIONS'),
@@ -161,62 +153,30 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   const SizedBox(height: 20),
                 ],
 
-                // Appointments card (logged-in only)
-                if (!_isGuest &&
-                    _services.contains(CareServices.appointments)) ...[
+                // Appointments card
+                if (_services.contains(CareServices.appointments)) ...[
                   _buildSectionLabel('APPOINTMENTS'),
                   const SizedBox(height: 8),
                   _buildAppointmentsCard(),
                   const SizedBox(height: 20),
                 ],
 
-                // Charts (logged-in only)
-                if (!_isGuest &&
-                    _services.contains(CareServices.measurements)) ...[
+                // Charts
+                if (_services.contains(CareServices.measurements)) ...[
                   _buildSectionLabel('HEALTH TRENDS'),
                   const SizedBox(height: 8),
                   _buildTrendsCard(),
                   const SizedBox(height: 20),
                 ],
 
-                // Health report card (logged-in only)
-                if (!_isGuest) ...[
-                  _buildSectionLabel('HEALTH REPORT'),
-                  const SizedBox(height: 8),
-                  _buildReportCard(),
-                ],
+                // Health report card
+                _buildSectionLabel('HEALTH REPORT'),
+                const SizedBox(height: 8),
+                _buildReportCard(),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // ── Guest banner ──────────────────────────────────────────────────────────
-
-  Widget _buildGuestBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              color: AppColors.primary, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Sign in to access all tracking features',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
