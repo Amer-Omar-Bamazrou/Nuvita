@@ -13,13 +13,16 @@ import '../models/emergency_contact.dart';
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
 
+  // Local cache of the contacts list, cleared on sign-out
+  static const prefsKey = 'emergency_contacts';
+
   @override
   State<EmergencyContactsScreen> createState() =>
       _EmergencyContactsScreenState();
 }
 
 class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
-  static const _prefsKey = 'emergency_contacts';
+  static const prefsKey = EmergencyContactsScreen.prefsKey;
   static const _maxContacts = 5;
   static const _relationships = [
     'Mother',
@@ -50,7 +53,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     if (uid != null) await _syncFromFirebase(uid);
 
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
+    final raw = prefs.getString(prefsKey);
     if (raw != null && raw.isNotEmpty) {
       final decoded = jsonDecode(raw) as List<dynamic>;
       _contacts = decoded
@@ -64,7 +67,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   Future<void> _saveAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _prefsKey,
+      prefsKey,
       jsonEncode(_contacts.map((c) => c.toMap()).toList()),
     );
   }
@@ -85,7 +88,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           .toList();
 
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_prefsKey);
+      final raw = prefs.getString(prefsKey);
       final local = <EmergencyContact>[];
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as List<dynamic>;
@@ -100,7 +103,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       }
 
       await prefs.setString(
-        _prefsKey,
+        prefsKey,
         jsonEncode(merged.map((c) => c.toMap()).toList()),
       );
     } catch (e) {

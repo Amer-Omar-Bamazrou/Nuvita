@@ -5,7 +5,7 @@ import '../../core/health/health_metrics.dart';
 import '../../core/theme/app_colors.dart';
 
 class TrendWarningService {
-  static const _prefKey = 'bp_trend_warning_shown_date';
+  static const prefsKey = 'bp_trend_warning_shown_date';
 
   // Checks the last 7 days of BP readings and warns the user if the
   // weekly average is consistently above safe thresholds. We guard with a
@@ -15,7 +15,7 @@ class TrendWarningService {
     final today = _todayString();
 
     // Already shown today — skip
-    if (prefs.getString(_prefKey) == today) return;
+    if (prefs.getString(prefsKey) == today) return;
 
     final readings = await HealthReadingService.getReadingsLastDays(uid, 7);
 
@@ -48,7 +48,7 @@ class TrendWarningService {
     if (!isHigh) return;
 
     // Mark as shown for today before displaying so a hot-reload doesn't double-fire
-    await prefs.setString(_prefKey, today);
+    await prefs.setString(prefsKey, today);
 
     if (!context.mounted) return;
 

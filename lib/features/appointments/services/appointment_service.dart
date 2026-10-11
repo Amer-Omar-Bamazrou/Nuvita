@@ -7,7 +7,7 @@ import '../models/appointment_model.dart';
 import '../../../core/services/notification_service.dart';
 
 class AppointmentService {
-  static const _key = 'appointments_list';
+  static const prefsKey = 'appointments_list';
 
   static CollectionReference<Map<String, dynamic>> _col(String uid) =>
       FirebaseFirestore.instance
@@ -26,7 +26,7 @@ class AppointmentService {
 
   static Future<List<AppointmentModel>> getAppointments() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final raw = prefs.getString(prefsKey);
     if (raw == null || raw.isEmpty) return [];
     final decoded = jsonDecode(raw) as List<dynamic>;
     return decoded
@@ -132,7 +132,7 @@ class AppointmentService {
   static Future<void> _saveAll(List<AppointmentModel> list) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _key,
+      prefsKey,
       jsonEncode(list.map((a) => a.toMap()).toList()),
     );
   }

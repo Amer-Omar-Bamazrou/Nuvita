@@ -8,6 +8,10 @@ class HealthHistoryProvider extends ChangeNotifier {
   bool _loaded = false;
   bool _hasMore = true;
 
+  // Bumped by reset() so a fetch that started for the previous account
+  // can't refill the list after sign-out
+  int _generation = 0;
+
   List<HealthReading> get allReadings => List.unmodifiable(_readings);
 
   bool get isLoaded => _loaded;
@@ -29,8 +33,10 @@ class HealthHistoryProvider extends ChangeNotifier {
 
   Future<void> loadReadings(String uid) async {
     if (_loaded) return;
+    final generation = _generation;
     try {
       final list = await HealthReadingService.getReadingsPaginated(uid, limit: 30);
+      if (generation != _generation) return;
       _readings
         ..clear()
         ..addAll(list);
@@ -40,6 +46,15 @@ class HealthHistoryProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('HealthHistoryProvider: loadReadings failed: $e');
     }
+  }
+
+  // Forgets everything loaded for the previous account (used on sign-out)
+  void reset() {
+    _generation++;
+    _readings.clear();
+    _loaded = false;
+    _hasMore = true;
+    notifyListeners();
   }
 
   Future<void> forceReload(String uid) async {
@@ -52,10 +67,12 @@ class HealthHistoryProvider extends ChangeNotifier {
 
   Future<void> loadMore(String uid) async {
     if (!_hasMore || _readings.isEmpty) return;
+    final generation = _generation;
     try {
       final lastTimestamp = _readings.last.timestamp;
       final list = await HealthReadingService.getReadingsPaginated(
           uid, limit: 30, startAfter: lastTimestamp);
+      if (generation != _generation) return;
       _readings.addAll(list);
       _hasMore = list.length >= 30;
       notifyListeners();

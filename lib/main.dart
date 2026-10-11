@@ -19,6 +19,7 @@ import 'features/appointments/screens/appointment_detail_screen.dart';
 import 'features/medication/services/medication_service.dart';
 import 'features/medication/screens/medication_detail_screen.dart';
 import 'features/notifications/screens/suggestions_panel_screen.dart';
+import 'features/profile/services/account_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -56,7 +57,7 @@ void main() async {
             .doc(user.uid)
             .get();
         if (doc.data()?['active'] == false) {
-          await FirebaseAuth.instance.signOut();
+          await AccountService.signOut();
           deactivated = true;
         }
       } catch (e) {

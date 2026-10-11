@@ -69,6 +69,28 @@ class PreferencesService {
     return raw.split(',');
   }
 
+  // True when this device holds name/gender/DOB from an onboarding run that
+  // hasn't been cleared by a sign-out
+  static Future<bool> hasOnboardingDetails() async {
+    final prefs = await _getInstance();
+    return (prefs.getString(_keyFirstName) ?? '').isNotEmpty;
+  }
+
+  // Removes the onboarding answers (they belong to one person) but keeps the
+  // onboarding-complete flag
+  static Future<void> clearOnboardingDetails() async {
+    final prefs = await _getInstance();
+    for (final key in [
+      _keyFirstName,
+      _keyLastName,
+      _keyGender,
+      _keyDob,
+      _keyServices,
+    ]) {
+      await prefs.remove(key);
+    }
+  }
+
   static Future<void> clearAll() async {
     final prefs = await _getInstance();
     await prefs.clear();

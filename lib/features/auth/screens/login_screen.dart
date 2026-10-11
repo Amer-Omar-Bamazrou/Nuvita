@@ -12,6 +12,7 @@ import '../../home/screens/main_shell.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import 'register_screen.dart';
 import 'forgot_password_sent_screen.dart';
+import '../../profile/services/account_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -65,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
               .doc(uid)
               .get();
           if (doc.data()?['active'] == false) {
-            await FirebaseAuth.instance.signOut();
+            await AccountService.signOut();
             if (!mounted) return;
             setState(() => _isLoading = false);
             _showDeactivatedDialog();
@@ -121,13 +122,18 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // Registration uses the onboarding answers saved on this device. After a
+  // sign-out those are cleared, so a new person goes through onboarding again
+  // instead of registering with someone else's (or no) details.
   Future<void> _navigateToRegister() async {
     final onboardingDone = await PreferencesService.isOnboardingComplete();
+    final hasDetails = await PreferencesService.hasOnboardingDetails();
     if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            onboardingDone ? const RegisterScreen() : const OnboardingScreen(),
+        builder: (_) => onboardingDone && hasDetails
+            ? const RegisterScreen()
+            : const OnboardingScreen(),
       ),
     );
   }

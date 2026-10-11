@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/medication_model.dart';
 
 class MedicationService {
-  static const _key = 'medications_list';
+  static const prefsKey = 'medications_list';
 
   static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
@@ -21,7 +21,7 @@ class MedicationService {
 
   static Future<List<MedicationModel>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final raw = prefs.getString(prefsKey);
     if (raw == null || raw.isEmpty) return [];
     final decoded = jsonDecode(raw) as List<dynamic>;
     return decoded
@@ -41,7 +41,7 @@ class MedicationService {
   static Future<void> _saveAll(List<MedicationModel> meds) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _key,
+      prefsKey,
       jsonEncode(meds.map((m) => m.toMap()).toList()),
     );
   }

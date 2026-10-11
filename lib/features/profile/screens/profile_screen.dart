@@ -3,15 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:iconly/iconly.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/nuvita_button.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
-import '../../../core/services/notification_service.dart';
+import '../../dashboard/providers/health_history_provider.dart';
 import '../../emergency/screens/emergency_contacts_screen.dart';
-import '../../../main.dart' show cancelDoctorNotificationListeners;
+import '../services/account_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -100,13 +101,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ── Sign out ───────────────────────────────────────────────────────────────
 
+  // Cancels all notifications, wipes this user's local data and readings,
+  // then signs out so the next account starts clean
   Future<void> _signOut() async {
     setState(() => _signingOut = true);
     try {
-      await NotificationService.cancelWellnessReminder();
-      await NotificationService.cancelWeeklyHealthSummary();
-      cancelDoctorNotificationListeners();
-      await FirebaseAuth.instance.signOut();
+      await AccountService.signOut(
+        history: context.read<HealthHistoryProvider>(),
+      );
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
