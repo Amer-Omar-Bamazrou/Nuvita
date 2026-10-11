@@ -25,6 +25,7 @@ const _filterOptions = [
   _FilterOption('Heart Rate', {HealthMetric.heartRate}),
   _FilterOption('Weight', {HealthMetric.weight}),
   _FilterOption('Walking', {HealthMetric.walkingMinutes}),
+  _FilterOption('Temperature', {HealthMetric.temperature}),
 ];
 
 class _DisplayItem {
@@ -100,6 +101,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return Icons.scale_rounded;
       case 'walkingMinutes':
         return Icons.directions_walk_rounded;
+      case 'temperature':
+        return Icons.thermostat_rounded;
       default:
         return Icons.health_and_safety_rounded;
     }
@@ -118,6 +121,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return const Color(0xFF388E3C);
       case 'walkingMinutes':
         return const Color(0xFF7B1FA2);
+      case 'temperature':
+        return const Color(0xFF0097A7);
       default:
         return AppColors.secondary;
     }

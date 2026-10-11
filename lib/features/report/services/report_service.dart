@@ -211,10 +211,14 @@ class ReportService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               vitalRow('SYS / DIA', '$sys / $dia${sys != '--' ? ' mmHg' : ''}'),
-              vitalRow('Heart Rate', hr != '--' ? '$hr $hrUnit' : '--'),
-              vitalRow('Blood Sugar', bs != '--' ? '$bs $bsUnit$bsSuffix' : '--'),
-              vitalRow('Temperature', temp != '--' ? '$temp $tempUnit' : '--'),
-              vitalRow('Weight', weight != '--' ? '$weight $weightUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('heartRate'),
+                  hr != '--' ? '$hr $hrUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('bloodSugar'),
+                  bs != '--' ? '$bs $bsUnit$bsSuffix' : '--'),
+              vitalRow(HealthMetrics.labelForKey('temperature'),
+                  temp != '--' ? '$temp $tempUnit' : '--'),
+              vitalRow(HealthMetrics.labelForKey('weight'),
+                  weight != '--' ? '$weight $weightUnit' : '--'),
               pw.Padding(
                 padding: pw.EdgeInsets.zero,
                 child: pw.Row(
