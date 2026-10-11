@@ -62,6 +62,7 @@ class _ReportScreenState extends State<ReportScreen> {
       final profile =
           (doc.data())?['profile'] as Map<String, dynamic>?;
 
+      if (!mounted) return;
       setState(() {
         _name = profile?['name'] as String? ?? '';
         _readingsCount = readings.length;
@@ -69,7 +70,7 @@ class _ReportScreenState extends State<ReportScreen> {
         _isLoading = false;
       });
     } catch (_) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

@@ -84,6 +84,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
       final profile = doc.data()?['profile'] as Map<String, dynamic>?;
       final disease = profile?['diseaseType'] as String? ?? 'other';
 
+      if (!mounted) return;
       setState(() {
         _diseaseType = disease;
         if (widget.preselectedMetric == null) {
@@ -92,6 +93,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         _loadingDisease = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loadingDisease = false);
     }
 

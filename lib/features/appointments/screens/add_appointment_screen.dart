@@ -105,40 +105,66 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
       _selectedTime.minute,
     );
 
-    if (_isEditMode) {
-      final updated = widget.existing!.copyWith(
-        doctorName: _doctorController.text.trim(),
-        speciality: _specialityController.text.trim(),
-        location: _locationController.text.trim(),
-        dateTime: appointmentDateTime,
-        notes: _notesController.text.trim(),
-        reminderMinutes: _reminderMinutes,
-      );
-
-      await AppointmentService.cancelReminder(updated.id);
-      await AppointmentService.updateAppointment(updated);
-      await AppointmentService.scheduleReminder(updated);
-
+    final AppointmentModel appointment;
+    try {
+      if (_isEditMode) {
+        appointment = widget.existing!.copyWith(
+          doctorName: _doctorController.text.trim(),
+          speciality: _specialityController.text.trim(),
+          location: _locationController.text.trim(),
+          dateTime: appointmentDateTime,
+          notes: _notesController.text.trim(),
+          reminderMinutes: _reminderMinutes,
+        );
+        await AppointmentService.updateAppointment(appointment);
+      } else {
+        appointment = AppointmentModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          doctorName: _doctorController.text.trim(),
+          speciality: _specialityController.text.trim(),
+          location: _locationController.text.trim(),
+          dateTime: appointmentDateTime,
+          notes: _notesController.text.trim(),
+          reminderMinutes: _reminderMinutes,
+        );
+        await AppointmentService.saveAppointment(appointment);
+      }
+    } catch (e) {
+      debugPrint('AddAppointmentScreen: save failed: $e');
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      setState(() => _isSaving = false);
+      _showError('Could not save the appointment. Please try again.');
       return;
     }
 
-    final appointment = AppointmentModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      doctorName: _doctorController.text.trim(),
-      speciality: _specialityController.text.trim(),
-      location: _locationController.text.trim(),
-      dateTime: appointmentDateTime,
-      notes: _notesController.text.trim(),
-      reminderMinutes: _reminderMinutes,
-    );
-
-    await AppointmentService.saveAppointment(appointment);
-    await AppointmentService.scheduleReminder(appointment);
+    // Stored; reminders are separate so a refused permission keeps the entry
+    var remindersOk = true;
+    try {
+      if (_isEditMode) await AppointmentService.cancelReminder(appointment.id);
+      await AppointmentService.scheduleReminder(appointment);
+    } catch (e) {
+      debugPrint('AddAppointmentScreen: reminder scheduling failed: $e');
+      remindersOk = false;
+    }
 
     if (!mounted) return;
+    if (!remindersOk) {
+      _showError('Appointment saved, but its reminders could not be set. '
+          'Check that notifications are allowed for Nuvita.');
+    }
     Navigator.of(context).pop(true);
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   String _formatDate(DateTime d) {

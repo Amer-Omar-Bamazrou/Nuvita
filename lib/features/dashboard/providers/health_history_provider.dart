@@ -7,6 +7,7 @@ class HealthHistoryProvider extends ChangeNotifier {
   final List<HealthReading> _readings = []; // maintained newest-first
   bool _loaded = false;
   bool _hasMore = true;
+  bool _loadFailed = false;
 
   // Bumped by reset() so a fetch that started for the previous account
   // can't refill the list after sign-out
@@ -15,6 +16,9 @@ class HealthHistoryProvider extends ChangeNotifier {
   List<HealthReading> get allReadings => List.unmodifiable(_readings);
 
   bool get isLoaded => _loaded;
+
+  // True when the last first-page load failed; History offers a retry
+  bool get loadFailed => _loadFailed;
 
   bool get hasMore => _hasMore;
 
@@ -34,6 +38,10 @@ class HealthHistoryProvider extends ChangeNotifier {
   Future<void> loadReadings(String uid) async {
     if (_loaded) return;
     final generation = _generation;
+    if (_loadFailed) {
+      _loadFailed = false;
+      notifyListeners();
+    }
     try {
       final list = await HealthReadingService.getReadingsPaginated(uid, limit: 30);
       if (generation != _generation) return;
@@ -45,6 +53,9 @@ class HealthHistoryProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('HealthHistoryProvider: loadReadings failed: $e');
+      if (generation != _generation) return;
+      _loadFailed = true;
+      notifyListeners();
     }
   }
 
@@ -53,6 +64,7 @@ class HealthHistoryProvider extends ChangeNotifier {
     _generation++;
     _readings.clear();
     _loaded = false;
+    _loadFailed = false;
     _hasMore = true;
     notifyListeners();
   }
@@ -65,19 +77,22 @@ class HealthHistoryProvider extends ChangeNotifier {
     await loadReadings(uid);
   }
 
-  Future<void> loadMore(String uid) async {
-    if (!_hasMore || _readings.isEmpty) return;
+  // Returns false when the page couldn't be fetched
+  Future<bool> loadMore(String uid) async {
+    if (!_hasMore || _readings.isEmpty) return true;
     final generation = _generation;
     try {
       final lastTimestamp = _readings.last.timestamp;
       final list = await HealthReadingService.getReadingsPaginated(
           uid, limit: 30, startAfter: lastTimestamp);
-      if (generation != _generation) return;
+      if (generation != _generation) return true;
       _readings.addAll(list);
       _hasMore = list.length >= 30;
       notifyListeners();
+      return true;
     } catch (e) {
       debugPrint('HealthHistoryProvider: loadMore failed: $e');
+      return false;
     }
   }
 

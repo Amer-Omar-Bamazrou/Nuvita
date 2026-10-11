@@ -194,40 +194,76 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       lowSupplyNotified: resetNotified ? false : (existing?.lowSupplyNotified ?? false),
     );
 
-    await NotificationService.initialize();
-    await NotificationService.requestPermissions();
-
-    if (_isEditMode) {
-      // Cancel everything scheduled for the old times (IDs depend on the
-      // number of times), then schedule again for the new ones
-      await NotificationService.cancelMedicationReminder(
-          existing!.id, existing.times.length);
-      await NotificationService.cancelDailyMedicationReminders(
-          existing.id, existing.times);
-      await MedicationService.update(med);
-      await NotificationService.scheduleMedicationReminder(med);
-      if (med.reminderEnabled) {
-        await NotificationService.scheduleDailyMedicationReminder(
-          med.id,
-          med.name,
-          med.dosage,
-          med.times,
-          pillsPerDose: med.pillsPerDose,
-        );
+    try {
+      if (_isEditMode) {
+        await MedicationService.update(med);
+      } else {
+        await MedicationService.add(med);
       }
+    } catch (e) {
+      debugPrint('AddMedicationScreen: save failed: $e');
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showError('Could not save the medication. Please try again.');
+      return;
+    }
 
-      // If the user refilled above threshold, cancel any pending supply alert
-      if (resetNotified) {
-        await NotificationService.cancelLowSupplyAlert(med.id);
+    // The medication is stored; reminders are scheduled separately so a
+    // refused permission doesn't lose the user's entry
+    var remindersOk = true;
+    try {
+      await NotificationService.initialize();
+      await NotificationService.requestPermissions();
+
+      if (_isEditMode) {
+        // Cancel everything scheduled for the old times (IDs depend on the
+        // number of times), then schedule again for the new ones
+        await NotificationService.cancelMedicationReminder(
+            existing!.id, existing.times.length);
+        await NotificationService.cancelDailyMedicationReminders(
+            existing.id, existing.times);
+        await NotificationService.scheduleMedicationReminder(med);
+        if (med.reminderEnabled) {
+          await NotificationService.scheduleDailyMedicationReminder(
+            med.id,
+            med.name,
+            med.dosage,
+            med.times,
+            pillsPerDose: med.pillsPerDose,
+          );
+        }
+
+        // If the user refilled above threshold, cancel any pending supply alert
+        if (resetNotified) {
+          await NotificationService.cancelLowSupplyAlert(med.id);
+        }
+      } else {
+        await NotificationService.scheduleMedicationReminder(med);
       }
-    } else {
-      await MedicationService.add(med);
-      await NotificationService.scheduleMedicationReminder(med);
+    } catch (e) {
+      debugPrint('AddMedicationScreen: reminder scheduling failed: $e');
+      remindersOk = false;
     }
 
     if (!mounted) return;
+    if (!remindersOk) {
+      _showError('Medication saved, but its reminders could not be set. '
+          'Check that notifications are allowed for Nuvita.');
+    }
     // Pop with the saved model so callers can update their state immediately
     Navigator.of(context).pop(med);
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   String _formatTime(TimeOfDay t) {

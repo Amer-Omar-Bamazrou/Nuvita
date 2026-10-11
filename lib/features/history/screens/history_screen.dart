@@ -464,8 +464,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     setState(() => _loadingMore = true);
-    await context.read<HealthHistoryProvider>().loadMore(uid);
-    if (mounted) setState(() => _loadingMore = false);
+    final ok = await context.read<HealthHistoryProvider>().loadMore(uid);
+    if (!mounted) return;
+    setState(() => _loadingMore = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't load older readings. Please try again."),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   // ── Chart filter pass ──
@@ -523,7 +533,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         builder: (context, provider, _) {
           final filtered = provider.filteredReadings(_combinedMetrics);
           final uid = FirebaseAuth.instance.currentUser?.uid;
-          final isLoading = uid != null && !provider.isLoaded;
+          final failed = uid != null && !provider.isLoaded && provider.loadFailed;
+          final isLoading = uid != null && !provider.isLoaded && !failed;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +543,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               if (provider.allReadings.isNotEmpty)
                 _buildSummaryCard(filtered),
               Expanded(
-                child: isLoading
+                child: failed
+                    ? _buildLoadError(uid)
+                    : isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
                           color: AppColors.primary,
@@ -719,6 +732,51 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadError(String uid) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off_rounded,
+                size: 64, color: AppColors.primary),
+            const SizedBox(height: 20),
+            Text(
+              "Couldn't load your readings",
+              style: AppTextStyles.heading3.copyWith(color: AppColors.primary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Check your connection and try again.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton(
+              onPressed: () =>
+                  context.read<HealthHistoryProvider>().loadReadings(uid),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

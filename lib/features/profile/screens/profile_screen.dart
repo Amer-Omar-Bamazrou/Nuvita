@@ -54,6 +54,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final data = doc.data();
       final profile = data?['profile'] as Map<String, dynamic>?;
+      if (!mounted) return;
       setState(() {
         // Name may live at root (new registrations) or under 'profile' (onboarding path)
         _name = profile?['name'] as String? ?? data?['name'] as String? ?? '';
@@ -63,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isLoading = false;
       });
     } catch (_) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

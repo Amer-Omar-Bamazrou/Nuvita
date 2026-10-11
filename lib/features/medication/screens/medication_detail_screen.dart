@@ -134,6 +134,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     final updated = _med.copyWith(reminderEnabled: value);
     setState(() => _med = updated);
     await MedicationService.update(updated);
+    if (!mounted) return;
 
     if (value) {
       await NotificationService.scheduleDailyMedicationReminder(
@@ -202,8 +203,9 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           _med.id, _med.times);
     }
     await MedicationService.delete(_med.id);
+    if (!mounted) return;
 
-    if (mounted) Navigator.of(context).pop(true);
+    Navigator.of(context).pop(true);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
