@@ -459,8 +459,6 @@ class _HomeBodyState extends State<_HomeBody> {
                     _buildDailySummaryCard(historyProvider),
                     const SizedBox(height: 16),
                     _buildSummaryBanner(),
-                    const SizedBox(height: 6),
-                    _buildSimulateButton(context),
                     const SizedBox(height: 20),
                     _buildTaskList(),
                   ],
@@ -1168,27 +1166,6 @@ class _HomeBodyState extends State<_HomeBody> {
         const SizedBox(width: 4),
         Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 11)),
       ],
-    );
-  }
-
-  // ── Simulate critical reading — quick testing shortcut ───────────────────
-
-  Widget _buildSimulateButton(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: TextButton(
-        onPressed: () => EmergencyService.showEmergencyFlow(context),
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.error,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: const Text(
-          'Simulate Critical Reading',
-          style: TextStyle(fontSize: 12),
-        ),
-      ),
     );
   }
 
