@@ -2,6 +2,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/health/health_metrics.dart';
 import '../../health/models/health_reading.dart';
+import '../../medication/services/adherence.dart';
+import '../../medication/services/medication_service.dart';
 import '../services/doctor_service.dart';
 import '../data/medicine_library.dart';
 import '../../charts/models/chart_data_point.dart';
@@ -153,44 +155,33 @@ class _DoctorPatientDetailScreenState
     setState(() => _loadingAdherence = true);
     try {
       final doses = await _service.getPatientAdherence(_uid, 7);
-      final meds = await _service.getPatientMedications(_uid);
-      final activeMeds = meds.where((m) => m['isActive'] != false).toList();
+      final meds = (await _service.getPatientMedications(_uid))
+          .map(MedicationService.fromFirestoreDoc)
+          .toList();
       final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final report = calculateAdherence(
+        medications: meds,
+        takenDoses: {
+          for (final d in doses)
+            if (d['taken'] == true) d['id'] as String,
+        },
+        from: DateTime(today.year, today.month, today.day - 6),
+        to: today,
+        now: now,
+      );
+
       final days = <_AdherenceDay>[];
-
       for (int i = 0; i < 7; i++) {
-        final date = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: i));
-        final dateStr =
-            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-        int total = 0;
-        int taken = 0;
-
-        for (final med in activeMeds) {
-          DateTime? startDate;
-          final sd = med['startDate'];
-          if (sd is Timestamp) {
-            startDate = sd.toDate();
-          } else if (sd is String) {
-            startDate = DateTime.tryParse(sd);
-          }
-          if (startDate != null) {
-            final start = DateTime(startDate.year, startDate.month, startDate.day);
-            if (start.isAfter(date)) continue;
-          }
-
-          final times = med['times'] as List<dynamic>? ?? [];
-          for (final time in times) {
-            total++;
-            final docId = '${dateStr}_${med['id']}_$time';
-            if (doses.any((d) => d['id'] == docId && d['taken'] == true)) {
-              taken++;
-            }
-          }
-        }
-
-        days.add(_AdherenceDay(date: date, taken: taken, total: total));
+        final date = DateTime(today.year, today.month, today.day - i);
+        final counts = report.byDay[date] ?? const AdherenceCounts();
+        days.add(_AdherenceDay(
+          date: date,
+          taken: counts.taken,
+          total: counts.expected,
+          pending: counts.pending,
+        ));
       }
 
       if (!mounted) return;
@@ -921,7 +912,7 @@ class _DoctorPatientDetailScreenState
           if (_loadingAdherence)
             const Center(
                 child: CircularProgressIndicator(color: _primary))
-          else if (_adherenceDays.every((d) => d.total == 0))
+          else if (_adherenceDays.every((d) => d.total + d.pending == 0))
             Text('No medication schedule found.',
                 style: TextStyle(fontSize: 13, color: const Color(0xFF6E7A82)))
           else
@@ -936,7 +927,10 @@ class _DoctorPatientDetailScreenState
     final ratio = day.total > 0 ? day.taken / day.total : 0.0;
 
     Color barColor;
-    if (pct == 100) {
+    if (day.total == 0) {
+      // Nothing due that day (or today's doses are still to come)
+      barColor = const Color(0xFF9AA3AB);
+    } else if (pct == 100) {
       barColor = const Color(0xFF388E3C);
     } else if (pct >= 50) {
       barColor = const Color(0xFFFF6F00);
@@ -983,7 +977,7 @@ class _DoctorPatientDetailScreenState
           SizedBox(
             width: 72,
             child: Text(
-              '${day.taken}/${day.total} ($pct%)',
+              day.total == 0 ? '—' : '${day.taken}/${day.total} ($pct%)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -1762,8 +1756,13 @@ class _AssignMedicationSheetState extends State<_AssignMedicationSheet> {
 class _AdherenceDay {
   final DateTime date;
   final int taken;
-  final int total;
+  final int total; // doses that were due
+  final int pending; // later today, not due yet
 
-  const _AdherenceDay(
-      {required this.date, required this.taken, required this.total});
+  const _AdherenceDay({
+    required this.date,
+    required this.taken,
+    required this.total,
+    this.pending = 0,
+  });
 }

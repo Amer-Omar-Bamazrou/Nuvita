@@ -15,6 +15,7 @@ import '../../emergency/emergency_service.dart';
 import '../../emergency/trend_warning_service.dart';
 import '../../medication/services/medication_service.dart';
 import '../../medication/services/dose_service.dart';
+import '../../medication/services/adherence.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../health/models/health_reading.dart';
 import '../../health/models/reading_entry.dart';
@@ -181,14 +182,9 @@ class _HomeBodyState extends State<_HomeBody> {
   Future<void> _loadMedSummary() async {
     final meds = await MedicationService.loadAll();
     final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
     var count = 0;
     for (final med in meds) {
-      if (!med.isActive) continue;
-      final start = med.startDate;
-      if (DateTime(start.year, start.month, start.day).isAfter(todayDate)) {
-        continue;
-      }
+      if (!isScheduledOn(med, today)) continue;
       count += med.times.length;
     }
     if (mounted) setState(() => _medScheduleCount = count);
@@ -210,11 +206,9 @@ class _HomeBodyState extends State<_HomeBody> {
       final meds = await MedicationService.loadAll();
       final prefs = await SharedPreferences.getInstance();
       for (final med in meds) {
-        if (!med.isActive) continue;
-        final start = med.startDate;
-        if (DateTime(start.year, start.month, start.day).isAfter(todayStart)) {
-          continue;
-        }
+        // Same schedule rules as the adherence figures (weekly and
+        // "As needed" medications don't get a task every day)
+        if (!isScheduledOn(med, todayStart)) continue;
         for (final time in med.times) {
           final prefKey = 'taken_${med.id}_${time}_$todayStr';
           final taken = prefs.getString(prefKey) == 'true';
@@ -261,33 +255,51 @@ class _HomeBodyState extends State<_HomeBody> {
 
     try {
       final now = DateTime.now();
-      final startStr = _dateStr(now.subtract(const Duration(days: 60)));
+      final today = DateTime(now.year, now.month, now.day);
+      final from = DateTime(today.year, today.month, today.day - 60);
 
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('adherence')
-          .where('date', isGreaterThanOrEqualTo: startStr)
+          .where('date', isGreaterThanOrEqualTo: _dateStr(from))
           .get();
 
       final Map<String, List<Map<String, dynamic>>> byDate = {};
+      final takenDoses = <String>{};
       for (final doc in snap.docs) {
         final data = doc.data();
         final date = data['date'] as String?;
         if (date == null) continue;
         byDate.putIfAbsent(date, () => []);
         byDate[date]!.add(data);
+        if (data['taken'] == true) takenDoses.add(doc.id);
+      }
+      // Today's taps may not have reached Firestore yet
+      for (final t in _tasks) {
+        if (t.isCompleted && t.medicationId != null) {
+          takenDoses.add(doseKey(today, t.medicationId!, t.timeOfDay));
+        }
       }
 
+      final meds = await MedicationService.loadAll();
+      final report = calculateAdherence(
+        medications: meds,
+        takenDoses: takenDoses,
+        from: from,
+        to: today,
+        now: now,
+      );
+
+      // Share of each day's scheduled doses that were taken
       final Map<String, double> cMap = {};
-      for (final entry in byDate.entries) {
-        final takenCount =
-            entry.value.where((d) => d['taken'] == true).length;
-        cMap[entry.key] =
-            entry.value.isEmpty ? 0.0 : takenCount / entry.value.length;
+      for (final entry in report.byDay.entries) {
+        final c = entry.value;
+        if (!c.hasSchedule) continue;
+        cMap[_dateStr(entry.key)] = c.taken / (c.expected + c.pending);
       }
 
-      final todayStr = _dateStr(now);
+      final todayStr = _dateStr(today);
       if (_tasks.isNotEmpty) {
         final completed = _tasks.where((t) => t.isCompleted).length;
         cMap[todayStr] = completed / _tasks.length;
@@ -297,7 +309,8 @@ class _HomeBodyState extends State<_HomeBody> {
       if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
 
       for (int i = 1; i <= 60; i++) {
-        final dayStr = _dateStr(now.subtract(Duration(days: i)));
+        final dayStr =
+            _dateStr(DateTime(today.year, today.month, today.day - i));
         if (cMap.containsKey(dayStr) && cMap[dayStr]! >= 1.0) {
           streak++;
         } else {
@@ -319,7 +332,8 @@ class _HomeBodyState extends State<_HomeBody> {
 
   void _updateTodayStreak() {
     final now = DateTime.now();
-    final todayStr = _dateStr(now);
+    final today = DateTime(now.year, now.month, now.day);
+    final todayStr = _dateStr(today);
 
     if (_tasks.isNotEmpty) {
       final completed = _tasks.where((t) => t.isCompleted).length;
@@ -330,7 +344,7 @@ class _HomeBodyState extends State<_HomeBody> {
     if (_tasks.isNotEmpty && _tasks.every((t) => t.isCompleted)) streak = 1;
 
     for (int i = 1; i <= 60; i++) {
-      final dayStr = _dateStr(now.subtract(Duration(days: i)));
+      final dayStr = _dateStr(DateTime(today.year, today.month, today.day - i));
       if (_completionMap.containsKey(dayStr) && _completionMap[dayStr]! >= 1.0) {
         streak++;
       } else {

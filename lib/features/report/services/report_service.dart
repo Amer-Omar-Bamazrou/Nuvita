@@ -8,6 +8,7 @@ import '../../health/models/health_reading.dart';
 import '../../health/services/health_reading_service.dart';
 import '../../medication/models/medication_model.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/adherence.dart';
 
 class ReportService {
   static final _primary = PdfColor.fromHex('004346');
@@ -30,6 +31,18 @@ class ReportService {
     final readings = await HealthReadingService.getReadingsLastDays(uid, 30);
     final medications = await MedicationService.loadAll();
     final adherence = await MedicationService.getAdherenceHistory(uid, 30);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final adherenceCounts = calculateAdherence(
+      medications: medications,
+      takenDoses: {
+        for (final e in adherence.entries)
+          if (e.value) e.key,
+      },
+      from: DateTime(today.year, today.month, today.day - 29),
+      to: today,
+      now: now,
+    ).total;
 
     final doc = pw.Document();
 
@@ -46,7 +59,7 @@ class ReportService {
           pw.SizedBox(height: 24),
           ..._buildReadingsWidgets(readings),
           pw.SizedBox(height: 24),
-          ..._buildMedicationsWidgets(medications, adherence),
+          ..._buildMedicationsWidgets(medications, adherenceCounts),
           pw.SizedBox(height: 24),
           _buildDisclaimer(),
         ],
@@ -738,7 +751,7 @@ class ReportService {
 
   static List<pw.Widget> _buildMedicationsWidgets(
     List<MedicationModel> medications,
-    Map<String, bool> adherence,
+    AdherenceCounts adherence,
   ) {
     final sectionTitle = pw.Text(
       'Medications',
@@ -820,11 +833,12 @@ class ReportService {
 
     final result = <pw.Widget>[medTable];
 
-    // Adherence summary
-    if (adherence.isNotEmpty) {
-      final taken = adherence.values.where((v) => v).length;
-      final total = adherence.length;
-      final pct = total > 0 ? (taken / total * 100).toStringAsFixed(0) : '0';
+    // Adherence over the report period: doses due vs doses recorded as taken.
+    // "As needed" medications and doses not due yet are left out.
+    if (adherence.expected > 0) {
+      final taken = adherence.taken;
+      final total = adherence.expected;
+      final pct = (taken / total * 100).toStringAsFixed(0);
 
       result.add(pw.SizedBox(height: 12));
       result.add(pw.Container(
@@ -839,7 +853,7 @@ class ReportService {
           children: [
             _statChip('Doses Taken', '$taken / $total'),
             _statChip('Adherence Rate', '$pct%'),
-            _statChip('Missed', '${total - taken} doses'),
+            _statChip('Missed', '${adherence.missed} doses'),
           ],
         ),
       ));

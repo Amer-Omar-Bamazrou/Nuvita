@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../medication/models/medication_model.dart';
 import '../../medication/services/medication_service.dart';
+import '../../medication/services/adherence.dart';
 import '../../medication/screens/medication_screen.dart';
 import '../../medication/screens/add_medication_screen.dart';
 import '../../appointments/models/appointment_model.dart';
@@ -29,6 +30,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   List<AppointmentModel> _appointments = [];
   int _readingsCount = 0;
   int _activeMedsCount = 0;
+  // Medications with nothing left to take today
   Set<String> _takenKeys = {};
 
   @override
@@ -42,19 +44,30 @@ class _TrackingScreenState extends State<TrackingScreen> {
     final meds = await MedicationService.loadAll();
     final activeMeds = meds.where((m) => m.isActive).toList();
 
-    // Check which meds are taken today
+    // Today's status per medication, using the same rules as the adherence
+    // figures: done once every dose scheduled for today has been taken
     final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now();
+    final now = DateTime.now();
     final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    final taken = <String>{};
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final takenDoses = <String>{};
     for (final med in activeMeds) {
       for (final time in med.times) {
-        final key = 'taken_${med.id}_${time}_$todayStr';
-        if (prefs.getString(key) == 'true') {
-          taken.add(med.id);
+        if (prefs.getString('taken_${med.id}_${time}_$todayStr') == 'true') {
+          takenDoses.add(doseKey(now, med.id, time));
         }
       }
+    }
+    final taken = <String>{};
+    for (final med in activeMeds) {
+      final today = calculateAdherence(
+        medications: [med],
+        takenDoses: takenDoses,
+        from: now,
+        to: now,
+        now: now,
+      ).total;
+      if (!today.hasSchedule || today.isComplete) taken.add(med.id);
     }
 
     List<AppointmentModel> upcoming = [];
