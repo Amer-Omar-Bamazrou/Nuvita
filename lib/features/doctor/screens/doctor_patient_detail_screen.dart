@@ -17,10 +17,15 @@ class DoctorPatientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
   final String doctorName;
 
+  // Set when shown inside the dashboard shell: the back arrow returns to
+  // the patient list instead of popping a route
+  final VoidCallback? onBack;
+
   const DoctorPatientDetailScreen({
     super.key,
     required this.patient,
     required this.doctorName,
+    this.onBack,
   });
 
   @override
@@ -434,6 +439,13 @@ class _DoctorPatientDetailScreenState
         foregroundColor: const Color(0xFF172A3A),
         elevation: 0,
         titleSpacing: 0,
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back to patients',
+                onPressed: widget.onBack,
+              ),
         title: Text(
           _patientName,
           style: const TextStyle(

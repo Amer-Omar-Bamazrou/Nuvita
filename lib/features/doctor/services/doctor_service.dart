@@ -29,6 +29,15 @@ class DoctorService {
         .toList();
   }
 
+  // The full patient record (same shape as getAllPatients), or null when the
+  // user document doesn't exist
+  Future<Map<String, dynamic>?> getPatient(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    final data = doc.data();
+    if (data == null) return null;
+    return {'uid': doc.id, ...data};
+  }
+
   // Last 10 readings for a patient, newest first
   Future<List<Map<String, dynamic>>> getPatientReadings(String uid) async {
     final snap = await _db

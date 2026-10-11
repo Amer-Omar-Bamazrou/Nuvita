@@ -4,6 +4,7 @@ import 'package:iconly/iconly.dart';
 import 'doctor_login_screen.dart';
 import 'doctor_overview_screen.dart';
 import 'doctor_patients_screen.dart';
+import 'doctor_patient_detail_screen.dart';
 import 'doctor_settings_screen.dart';
 
 class DoctorDashboardScreen extends StatefulWidget {
@@ -22,6 +23,20 @@ class DoctorDashboardScreen extends StatefulWidget {
 
 class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   int _selectedIndex = 0;
+
+  // Patient open in the content area, next to the sidebar
+  Map<String, dynamic>? _selectedPatient;
+
+  String get _doctorDisplayName =>
+      widget.doctorName.isNotEmpty ? widget.doctorName : widget.doctorEmail;
+
+  // Every way of choosing a patient (grid, alert, message) ends here
+  void _selectPatient(Map<String, dynamic> patient) {
+    setState(() {
+      _selectedPatient = patient;
+      _selectedIndex = 1;
+    });
+  }
 
   static const _primary = Color(0xFF004346);
 
@@ -230,7 +245,10 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   Widget _buildNavItem(int index, _NavItem item) {
     final isSelected = _selectedIndex == index;
     return InkWell(
-      onTap: () => setState(() => _selectedIndex = index),
+      onTap: () => setState(() {
+        _selectedIndex = index;
+        _selectedPatient = null;
+      }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -294,26 +312,38 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   }
 
   Widget _buildContent() {
+    final patient = _selectedPatient;
+    // The patient list stays alive underneath, so search and filter survive
+    // opening a patient and coming back
     return IndexedStack(
-      index: _selectedIndex,
+      index: patient != null ? 3 : _selectedIndex,
       children: [
         DoctorOverviewScreen(
-          doctorName: widget.doctorName.isNotEmpty
-              ? widget.doctorName
-              : widget.doctorEmail,
-          onViewPatients: () => setState(() => _selectedIndex = 1),
+          doctorName: _doctorDisplayName,
+          onViewPatients: () => setState(() {
+            _selectedIndex = 1;
+            _selectedPatient = null;
+          }),
+          onSelectPatient: _selectPatient,
         ),
         DoctorPatientsScreen(
-          onSelectPatient: (_) => setState(() => _selectedIndex = 1),
-          doctorName: widget.doctorName.isNotEmpty
-              ? widget.doctorName
-              : widget.doctorEmail,
+          onSelectPatient: _selectPatient,
+          doctorName: _doctorDisplayName,
         ),
         DoctorSettingsScreen(
           doctorEmail: widget.doctorEmail,
           doctorName: widget.doctorName,
           onSignOut: _signOut,
         ),
+        if (patient != null)
+          DoctorPatientDetailScreen(
+            key: ValueKey(patient['uid']),
+            patient: patient,
+            doctorName: _doctorDisplayName,
+            onBack: () => setState(() => _selectedPatient = null),
+          )
+        else
+          const SizedBox.shrink(),
       ],
     );
   }

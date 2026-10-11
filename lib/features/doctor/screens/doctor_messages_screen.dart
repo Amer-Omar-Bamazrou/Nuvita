@@ -3,7 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/doctor_service.dart';
 
 class DoctorMessagesScreen extends StatefulWidget {
-  const DoctorMessagesScreen({super.key});
+  // Opens the sender in the dashboard shell
+  final void Function(Map<String, dynamic> patient) onSelectPatient;
+
+  const DoctorMessagesScreen({super.key, required this.onSelectPatient});
 
   @override
   State<DoctorMessagesScreen> createState() => _DoctorMessagesScreenState();
@@ -21,6 +24,28 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  // Messages only carry the sender's name and IDs; load the full record
+  Future<void> _openPatient(String uid) async {
+    try {
+      final patient = await _service.getPatient(uid);
+      if (!mounted) return;
+      if (patient == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient record not found')),
+        );
+        return;
+      }
+      Navigator.of(context).pop();
+      widget.onSelectPatient(patient);
+    } catch (e) {
+      debugPrint('DoctorMessages: loading patient failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the patient. Try again.')),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -269,26 +294,14 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
                         : const Color(0xFF172A3A),
                   ),
                 ),
-                if (!isRead) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: () async {
-                        try {
-                          await _service.markMessageAsRead(patientUid, id);
-                          _load();
-                        } catch (_) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Failed to mark as read')),
-                            );
-                          }
-                        }
-                      },
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _openPatient(patientUid),
                       child: const Text(
-                        'Mark as read',
+                        'View patient',
                         style: TextStyle(
                           fontSize: 12,
                           color: _primary,
@@ -296,8 +309,34 @@ class _DoctorMessagesScreenState extends State<DoctorMessagesScreen> {
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    if (!isRead) ...[
+                      const SizedBox(width: 16),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            await _service.markMessageAsRead(patientUid, id);
+                            _load();
+                          } catch (_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Failed to mark as read')),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text(
+                          'Mark as read',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),

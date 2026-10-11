@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/doctor_service.dart';
-import 'doctor_patient_detail_screen.dart';
 import '../../../core/health/conditions.dart';
 
 class DoctorPatientsScreen extends StatefulWidget {
@@ -288,16 +287,7 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
         conditions.isEmpty ? ['General'] : conditions.labels;
 
     return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => DoctorPatientDetailScreen(
-              patient: patient,
-              doctorName: widget.doctorName,
-            ),
-          ),
-        );
-      },
+      onTap: () => widget.onSelectPatient(patient),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 240,

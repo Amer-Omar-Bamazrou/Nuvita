@@ -10,11 +10,13 @@ import '../widgets/status_badge.dart';
 class DoctorOverviewScreen extends StatefulWidget {
   final String doctorName;
   final VoidCallback onViewPatients;
+  final void Function(Map<String, dynamic> patient) onSelectPatient;
 
   const DoctorOverviewScreen({
     super.key,
     required this.doctorName,
     required this.onViewPatients,
+    required this.onSelectPatient,
   });
 
   @override
@@ -170,8 +172,10 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CriticalAlertsScreen(doctorName: widget.doctorName),
+                  builder: (_) => CriticalAlertsScreen(
+                    doctorName: widget.doctorName,
+                    onSelectPatient: widget.onSelectPatient,
+                  ),
                 ),
               );
             },
@@ -234,7 +238,8 @@ class _DoctorOverviewScreenState extends State<DoctorOverviewScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const DoctorMessagesScreen(),
+            builder: (_) =>
+                DoctorMessagesScreen(onSelectPatient: widget.onSelectPatient),
           ),
         );
         _loadData();
